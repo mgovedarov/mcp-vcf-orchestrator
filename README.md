@@ -1,6 +1,11 @@
 # MCP Server for VCF Automation Orchestrator
 
-An MCP (Model Context Protocol) server that exposes VCF Automation Orchestrator (vRO) REST API operations as tools. Enables AI assistants to list, create, and run workflows, actions, configuration elements, and extensibility subscriptions via natural language. Supports VCF 9 Automation and Aria Automation 8.x.
+[![npm version](https://img.shields.io/npm/v/@mgovedarov/mcp-vcf-orchestrator)](https://www.npmjs.com/package/@mgovedarov/mcp-vcf-orchestrator)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+An [MCP](https://modelcontextprotocol.io/) server that exposes VCF Automation Orchestrator (vRO) REST API operations as tools. Enables AI assistants to list, create, and run workflows, actions, configuration elements, and extensibility subscriptions via natural language.
+
+Supports **VCF 9 Automation** and **Aria Automation 8.x**.
 
 ## Prerequisites
 
