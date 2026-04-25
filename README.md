@@ -43,20 +43,20 @@ Set the following environment variables (see `.env.example`):
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `VRO_HOST` | Yes | Orchestrator hostname (e.g. `vro.example.com`) |
-| `VRO_USERNAME` | Yes | Username without organization (e.g. `admin`) |
-| `VRO_ORGANIZATION` | Yes | Organization/tenant (e.g. `System` or `vsphere.local`) |
-| `VRO_PASSWORD` | Yes | Password |
-| `VRO_IGNORE_TLS` | No | Set to `true` to skip TLS certificate verification (lab environments) |
+| `VCFA_HOST` | Yes | VCFA hostname (e.g. `vcfa.example.com`) |
+| `VCFA_USERNAME` | Yes | Username without organization (e.g. `admin`) |
+| `VCFA_ORGANIZATION` | Yes | Organization/tenant (e.g. `System` or `vsphere.local`) |
+| `VCFA_PASSWORD` | Yes | Password |
+| `VCFA_IGNORE_TLS` | No | Set to `true` to skip TLS certificate verification (lab environments) |
 
-The server authenticates by POSTing to `https://{VRO_HOST}/cloudapi/1.0.0/sessions` with Basic Auth as `{VRO_USERNAME}@{VRO_ORGANIZATION}:{VRO_PASSWORD}` and uses the returned bearer token for all VRO API calls.
+The server authenticates by POSTing to `https://{VCFA_HOST}/cloudapi/1.0.0/sessions` with Basic Auth as `{VCFA_USERNAME}@{VCFA_ORGANIZATION}:{VCFA_PASSWORD}` and uses the returned bearer token for all VCFA API calls.
 
 ## Usage
 
 ### Run directly
 
 ```bash
-VRO_HOST=vro.example.com VRO_USERNAME=admin VRO_ORGANIZATION=vsphere.local VRO_PASSWORD=secret npx @mgovedarov/mcp-vcf-orchestrator
+VCFA_HOST=vcfa.example.com VCFA_USERNAME=admin VCFA_ORGANIZATION=vsphere.local VCFA_PASSWORD=secret npx @mgovedarov/mcp-vcf-orchestrator
 ```
 
 ### VS Code (GitHub Copilot)
@@ -67,15 +67,15 @@ Add to your VS Code `settings.json`:
 {
   "mcp": {
     "servers": {
-      "vro": {
+      "vcfa": {
         "command": "npx",
         "args": ["-y", "@mgovedarov/mcp-vcf-orchestrator"],
         "env": {
-          "VRO_HOST": "vro.example.com",
-          "VRO_USERNAME": "administrator",
-          "VRO_ORGANIZATION": "vsphere.local",
-          "VRO_PASSWORD": "your-password",
-          "VRO_IGNORE_TLS": "false"
+          "VCFA_HOST": "vcfa.example.com",
+          "VCFA_USERNAME": "administrator",
+          "VCFA_ORGANIZATION": "vsphere.local",
+          "VCFA_PASSWORD": "your-password",
+          "VCFA_IGNORE_TLS": "false"
         }
       }
     }
@@ -90,15 +90,15 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
-    "vro": {
+    "vcfa": {
       "command": "npx",
       "args": ["-y", "@mgovedarov/mcp-vcf-orchestrator"],
       "env": {
-        "VRO_HOST": "vro.example.com",
-        "VRO_USERNAME": "administrator",
-        "VRO_ORGANIZATION": "vsphere.local",
-        "VRO_PASSWORD": "your-password",
-        "VRO_IGNORE_TLS": "false"
+        "VCFA_HOST": "vcfa.example.com",
+        "VCFA_USERNAME": "administrator",
+        "VCFA_ORGANIZATION": "vsphere.local",
+        "VCFA_PASSWORD": "your-password",
+        "VCFA_IGNORE_TLS": "false"
       }
     }
   }
@@ -141,6 +141,13 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | Tool | Description |
 |------|-------------|
 | `list-categories` | List categories by type (`WorkflowCategory`, `ActionCategory`, `ConfigurationElementCategory`) |
+
+### Catalog Items
+
+| Tool | Description |
+|------|-------------|
+| `list-catalog-items` | List available Service Broker catalog items, optionally searched by name |
+| `get-catalog-item` | Get catalog item details including type, source, and project assignments |
 
 ### Extensibility Subscriptions
 
@@ -296,7 +303,7 @@ Assistant calls: create-subscription(
 npx tsc --noEmit
 
 # Run in dev mode (no build step)
-VRO_HOST=... VRO_USERNAME=... VRO_ORGANIZATION=... VRO_PASSWORD=... npm start
+VCFA_HOST=... VCFA_USERNAME=... VCFA_ORGANIZATION=... VCFA_PASSWORD=... npm start
 
 # Build for production
 npm run build

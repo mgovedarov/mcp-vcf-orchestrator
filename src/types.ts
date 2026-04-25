@@ -182,6 +182,36 @@ export interface EventTopicList {
   numberOfElements?: number;
 }
 
+// --- Catalog Items (Service Broker) ---
+
+export interface CatalogItemType {
+  id: string;
+  name: string;
+}
+
+export interface CatalogItem {
+  id: string;
+  name: string;
+  description?: string;
+  type?: CatalogItemType;
+  sourceType?: string;
+  sourceName?: string;
+  sourceId?: string;
+  projectIds?: string[];
+  iconId?: string;
+  createdAt?: string;
+  createdBy?: string;
+  lastUpdatedAt?: string;
+  lastUpdatedBy?: string;
+  requestScopeOrg?: boolean;
+}
+
+export interface CatalogItemList {
+  content: CatalogItem[];
+  totalElements?: number;
+  numberOfElements?: number;
+}
+
 // --- Client config ---
 
 export interface VroClientConfig {

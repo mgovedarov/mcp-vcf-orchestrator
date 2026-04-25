@@ -1,7 +1,8 @@
 # TODO
 
-1. [ ] Add support for deployments - list, delete, create from catalog item
-2. [ ] Add support for templates - list, create, delete
-3. [x] Add delete operations for workflows, actions, and configuration elements
-4. [ ] Add package import/export support
-5. [ ] Add inventory browsing/search (plugin inventory tree)
+1. [x] List catalog items, get catalog item
+2. [ ] Add support for deployments - list, delete, create from catalog item
+3. [ ] Add support for templates - list, create, delete
+4. [x] Add delete operations for workflows, actions, and configuration elements
+5. [ ] Add package import/export support
+6. [ ] Add inventory browsing/search (plugin inventory tree)
