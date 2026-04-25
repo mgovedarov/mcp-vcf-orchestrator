@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@mgovedarov/mcp-vcf-orchestrator)](https://www.npmjs.com/package/@mgovedarov/mcp-vcf-orchestrator)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-An [MCP](https://modelcontextprotocol.io/) server that exposes VCF Automation Orchestrator (vRO) REST API operations as tools. Enables AI assistants to list, create, delete, and run workflows, actions, configuration elements, and extensibility subscriptions via natural language.
+An [MCP](https://modelcontextprotocol.io/) server that exposes VCF Automation Orchestrator (vRO) and Service Broker REST API operations as tools. Enables AI assistants to list, create, delete, and run workflows, actions, configuration elements, extensibility subscriptions, catalog items, and deployments via natural language.
 
 Supports **VCF 9 Automation** and **Aria Automation 8.x**.
 
@@ -149,6 +149,15 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `list-catalog-items` | List available Service Broker catalog items, optionally searched by name |
 | `get-catalog-item` | Get catalog item details including type, source, and project assignments |
 
+### Deployments
+
+| Tool | Description |
+|------|-------------|
+| `list-deployments` | List deployments, optionally filtered by name/keyword or project ID |
+| `get-deployment` | Get deployment details including status, project, and catalog item info |
+| `create-deployment` | Deploy a catalog item by providing its ID, a deployment name, and a project ID |
+| `delete-deployment` | Delete a deployment (irreversible) |
+
 ### Extensibility Subscriptions
 
 | Tool | Description |
@@ -221,6 +230,33 @@ Assistant calls: create-subscription(
   priority: 10
 )
   → Subscription created: Post-Provision VM Hardening (ENABLED)
+```
+
+### List and deploy a catalog item
+
+```
+User: What catalog items are available in the Service Broker?
+
+Assistant calls: list-catalog-items()
+  → Lists all catalog items with IDs and types
+
+User: Deploy "Ubuntu 22.04 Server" to project "dev-team" and name it
+      "build-agent-01".
+
+Assistant calls: get-catalog-item(id: "...")
+  → Shows inputs required: size, diskGb
+Assistant calls: create-deployment(
+  catalogItemId: "...",
+  deploymentName: "build-agent-01",
+  projectId: "<dev-team-project-id>",
+  inputs: {size: "medium", diskGb: 80}
+)
+  → Deployment request submitted. ID: ... Status: CREATE_IN_PROGRESS
+
+User: Check all deployments in the dev-team project.
+
+Assistant calls: list-deployments(projectId: "<dev-team-project-id>")
+  → Lists deployments with status
 ```
 
 ### Manage existing subscriptions

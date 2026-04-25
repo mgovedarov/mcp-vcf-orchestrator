@@ -16,6 +16,8 @@ import type {
   EventTopicList,
   CatalogItem,
   CatalogItemList,
+  Deployment,
+  DeploymentList,
 } from "./types.js";
 
 /**
@@ -30,6 +32,7 @@ export class VroClient {
   private baseUrl: string;
   private eventBrokerBaseUrl: string;
   private catalogBaseUrl: string;
+  private deploymentBaseUrl: string;
   private sessionUrl: string;
   private loginHeader: string;
   private token: string | null = null;
@@ -38,6 +41,7 @@ export class VroClient {
     this.baseUrl = `https://${config.host}/vco/api`;
     this.eventBrokerBaseUrl = `https://${config.host}/event-broker/api`;
     this.catalogBaseUrl = `https://${config.host}/catalog/api`;
+    this.deploymentBaseUrl = `https://${config.host}/deployment/api`;
     this.sessionUrl = `https://${config.host}/cloudapi/1.0.0/sessions`;
     // Basic Auth credential: username@organization:password
     this.loginHeader =
@@ -496,6 +500,56 @@ export class VroClient {
   async getCatalogItem(id: string): Promise<CatalogItem> {
     return this.get<CatalogItem>(
       `/items/${encodeURIComponent(id)}`,
+      this.catalogBaseUrl
+    );
+  }
+
+  // --- Deployments ---
+
+  async listDeployments(search?: string, projectId?: string): Promise<DeploymentList> {
+    const params: string[] = [];
+    if (search) {
+      params.push(`$search=${encodeURIComponent(search)}`);
+    }
+    if (projectId) {
+      params.push(`projectId=${encodeURIComponent(projectId)}`);
+    }
+    const path = params.length > 0 ? `/deployments?${params.join("&")}` : "/deployments";
+    return this.get<DeploymentList>(path, this.deploymentBaseUrl);
+  }
+
+  async getDeployment(id: string): Promise<Deployment> {
+    return this.get<Deployment>(
+      `/deployments/${encodeURIComponent(id)}`,
+      this.deploymentBaseUrl
+    );
+  }
+
+  async deleteDeployment(id: string): Promise<void> {
+    await this.del<unknown>(
+      `/deployments/${encodeURIComponent(id)}`,
+      this.deploymentBaseUrl
+    );
+  }
+
+  async createDeploymentFromCatalogItem(params: {
+    catalogItemId: string;
+    deploymentName: string;
+    projectId: string;
+    version?: string;
+    reason?: string;
+    inputs?: Record<string, unknown>;
+  }): Promise<Deployment> {
+    const body: Record<string, unknown> = {
+      deploymentName: params.deploymentName,
+      projectId: params.projectId,
+    };
+    if (params.version !== undefined) body.version = params.version;
+    if (params.reason !== undefined) body.reason = params.reason;
+    if (params.inputs !== undefined) body.inputs = params.inputs;
+    return this.post<Deployment>(
+      `/items/${encodeURIComponent(params.catalogItemId)}/request`,
+      body,
       this.catalogBaseUrl
     );
   }
