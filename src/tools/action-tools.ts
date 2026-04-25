@@ -180,4 +180,40 @@ export function registerActionTools(
       }
     }
   );
+
+  server.registerTool(
+    "delete-action",
+    {
+      title: "Delete Action",
+      description:
+        "Delete an action (scriptable task) from VCF Automation Orchestrator. This action is irreversible.",
+      inputSchema: z.object({
+        id: z.string().describe("The action ID to delete"),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: true },
+    },
+    async ({ id }): Promise<CallToolResult> => {
+      try {
+        await client.deleteAction(id);
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Action ${id} deleted successfully.`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to delete action: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+  );
 }

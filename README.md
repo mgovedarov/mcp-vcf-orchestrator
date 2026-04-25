@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@mgovedarov/mcp-vcf-orchestrator)](https://www.npmjs.com/package/@mgovedarov/mcp-vcf-orchestrator)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-An [MCP](https://modelcontextprotocol.io/) server that exposes VCF Automation Orchestrator (vRO) REST API operations as tools. Enables AI assistants to list, create, and run workflows, actions, configuration elements, and extensibility subscriptions via natural language.
+An [MCP](https://modelcontextprotocol.io/) server that exposes VCF Automation Orchestrator (vRO) REST API operations as tools. Enables AI assistants to list, create, delete, and run workflows, actions, configuration elements, and extensibility subscriptions via natural language.
 
 Supports **VCF 9 Automation** and **Aria Automation 8.x**.
 
@@ -114,6 +114,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `list-workflows` | List workflows, optionally filtered by name |
 | `get-workflow` | Get workflow details including input/output parameters |
 | `create-workflow` | Create a new empty workflow in a category |
+| `delete-workflow` | Delete a workflow (irreversible) |
 | `run-workflow` | Execute a workflow with optional input parameters |
 | `get-workflow-execution` | Check execution status and retrieve outputs |
 
@@ -124,6 +125,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `list-actions` | List actions (scriptable tasks), optionally filtered by name |
 | `get-action` | Get action details including script content and parameters |
 | `create-action` | Create a new action with script content |
+| `delete-action` | Delete an action (irreversible) |
 
 ### Configuration Elements
 
@@ -132,6 +134,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `list-configurations` | List configuration elements, optionally filtered by name |
 | `get-configuration` | Get configuration element details and attributes |
 | `create-configuration` | Create a new configuration element with attributes |
+| `delete-configuration` | Delete a configuration element (irreversible) |
 
 ### Categories
 

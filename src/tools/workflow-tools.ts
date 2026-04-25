@@ -248,4 +248,40 @@ export function registerWorkflowTools(
       }
     }
   );
+
+  server.registerTool(
+    "delete-workflow",
+    {
+      title: "Delete Workflow",
+      description:
+        "Delete a workflow from VCF Automation Orchestrator. This action is irreversible.",
+      inputSchema: z.object({
+        id: z.string().describe("The workflow ID to delete"),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: true },
+    },
+    async ({ id }): Promise<CallToolResult> => {
+      try {
+        await client.deleteWorkflow(id);
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Workflow ${id} deleted successfully.`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to delete workflow: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+  );
 }

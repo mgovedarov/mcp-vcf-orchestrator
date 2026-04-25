@@ -325,7 +325,7 @@ export function registerSubscriptionTools(
       inputSchema: z.object({
         id: z.string().describe("The subscription ID to delete"),
       }),
-      annotations: { readOnlyHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: true },
     },
     async ({ id }): Promise<CallToolResult> => {
       try {

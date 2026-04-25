@@ -179,4 +179,40 @@ export function registerConfigTools(
       }
     }
   );
+
+  server.registerTool(
+    "delete-configuration",
+    {
+      title: "Delete Configuration Element",
+      description:
+        "Delete a configuration element from VCF Automation Orchestrator. This action is irreversible.",
+      inputSchema: z.object({
+        id: z.string().describe("The configuration element ID to delete"),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: true },
+    },
+    async ({ id }): Promise<CallToolResult> => {
+      try {
+        await client.deleteConfiguration(id);
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Configuration element ${id} deleted successfully.`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to delete configuration: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+  );
 }

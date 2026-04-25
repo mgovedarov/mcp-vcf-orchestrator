@@ -249,6 +249,10 @@ export class VroClient {
     );
   }
 
+  async deleteWorkflow(id: string): Promise<void> {
+    await this.del<unknown>(`/workflows/${encodeURIComponent(id)}`);
+  }
+
   // --- Actions ---
 
   async listActions(filter?: string): Promise<ActionList> {
@@ -302,6 +306,10 @@ export class VroClient {
       }));
     }
     return this.post<Action>("/actions", body);
+  }
+
+  async deleteAction(id: string): Promise<void> {
+    await this.del<unknown>(`/actions/${encodeURIComponent(id)}`);
   }
 
   // --- Configuration Elements ---
@@ -358,6 +366,10 @@ export class VroClient {
       }));
     }
     return this.post<ConfigElement>("/configurations", body);
+  }
+
+  async deleteConfiguration(id: string): Promise<void> {
+    await this.del<unknown>(`/configurations/${encodeURIComponent(id)}`);
   }
 
   // --- Categories ---
