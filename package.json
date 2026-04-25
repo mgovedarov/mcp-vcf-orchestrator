@@ -1,0 +1,47 @@
+{
+  "name": "@mgovedarov/mcp-vcf-orchestrator",
+  "version": "1.0.0",
+  "description": "MCP server for VCF Automation Orchestrator — manage workflows, actions, configuration elements, and extensibility subscriptions via AI assistants",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "mcp-vcf-orchestrator": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "build": "tsc",
+    "prepublishOnly": "npm run build",
+    "inspect": "npx @modelcontextprotocol/inspector node dist/index.js"
+  },
+  "keywords": [
+    "mcp",
+    "vcf",
+    "vro",
+    "orchestrator",
+    "vmware",
+    "automation",
+    "aria",
+    "extensibility"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mgovedarov/mcp-vcf-orchestrator.git"
+  },
+  "homepage": "https://github.com/mgovedarov/mcp-vcf-orchestrator#readme",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.17",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -1,0 +1,9 @@
+src/
+*.ts
+!dist/
+tsconfig.json
+.env
+.env.example
+.npmrc
+coverage/
+node_modules/
