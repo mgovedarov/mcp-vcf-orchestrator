@@ -212,6 +212,30 @@ export interface CatalogItemList {
   numberOfElements?: number;
 }
 
+// --- Deployments ---
+
+export interface Deployment {
+  id: string;
+  name: string;
+  description?: string;
+  status?: string; // e.g. "CREATE_SUCCESSFUL" | "DELETE_IN_PROGRESS" | "UPDATE_FAILED" etc.
+  projectId?: string;
+  projectName?: string;
+  catalogItemId?: string;
+  catalogItemVersion?: string;
+  ownedBy?: string;
+  createdAt?: string;
+  createdBy?: string;
+  lastUpdatedAt?: string;
+  lastUpdatedBy?: string;
+}
+
+export interface DeploymentList {
+  content: Deployment[];
+  totalElements?: number;
+  numberOfElements?: number;
+}
+
 // --- Client config ---
 
 export interface VroClientConfig {

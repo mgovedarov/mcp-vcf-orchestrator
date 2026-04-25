@@ -9,6 +9,7 @@ import { registerConfigTools } from "./tools/config-tools.js";
 import { registerCategoryTools } from "./tools/category-tools.js";
 import { registerSubscriptionTools } from "./tools/subscription-tools.js";
 import { registerCatalogTools } from "./tools/catalog-tools.js";
+import { registerDeploymentTools } from "./tools/deployment-tools.js";
 
 function getRequiredEnv(name: string): string {
   const value = process.env[name];
@@ -49,6 +50,7 @@ async function main(): Promise<void> {
         "Use list-event-topics to discover available event topics before creating extensibility subscriptions.",
         "Use list-subscriptions to see existing event-driven triggers.",
         "Use list-catalog-items to browse the Service Broker catalog; use get-catalog-item to inspect a specific item by ID.",
+        "Use list-deployments to see existing deployments; use create-deployment to deploy a catalog item, providing the catalogItemId, deploymentName, and projectId.",
       ].join(" "),
     }
   );
@@ -60,6 +62,7 @@ async function main(): Promise<void> {
   registerCategoryTools(server, client);
   registerSubscriptionTools(server, client);
   registerCatalogTools(server, client);
+  registerDeploymentTools(server, client);
 
   // Connect via stdio transport
   const transport = new StdioServerTransport();

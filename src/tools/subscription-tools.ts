@@ -321,13 +321,24 @@ export function registerSubscriptionTools(
     {
       title: "Delete Subscription",
       description:
-        "Delete an extensibility subscription from the VCF Automation Event Broker.",
+        "Delete an extensibility subscription from the VCF Automation Event Broker. Set confirm to true to proceed.",
       inputSchema: z.object({
         id: z.string().describe("The subscription ID to delete"),
+        confirm: z.boolean().describe("Must be set to true to confirm deletion. If false, the deletion will not proceed."),
       }),
       annotations: { readOnlyHint: false, destructiveHint: true },
     },
-    async ({ id }): Promise<CallToolResult> => {
+    async ({ id, confirm }): Promise<CallToolResult> => {
+      if (!confirm) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Confirm deletion of subscription ${id} by setting confirm to true. This action is irreversible.`,
+            },
+          ],
+        };
+      }
       try {
         await client.deleteSubscription(id);
         return {

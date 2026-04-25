@@ -185,13 +185,24 @@ export function registerConfigTools(
     {
       title: "Delete Configuration Element",
       description:
-        "Delete a configuration element from VCF Automation Orchestrator. This action is irreversible.",
+        "Delete a configuration element from VCF Automation Orchestrator. This action is irreversible. Set confirm to true to proceed.",
       inputSchema: z.object({
         id: z.string().describe("The configuration element ID to delete"),
+        confirm: z.boolean().describe("Must be set to true to confirm deletion. If false, the deletion will not proceed."),
       }),
       annotations: { readOnlyHint: false, destructiveHint: true },
     },
-    async ({ id }): Promise<CallToolResult> => {
+    async ({ id, confirm }): Promise<CallToolResult> => {
+      if (!confirm) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Confirm deletion of configuration element ${id} by setting confirm to true. This action is irreversible.`,
+            },
+          ],
+        };
+      }
       try {
         await client.deleteConfiguration(id);
         return {
