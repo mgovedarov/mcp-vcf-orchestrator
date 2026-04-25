@@ -8,6 +8,7 @@ import { registerActionTools } from "./tools/action-tools.js";
 import { registerConfigTools } from "./tools/config-tools.js";
 import { registerCategoryTools } from "./tools/category-tools.js";
 import { registerSubscriptionTools } from "./tools/subscription-tools.js";
+import { registerCatalogTools } from "./tools/catalog-tools.js";
 
 function getRequiredEnv(name: string): string {
   const value = process.env[name];
@@ -20,16 +21,16 @@ function getRequiredEnv(name: string): string {
 
 async function main(): Promise<void> {
   // Read configuration from environment variables
-  const host = getRequiredEnv("VRO_HOST");
-  const username = getRequiredEnv("VRO_USERNAME");
-  const organization = getRequiredEnv("VRO_ORGANIZATION");
-  const password = getRequiredEnv("VRO_PASSWORD");
-  const ignoreTls = process.env["VRO_IGNORE_TLS"] === "true";
+  const host = getRequiredEnv("VCFA_HOST");
+  const username = getRequiredEnv("VCFA_USERNAME");
+  const organization = getRequiredEnv("VCFA_ORGANIZATION");
+  const password = getRequiredEnv("VCFA_PASSWORD");
+  const ignoreTls = process.env["VCFA_IGNORE_TLS"] === "true";
 
   if (ignoreTls) {
     process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0";
     console.error(
-      "[vro-server] WARNING: TLS certificate verification disabled (VRO_IGNORE_TLS=true)"
+      "[vcfa-server] WARNING: TLS certificate verification disabled (VCFA_IGNORE_TLS=true)"
     );
   }
 
@@ -38,15 +39,16 @@ async function main(): Promise<void> {
 
   // Create MCP server
   const server = new McpServer(
-    { name: "vro-server", version: "1.0.0" },
+    { name: "vcfa-server", version: "1.0.0" },
     {
       instructions: [
-        "This server connects to a VCF Automation Orchestrator instance.",
+        "This server connects to a VCF Automation instance.",
         "Use list-categories before creating workflows, actions, or configuration elements to find the target category ID.",
         "Use get-workflow to inspect a workflow's input parameters before running it with run-workflow.",
         "After starting a workflow execution with run-workflow, use get-workflow-execution to poll for completion and retrieve outputs.",
         "Use list-event-topics to discover available event topics before creating extensibility subscriptions.",
         "Use list-subscriptions to see existing event-driven triggers.",
+        "Use list-catalog-items to browse the Service Broker catalog; use get-catalog-item to inspect a specific item by ID.",
       ].join(" "),
     }
   );
@@ -57,21 +59,22 @@ async function main(): Promise<void> {
   registerConfigTools(server, client);
   registerCategoryTools(server, client);
   registerSubscriptionTools(server, client);
+  registerCatalogTools(server, client);
 
   // Connect via stdio transport
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("[vro-server] MCP server started (stdio transport)");
+  console.error("[vcfa-server] MCP server started (stdio transport)");
 
   // Graceful shutdown
   process.on("SIGINT", async () => {
-    console.error("[vro-server] Shutting down...");
+    console.error("[vcfa-server] Shutting down...");
     await server.close();
     process.exit(0);
   });
 }
 
 main().catch((error) => {
-  console.error("[vro-server] Fatal error:", error);
+  console.error("[vcfa-server] Fatal error:", error);
   process.exit(1);
 });

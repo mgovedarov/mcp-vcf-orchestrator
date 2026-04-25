@@ -14,6 +14,8 @@ import type {
   SubscriptionList,
   EventTopic,
   EventTopicList,
+  CatalogItem,
+  CatalogItemList,
 } from "./types.js";
 
 /**
@@ -27,6 +29,7 @@ import type {
 export class VroClient {
   private baseUrl: string;
   private eventBrokerBaseUrl: string;
+  private catalogBaseUrl: string;
   private sessionUrl: string;
   private loginHeader: string;
   private token: string | null = null;
@@ -34,6 +37,7 @@ export class VroClient {
   constructor(private config: VroClientConfig) {
     this.baseUrl = `https://${config.host}/vco/api`;
     this.eventBrokerBaseUrl = `https://${config.host}/event-broker/api`;
+    this.catalogBaseUrl = `https://${config.host}/catalog/api`;
     this.sessionUrl = `https://${config.host}/cloudapi/1.0.0/sessions`;
     // Basic Auth credential: username@organization:password
     this.loginHeader =
@@ -477,5 +481,22 @@ export class VroClient {
 
   async listEventTopics(): Promise<EventTopicList> {
     return this.get<EventTopicList>("/topics", this.eventBrokerBaseUrl);
+  }
+
+  // --- Catalog Items (Service Broker) ---
+
+  async listCatalogItems(search?: string): Promise<CatalogItemList> {
+    let path = "/items";
+    if (search) {
+      path += `?$search=${encodeURIComponent(search)}`;
+    }
+    return this.get<CatalogItemList>(path, this.catalogBaseUrl);
+  }
+
+  async getCatalogItem(id: string): Promise<CatalogItem> {
+    return this.get<CatalogItem>(
+      `/items/${encodeURIComponent(id)}`,
+      this.catalogBaseUrl
+    );
   }
 }
