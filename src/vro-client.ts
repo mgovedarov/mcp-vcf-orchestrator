@@ -1,3 +1,4 @@
+import { readFile, writeFile } from "node:fs/promises";
 import type {
   Action,
   ActionList,
@@ -22,9 +23,9 @@ import type {
   VroPluginList,
   Workflow,
   WorkflowExecution,
+  WorkflowExecutionList,
   WorkflowList
 } from "./types.js";
-import { readFile, writeFile } from "node:fs/promises";
 
 /**
  * HTTP client for VCF Automation Orchestrator 8.x REST API.
@@ -263,6 +264,32 @@ export class VroClient {
     return this.get<WorkflowExecution>(
       `/workflows/${encodeURIComponent(workflowId)}/executions/${encodeURIComponent(executionId)}`
     );
+  }
+
+  async listWorkflowExecutions(
+    workflowId: string,
+    options?: { maxResults?: number; status?: string }
+  ): Promise<WorkflowExecutionList> {
+    const params: string[] = [`maxResults=${options?.maxResults ?? 20}`];
+    if (options?.status) {
+      params.push(`conditions=state~${encodeURIComponent(options.status)}`);
+    }
+    const path = `/workflows/${encodeURIComponent(workflowId)}/executions?${params.join("&")}`;
+    const raw = await this.get<{
+      total?: number;
+      relations?: { link?: { attributes?: { name: string; value: string }[] }[] };
+    }>(path);
+    const items = (raw.relations?.link ?? []).map((item) => {
+      const a = this.parseAttrs(item.attributes);
+      return {
+        id: a["id"] ?? a["@id"] ?? "",
+        state: a["state"] ?? "",
+        "start-date": a["startDate"] ?? a["start-date"],
+        "end-date": a["endDate"] ?? a["end-date"],
+        "started-by": a["startedBy"] ?? a["started-by"],
+      } as WorkflowExecution;
+    });
+    return { total: raw.total ?? items.length, relations: { link: items } };
   }
 
   async deleteWorkflow(id: string): Promise<void> {

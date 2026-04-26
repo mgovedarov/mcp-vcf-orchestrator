@@ -250,6 +250,69 @@ export function registerWorkflowTools(
   );
 
   server.registerTool(
+    "list-workflow-executions",
+    {
+      title: "List Workflow Executions",
+      description:
+        "List past and current executions for a specific workflow. Use this to find an execution ID before calling get-workflow-execution.",
+      inputSchema: z.object({
+        workflowId: z.string().describe("The workflow ID"),
+        maxResults: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe("Maximum number of executions to return (default: 20)"),
+        status: z
+          .enum(["running", "completed", "failed", "canceled", "waiting-signal"])
+          .optional()
+          .describe("Filter executions by status"),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ workflowId, maxResults, status }): Promise<CallToolResult> => {
+      try {
+        const result = await client.listWorkflowExecutions(workflowId, {
+          maxResults,
+          status,
+        });
+        const executions = result.relations?.link ?? [];
+        if (executions.length === 0) {
+          return {
+            content: [{ type: "text", text: "No executions found." }],
+          };
+        }
+        const lines = executions.map((e) => {
+          let line = `• ${e.state.toUpperCase()} (id: ${e.id})`;
+          if (e["start-date"]) line += ` — started: ${e["start-date"]}`;
+          if (e["end-date"]) line += `, ended: ${e["end-date"]}`;
+          if (e["started-by"]) line += ` [by: ${e["started-by"]}]`;
+          return line;
+        });
+        const total = result.total ?? executions.length;
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Found ${total} execution(s):\n\n${lines.join("\n")}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to list executions: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  server.registerTool(
     "delete-workflow",
     {
       title: "Delete Workflow",
