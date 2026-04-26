@@ -116,6 +116,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `create-workflow` | Create a new empty workflow in a category |
 | `delete-workflow` | Delete a workflow (irreversible) |
 | `run-workflow` | Execute a workflow with optional input parameters |
+| `list-workflow-executions` | List past and current executions for a workflow, with optional status filter |
 | `get-workflow-execution` | Check execution status and retrieve outputs |
 
 ### Actions
