@@ -18,6 +18,8 @@ import type {
   VroClientConfig,
   VroPackage,
   VroPackageList,
+  VroPlugin,
+  VroPluginList,
   Workflow,
   WorkflowExecution,
   WorkflowList
@@ -701,5 +703,26 @@ export class VroClient {
     await this.del<unknown>(
       `/packages/${encodeURIComponent(name)}?deleteContent=${deleteContents}`
     );
+  }
+
+  // --- vRO Plugins ---
+
+  async listPlugins(filter?: string): Promise<VroPluginList> {
+    let path = "/plugins";
+    if (filter) {
+      path += `?conditions=name~${encodeURIComponent(filter)}`;
+    }
+    const raw = await this.get<{ link?: { attributes?: { name: string; value: string }[] }[]; total?: number }>(path);
+    const link: VroPlugin[] = (raw.link ?? []).map((item) => {
+      const a = this.parseAttrs(item.attributes);
+      return {
+        name: a["name"] ?? a["@name"] ?? "",
+        displayName: a["displayName"] ?? a["display-name"],
+        version: a["version"],
+        description: a["description"],
+        type: a["type"],
+      };
+    });
+    return { total: raw.total ?? link.length, link };
   }
 }
