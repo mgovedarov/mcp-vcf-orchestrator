@@ -274,6 +274,21 @@ export interface VroPackageList {
   link: VroPackage[];
 }
 
+// --- vRO Plugins ---
+
+export interface VroPlugin {
+  name: string;
+  displayName?: string;
+  version?: string;
+  description?: string;
+  type?: string;
+}
+
+export interface VroPluginList {
+  total?: number;
+  link: VroPlugin[];
+}
+
 // --- Client config ---
 
 export interface VroClientConfig {

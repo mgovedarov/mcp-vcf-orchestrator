@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@mgovedarov/mcp-vcf-orchestrator)](https://www.npmjs.com/package/@mgovedarov/mcp-vcf-orchestrator)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-An [MCP](https://modelcontextprotocol.io/) server that exposes VCF Automation Orchestrator (vRO), Service Broker, and Cloud Assembly REST API operations as tools. Enables AI assistants to list, create, delete, and run workflows, actions, configuration elements, extensibility subscriptions, catalog items, deployments, and blueprint templates via natural language.
+An [MCP](https://modelcontextprotocol.io/) server that exposes VCF Automation Orchestrator (vRO), Service Broker, and Cloud Assembly REST API operations as tools. Enables AI assistants to list, create, delete, and run workflows, actions, configuration elements, extensibility subscriptions, catalog items, deployments, blueprint templates, and plugins via natural language.
 
 Supports **VCF 9 Automation** and **Aria Automation 8.x**.
 
@@ -176,6 +176,12 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `export-package` | Export a package as a ZIP file to a local path |
 | `import-package` | Import a package from a local ZIP file into the Orchestrator instance |
 | `delete-package` | Delete a package, optionally deleting all its contained elements |
+
+### vRO Plugins
+
+| Tool | Description |
+|------|-------------|
+| `list-plugins` | List installed plugins on the Orchestrator instance, optionally filtered by name |
 
 ### Extensibility Subscriptions
 
@@ -377,6 +383,25 @@ Assistant calls: create-subscription(
   description: "Assigns custom hostnames during VM provisioning"
 )
   → Subscription created and ENABLED
+```
+
+### List installed plugins
+
+```
+User: What plugins are installed on the Orchestrator?
+
+Assistant calls: list-plugins()
+  → Found 12 plugin(s):
+     • vCenter Plugin (com.vmware.library.vc) v8.0.0 — vCenter Server integration
+     • SSH Plugin (com.vmware.library.ssh) v2.0.0 — SSH remote execution
+     ...
+
+User: Show me only plugins related to NSX.
+
+Assistant calls: list-plugins(filter: "nsx")
+  → Found 2 plugin(s):
+     • NSX-T Plugin (com.vmware.library.nsx-t) v3.2.0
+     • NSX ALB Plugin (com.vmware.library.nsxalb) v1.0.0
 ```
 
 ## Development
