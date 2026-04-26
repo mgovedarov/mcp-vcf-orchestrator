@@ -133,7 +133,7 @@ export function registerTemplateTools(
                         "If true, the template is available org-wide rather than project-scoped"
                     ),
             }),
-            annotations: { destructiveHint: false },
+            annotations: { readOnlyHint: false },
         },
         async ({
             name,

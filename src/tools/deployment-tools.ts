@@ -114,7 +114,7 @@ export function registerDeploymentTools(
         id: z.string().describe("The deployment ID to delete"),
         confirm: z.boolean().describe("Must be set to true to confirm deletion. If false, the deletion will not proceed."),
       }),
-      annotations: { destructiveHint: true },
+      annotations: { readOnlyHint: false, destructiveHint: true },
     },
     async ({ id, confirm }): Promise<CallToolResult> => {
       if (!confirm) {
@@ -170,7 +170,7 @@ export function registerDeploymentTools(
           .optional()
           .describe("Catalog item input parameters as a key/value object"),
       }),
-      annotations: { destructiveHint: false },
+      annotations: { readOnlyHint: false },
     },
     async ({ catalogItemId, deploymentName, projectId, version, reason, inputs }): Promise<CallToolResult> => {
       try {
