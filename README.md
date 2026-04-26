@@ -167,6 +167,16 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `create-template` | Create a new blueprint template with optional YAML content |
 | `delete-template` | Delete a blueprint template (irreversible) |
 
+### vRO Packages
+
+| Tool | Description |
+|------|-------------|
+| `list-packages` | List vRO packages on the Orchestrator instance, optionally filtered by name |
+| `get-package` | Get details of a specific package by its fully-qualified name |
+| `export-package` | Export a package as a ZIP file to a local path |
+| `import-package` | Import a package from a local ZIP file into the Orchestrator instance |
+| `delete-package` | Delete a package, optionally deleting all its contained elements |
+
 ### Extensibility Subscriptions
 
 | Tool | Description |

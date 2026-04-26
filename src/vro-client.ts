@@ -16,10 +16,13 @@ import type {
   Template,
   TemplateList,
   VroClientConfig,
+  VroPackage,
+  VroPackageList,
   Workflow,
   WorkflowExecution,
   WorkflowList
 } from "./types.js";
+import { readFile, writeFile } from "node:fs/promises";
 
 /**
  * HTTP client for VCF Automation Orchestrator 8.x REST API.
@@ -599,6 +602,104 @@ export class VroClient {
       `/items/${encodeURIComponent(params.catalogItemId)}/request`,
       body,
       this.catalogBaseUrl
+    );
+  }
+
+  // --- vRO Packages ---
+
+  async listPackages(filter?: string): Promise<VroPackageList> {
+    let path = "/packages";
+    if (filter) {
+      path += `?conditions=name~${encodeURIComponent(filter)}`;
+    }
+    const raw = await this.get<{ link?: { attributes?: { name: string; value: string }[] }[]; total?: number }>(path);
+    const link: VroPackage[] = (raw.link ?? []).map((item) => {
+      const a = this.parseAttrs(item.attributes);
+      return {
+        name: a["name"] ?? a["@name"],
+        description: a["description"],
+        version: a["version"],
+      };
+    });
+    return { total: raw.total ?? link.length, link };
+  }
+
+  async getPackage(name: string): Promise<VroPackage> {
+    const raw = await this.get<{ attributes?: { name: string; value: string }[] }>(
+      `/packages/${encodeURIComponent(name)}`
+    );
+    const a = this.parseAttrs(raw.attributes);
+    return {
+      name: a["name"] ?? name,
+      description: a["description"],
+      version: a["version"],
+    };
+  }
+
+  async exportPackage(name: string, destPath: string): Promise<void> {
+    if (!this.token) {
+      await this.authenticate();
+    }
+    const url = `${this.baseUrl}/packages/${encodeURIComponent(name)}?export=true`;
+    console.error(`[vro-client] GET /packages/${name}?export=true`);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60_000);
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${this.token}`,
+          Accept: "application/zip",
+        },
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`vRO API error: ${res.status} ${res.statusText} — export package\n${text}`);
+    }
+    const buffer = Buffer.from(await res.arrayBuffer());
+    await writeFile(destPath, buffer);
+  }
+
+  async importPackage(srcPath: string, overwrite = true): Promise<void> {
+    if (!this.token) {
+      await this.authenticate();
+    }
+    const buffer = await readFile(srcPath);
+    const url = `${this.baseUrl}/packages?overwrite=${overwrite}`;
+    console.error(`[vro-client] POST /packages?overwrite=${overwrite}`);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60_000);
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.token}`,
+          "Content-Type": "application/zip",
+          Accept: "application/json",
+        },
+        body: buffer,
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`vRO API error: ${res.status} ${res.statusText} — import package\n${text}`);
+    }
+  }
+
+  async deletePackage(name: string, deleteContents = false): Promise<void> {
+    await this.del<unknown>(
+      `/packages/${encodeURIComponent(name)}?deleteContent=${deleteContents}`
     );
   }
 }

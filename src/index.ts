@@ -7,6 +7,7 @@ import { registerCatalogTools } from "./tools/catalog-tools.js";
 import { registerCategoryTools } from "./tools/category-tools.js";
 import { registerConfigTools } from "./tools/config-tools.js";
 import { registerDeploymentTools } from "./tools/deployment-tools.js";
+import { registerPackageTools } from "./tools/package-tools.js";
 import { registerSubscriptionTools } from "./tools/subscription-tools.js";
 import { registerTemplateTools } from "./tools/template-tools.js";
 import { registerWorkflowTools } from "./tools/workflow-tools.js";
@@ -53,6 +54,7 @@ async function main(): Promise<void> {
         "Use list-catalog-items to browse the Service Broker catalog; use get-catalog-item to inspect a specific item by ID.",
         "Use list-deployments to see existing deployments; use create-deployment to deploy a catalog item, providing the catalogItemId, deploymentName, and projectId.",
         "Use list-templates to browse blueprint templates; use get-template to inspect a specific template by ID; use create-template to create a new template; use delete-template to remove one.",
+        "Use list-packages to browse vRO packages; use export-package to save a package as a ZIP file; use import-package to upload a package ZIP; use delete-package to remove a package.",
       ].join(" "),
     }
   );
@@ -66,6 +68,7 @@ async function main(): Promise<void> {
   registerCatalogTools(server, client);
   registerDeploymentTools(server, client);
   registerTemplateTools(server, client);
+  registerPackageTools(server, client);
 
   // Connect via stdio transport
   const transport = new StdioServerTransport();

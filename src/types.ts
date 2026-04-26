@@ -260,6 +260,20 @@ export interface TemplateList {
   numberOfElements?: number;
 }
 
+// --- vRO Packages ---
+
+export interface VroPackage {
+  name: string;
+  description?: string;
+  version?: string;
+  href?: string;
+}
+
+export interface VroPackageList {
+  total?: number;
+  link: VroPackage[];
+}
+
 // --- Client config ---
 
 export interface VroClientConfig {
