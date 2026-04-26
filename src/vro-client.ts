@@ -1,23 +1,24 @@
 import type {
-  VroClientConfig,
-  Workflow,
-  WorkflowList,
-  WorkflowExecution,
   Action,
   ActionList,
-  ConfigElement,
-  ConfigElementList,
+  CatalogItem,
+  CatalogItemList,
   Category,
   CategoryList,
+  ConfigElement,
+  ConfigElementList,
+  Deployment,
+  DeploymentList,
+  EventTopicList,
   SimpleParameter,
   Subscription,
   SubscriptionList,
-  EventTopic,
-  EventTopicList,
-  CatalogItem,
-  CatalogItemList,
-  Deployment,
-  DeploymentList,
+  Template,
+  TemplateList,
+  VroClientConfig,
+  Workflow,
+  WorkflowExecution,
+  WorkflowList
 } from "./types.js";
 
 /**
@@ -33,6 +34,7 @@ export class VroClient {
   private eventBrokerBaseUrl: string;
   private catalogBaseUrl: string;
   private deploymentBaseUrl: string;
+  private blueprintBaseUrl: string;
   private sessionUrl: string;
   private loginHeader: string;
   private token: string | null = null;
@@ -42,6 +44,7 @@ export class VroClient {
     this.eventBrokerBaseUrl = `https://${config.host}/event-broker/api`;
     this.catalogBaseUrl = `https://${config.host}/catalog/api`;
     this.deploymentBaseUrl = `https://${config.host}/deployment/api`;
+    this.blueprintBaseUrl = `https://${config.host}/blueprint/api`;
     this.sessionUrl = `https://${config.host}/cloudapi/1.0.0/sessions`;
     // Basic Auth credential: username@organization:password
     this.loginHeader =
@@ -529,6 +532,51 @@ export class VroClient {
     await this.del<unknown>(
       `/deployments/${encodeURIComponent(id)}`,
       this.deploymentBaseUrl
+    );
+  }
+
+  // --- Blueprint Templates (Cloud Assembly) ---
+
+  async listTemplates(search?: string, projectId?: string): Promise<TemplateList> {
+    const params: string[] = [];
+    if (search) {
+      params.push(`$search=${encodeURIComponent(search)}`);
+    }
+    if (projectId) {
+      params.push(`projectId=${encodeURIComponent(projectId)}`);
+    }
+    const path = params.length > 0 ? `/blueprints?${params.join("&")}` : "/blueprints";
+    return this.get<TemplateList>(path, this.blueprintBaseUrl);
+  }
+
+  async getTemplate(id: string): Promise<Template> {
+    return this.get<Template>(
+      `/blueprints/${encodeURIComponent(id)}`,
+      this.blueprintBaseUrl
+    );
+  }
+
+  async createTemplate(params: {
+    name: string;
+    projectId: string;
+    description?: string;
+    content?: string;
+    requestScopeOrg?: boolean;
+  }): Promise<Template> {
+    const body: Record<string, unknown> = {
+      name: params.name,
+      projectId: params.projectId,
+    };
+    if (params.description !== undefined) body.description = params.description;
+    if (params.content !== undefined) body.content = params.content;
+    if (params.requestScopeOrg !== undefined) body.requestScopeOrg = params.requestScopeOrg;
+    return this.post<Template>("/blueprints", body, this.blueprintBaseUrl);
+  }
+
+  async deleteTemplate(id: string): Promise<void> {
+    await this.del<unknown>(
+      `/blueprints/${encodeURIComponent(id)}`,
+      this.blueprintBaseUrl
     );
   }
 

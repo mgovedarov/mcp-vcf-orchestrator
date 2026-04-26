@@ -2,14 +2,15 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { VroClient } from "./vro-client.js";
-import { registerWorkflowTools } from "./tools/workflow-tools.js";
 import { registerActionTools } from "./tools/action-tools.js";
-import { registerConfigTools } from "./tools/config-tools.js";
-import { registerCategoryTools } from "./tools/category-tools.js";
-import { registerSubscriptionTools } from "./tools/subscription-tools.js";
 import { registerCatalogTools } from "./tools/catalog-tools.js";
+import { registerCategoryTools } from "./tools/category-tools.js";
+import { registerConfigTools } from "./tools/config-tools.js";
 import { registerDeploymentTools } from "./tools/deployment-tools.js";
+import { registerSubscriptionTools } from "./tools/subscription-tools.js";
+import { registerTemplateTools } from "./tools/template-tools.js";
+import { registerWorkflowTools } from "./tools/workflow-tools.js";
+import { VroClient } from "./vro-client.js";
 
 function getRequiredEnv(name: string): string {
   const value = process.env[name];
@@ -51,6 +52,7 @@ async function main(): Promise<void> {
         "Use list-subscriptions to see existing event-driven triggers.",
         "Use list-catalog-items to browse the Service Broker catalog; use get-catalog-item to inspect a specific item by ID.",
         "Use list-deployments to see existing deployments; use create-deployment to deploy a catalog item, providing the catalogItemId, deploymentName, and projectId.",
+        "Use list-templates to browse blueprint templates; use get-template to inspect a specific template by ID; use create-template to create a new template; use delete-template to remove one.",
       ].join(" "),
     }
   );
@@ -63,6 +65,7 @@ async function main(): Promise<void> {
   registerSubscriptionTools(server, client);
   registerCatalogTools(server, client);
   registerDeploymentTools(server, client);
+  registerTemplateTools(server, client);
 
   // Connect via stdio transport
   const transport = new StdioServerTransport();

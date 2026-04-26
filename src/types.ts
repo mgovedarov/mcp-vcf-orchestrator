@@ -236,6 +236,30 @@ export interface DeploymentList {
   numberOfElements?: number;
 }
 
+// --- Blueprint Templates (Cloud Assembly) ---
+
+export interface Template {
+  id: string;
+  name: string;
+  description?: string;
+  content?: string;
+  status?: string; // e.g. "DRAFT" | "VERSIONED" | "RELEASED"
+  projectId?: string;
+  projectName?: string;
+  requestScopeOrg?: boolean;
+  valid?: boolean;
+  createdAt?: string;
+  createdBy?: string;
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+export interface TemplateList {
+  content: Template[];
+  totalElements?: number;
+  numberOfElements?: number;
+}
+
 // --- Client config ---
 
 export interface VroClientConfig {

@@ -2,7 +2,7 @@
 
 1. [x] List catalog items, get catalog item
 2. [x] Add support for deployments - list, delete, create from catalog item
-3. [ ] Add support for templates - list, create, delete
+3. [x] Add support for templates - list, create, delete
 4. [x] Add delete operations for workflows, actions, and configuration elements
 5. [ ] Add package import/export support
 6. [ ] Add inventory browsing/search (plugin inventory tree)
