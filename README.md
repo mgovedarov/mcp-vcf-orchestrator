@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@mgovedarov/mcp-vcf-orchestrator)](https://www.npmjs.com/package/@mgovedarov/mcp-vcf-orchestrator)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-An [MCP](https://modelcontextprotocol.io/) server that exposes VCF Automation Orchestrator (vRO) and Service Broker REST API operations as tools. Enables AI assistants to list, create, delete, and run workflows, actions, configuration elements, extensibility subscriptions, catalog items, and deployments via natural language.
+An [MCP](https://modelcontextprotocol.io/) server that exposes VCF Automation Orchestrator (vRO), Service Broker, and Cloud Assembly REST API operations as tools. Enables AI assistants to list, create, delete, and run workflows, actions, configuration elements, extensibility subscriptions, catalog items, deployments, and blueprint templates via natural language.
 
 Supports **VCF 9 Automation** and **Aria Automation 8.x**.
 
@@ -158,6 +158,15 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `create-deployment` | Deploy a catalog item by providing its ID, a deployment name, and a project ID |
 | `delete-deployment` | Delete a deployment (irreversible) |
 
+### Blueprint Templates
+
+| Tool | Description |
+|------|-------------|
+| `list-templates` | List blueprint templates, optionally filtered by name/keyword or project ID |
+| `get-template` | Get template details including status, project, validity, and full YAML content |
+| `create-template` | Create a new blueprint template with optional YAML content |
+| `delete-template` | Delete a blueprint template (irreversible) |
+
 ### Extensibility Subscriptions
 
 | Tool | Description |
@@ -230,6 +239,34 @@ Assistant calls: create-subscription(
   priority: 10
 )
   → Subscription created: Post-Provision VM Hardening (ENABLED)
+```
+
+### Browse and manage blueprint templates
+
+```
+User: List all blueprint templates in the system.
+
+Assistant calls: list-templates()
+  → Lists templates with IDs, status, and project names
+
+User: Show me the YAML content of the "Ubuntu OS Provisioning" template.
+
+Assistant calls: get-template(id: "...")
+  → Returns full blueprint YAML content and metadata
+
+User: Create a new blank blueprint template called "Web Tier" in the dev project.
+
+Assistant calls: create-template(
+  name: "Web Tier",
+  projectId: "<dev-project-id>",
+  description: "Blueprint for web tier VMs"
+)
+  → Template created: Web Tier (id: ...) [DRAFT]
+
+User: Delete the "linux test" template.
+
+Assistant calls: delete-template(id: "...", confirm: true)
+  → Template deleted successfully.
 ```
 
 ### List and deploy a catalog item
