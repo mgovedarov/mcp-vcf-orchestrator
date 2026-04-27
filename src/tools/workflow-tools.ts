@@ -358,4 +358,43 @@ export function registerWorkflowTools(
       }
     }
   );
+
+  server.registerTool(
+    "update-workflow",
+    {
+      title: "Update Workflow",
+      description:
+        "Update an existing workflow's name, description, or category. Only the fields you provide will be updated.",
+      inputSchema: z.object({
+        id: z.string().describe("The workflow ID to update"),
+        name: z.string().optional().describe("New name for the workflow"),
+        description: z.string().optional().describe("New description for the workflow"),
+        categoryId: z.string().optional().describe("New category ID to move the workflow to"),
+      }),
+      annotations: { readOnlyHint: false },
+    },
+    async ({ id, name, description, categoryId }): Promise<CallToolResult> => {
+      try {
+        const wf = await client.updateWorkflow(id, { name, description, categoryId });
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Workflow updated successfully.\nName: ${wf.name}\nID: ${wf.id}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to update workflow: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+  );
 }

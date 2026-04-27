@@ -226,4 +226,53 @@ export function registerConfigTools(
       }
     }
   );
+
+  server.registerTool(
+    "update-configuration",
+    {
+      title: "Update Configuration Element",
+      description:
+        "Update an existing configuration element's name, description, category, or attributes. Only the fields you provide will be updated.",
+      inputSchema: z.object({
+        id: z.string().describe("The configuration element ID to update"),
+        name: z.string().optional().describe("New name for the configuration element"),
+        description: z.string().optional().describe("New description"),
+        categoryId: z.string().optional().describe("New category ID to move the element to"),
+        attributes: z
+          .array(
+            z.object({
+              name: z.string().describe("Attribute name"),
+              type: z.string().describe("Attribute type (e.g. string, number, boolean)"),
+              value: z.string().optional().describe("Attribute value as a string"),
+            })
+          )
+          .optional()
+          .describe("New attributes (replaces existing ones)"),
+      }),
+      annotations: { readOnlyHint: false },
+    },
+    async ({ id, name, description, categoryId, attributes }): Promise<CallToolResult> => {
+      try {
+        const config = await client.updateConfiguration(id, { name, description, categoryId, attributes });
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Configuration element updated successfully.\nName: ${config.name}\nID: ${config.id}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to update configuration: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+  );
 }
