@@ -227,4 +227,54 @@ export function registerActionTools(
       }
     }
   );
+
+  server.registerTool(
+    "update-action",
+    {
+      title: "Update Action",
+      description:
+        "Update an existing action (scriptable task). Only the fields you provide will be updated.",
+      inputSchema: z.object({
+        id: z.string().describe("The action ID to update"),
+        name: z.string().optional().describe("New name for the action"),
+        moduleName: z.string().optional().describe("New module name (e.g. com.vmware.example)"),
+        script: z.string().optional().describe("New JavaScript/TypeScript script content"),
+        inputParameters: z
+          .array(
+            z.object({
+              name: z.string().describe("Parameter name"),
+              type: z.string().describe("Parameter type (e.g. string, number, boolean)"),
+              description: z.string().optional().describe("Parameter description"),
+            })
+          )
+          .optional()
+          .describe("New input parameters (replaces existing ones)"),
+        returnType: z.string().optional().describe("New return type (e.g. string, void)"),
+      }),
+      annotations: { readOnlyHint: false },
+    },
+    async ({ id, name, moduleName, script, inputParameters, returnType }): Promise<CallToolResult> => {
+      try {
+        const action = await client.updateAction(id, { name, moduleName, script, inputParameters, returnType });
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Action updated successfully.\nName: ${action.name}\nID: ${action.id}\nModule: ${action.module}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to update action: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+  );
 }

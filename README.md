@@ -114,6 +114,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `list-workflows` | List workflows, optionally filtered by name |
 | `get-workflow` | Get workflow details including input/output parameters |
 | `create-workflow` | Create a new empty workflow in a category |
+| `update-workflow` | Update a workflow's name, description, or category |
 | `delete-workflow` | Delete a workflow (irreversible) |
 | `run-workflow` | Execute a workflow with optional input parameters |
 | `list-workflow-executions` | List past and current executions for a workflow, with optional status filter |
@@ -126,6 +127,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `list-actions` | List actions (scriptable tasks), optionally filtered by name |
 | `get-action` | Get action details including script content and parameters |
 | `create-action` | Create a new action with script content |
+| `update-action` | Update an action's name, module, script, parameters, or return type |
 | `delete-action` | Delete an action (irreversible) |
 
 ### Configuration Elements
@@ -135,6 +137,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `list-configurations` | List configuration elements, optionally filtered by name |
 | `get-configuration` | Get configuration element details and attributes |
 | `create-configuration` | Create a new configuration element with attributes |
+| `update-configuration` | Update a configuration element's name, description, category, or attributes |
 | `delete-configuration` | Delete a configuration element (irreversible) |
 
 ### Categories
