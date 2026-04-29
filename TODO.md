@@ -6,6 +6,6 @@
 4. [x] Add delete operations for workflows, actions, and configuration elements
 5. [x] Add package import/export support
 6. [x] Add inventory browsing/search (plugin inventory tree)
-7. [x] Add update tools for workflows, actions, and configuration elements (update-workflow, update-action, update-configuration)
+7. [x] Add update tool for configuration elements (update-configuration)
 8. [x] Add list-workflow-executions tool to list past/running executions for a workflow
 9. [ ] Add deployment day-2 actions support (list-deployment-actions, run-deployment-action)

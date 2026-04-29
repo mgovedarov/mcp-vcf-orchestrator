@@ -239,21 +239,6 @@ export class VroClient {
     return this.post<Workflow>("/workflows", body);
   }
 
-  async updateWorkflow(
-    id: string,
-    params: {
-      name?: string;
-      description?: string;
-      categoryId?: string;
-    }
-  ): Promise<Workflow> {
-    const body: Record<string, unknown> = {};
-    if (params.name !== undefined) body.name = params.name;
-    if (params.description !== undefined) body.description = params.description;
-    if (params.categoryId !== undefined) body["category-id"] = params.categoryId;
-    return this.put<Workflow>(`/workflows/${encodeURIComponent(id)}`, body);
-  }
-
   async runWorkflow(
     id: string,
     inputs?: SimpleParameter[]
@@ -370,31 +355,6 @@ export class VroClient {
     await this.del<unknown>(`/actions/${encodeURIComponent(id)}`);
   }
 
-  async updateAction(
-    id: string,
-    params: {
-      name?: string;
-      moduleName?: string;
-      script?: string;
-      inputParameters?: { name: string; type: string; description?: string }[];
-      returnType?: string;
-    }
-  ): Promise<Action> {
-    const body: Record<string, unknown> = {};
-    if (params.name !== undefined) body.name = params.name;
-    if (params.moduleName !== undefined) body.module = params.moduleName;
-    if (params.script !== undefined) body.script = params.script;
-    if (params.returnType !== undefined) body["output-type"] = params.returnType;
-    if (params.inputParameters !== undefined) {
-      body["input-parameters"] = params.inputParameters.map((p) => ({
-        name: p.name,
-        type: p.type,
-        description: p.description ?? "",
-      }));
-    }
-    return this.put<Action>(`/actions/${encodeURIComponent(id)}`, body);
-  }
-
   // --- Configuration Elements ---
 
   async listConfigurations(filter?: string): Promise<ConfigElementList> {
@@ -460,22 +420,20 @@ export class VroClient {
     params: {
       name?: string;
       description?: string;
-      categoryId?: string;
       attributes?: { name: string; type: string; value?: string }[];
     }
-  ): Promise<ConfigElement> {
+  ): Promise<void> {
     const body: Record<string, unknown> = {};
     if (params.name !== undefined) body.name = params.name;
     if (params.description !== undefined) body.description = params.description;
-    if (params.categoryId !== undefined) body["category-id"] = params.categoryId;
     if (params.attributes !== undefined) {
-      body.attributes = params.attributes.map((a) => ({
+      body.attribute = params.attributes.map((a) => ({
         name: a.name,
         type: a.type,
         value: a.value ? { [a.type]: { value: a.value } } : undefined,
       }));
     }
-    return this.put<ConfigElement>(`/configurations/${encodeURIComponent(id)}`, body);
+    await this.put<unknown>(`/configurations/${encodeURIComponent(id)}`, body);
   }
 
   // --- Categories ---
