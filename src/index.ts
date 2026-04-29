@@ -30,6 +30,7 @@ async function main(): Promise<void> {
   const organization = getRequiredEnv("VCFA_ORGANIZATION");
   const password = getRequiredEnv("VCFA_PASSWORD");
   const ignoreTls = process.env["VCFA_IGNORE_TLS"] === "true";
+  const packageDir = process.env["VCFA_PACKAGE_DIR"];
 
   if (ignoreTls) {
     process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0";
@@ -39,7 +40,7 @@ async function main(): Promise<void> {
   }
 
   // Create vRO API client
-  const client = new VroClient({ host, username, organization, password, ignoreTls });
+  const client = new VroClient({ host, username, organization, password, ignoreTls, packageDir });
 
   // Create MCP server
   const server = new McpServer(
@@ -55,7 +56,7 @@ async function main(): Promise<void> {
         "Use list-catalog-items to browse the Service Broker catalog; use get-catalog-item to inspect a specific item by ID.",
         "Use list-deployments to see existing deployments; use create-deployment to deploy a catalog item, providing the catalogItemId, deploymentName, and projectId.",
         "Use list-templates to browse blueprint templates; use get-template to inspect a specific template by ID; use create-template to create a new template; use delete-template to remove one.",
-        "Use list-packages to browse vRO packages; use export-package to save a package as a ZIP file; use import-package to upload a package ZIP; use delete-package to remove a package.",
+        "Use list-packages to browse vRO packages; use export-package to save a package file under VCFA_PACKAGE_DIR; use import-package to upload a package file from VCFA_PACKAGE_DIR; use delete-package to remove a package.",
         "Use list-plugins to see all installed vRO plugins.",
       ].join(" "),
     }

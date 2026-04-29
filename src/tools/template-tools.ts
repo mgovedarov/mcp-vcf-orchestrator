@@ -183,7 +183,7 @@ export function registerTemplateTools(
                         "Must be set to true to confirm deletion. If false, the deletion will not proceed."
                     ),
             }),
-            annotations: { destructiveHint: true },
+            annotations: { readOnlyHint: false, destructiveHint: true },
         },
         async ({ id, confirm }): Promise<CallToolResult> => {
             if (!confirm) {
