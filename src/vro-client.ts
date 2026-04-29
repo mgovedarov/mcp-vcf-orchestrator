@@ -1,4 +1,6 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { basename, extname, isAbsolute, join, resolve, sep } from "node:path";
+import { tmpdir } from "node:os";
 import type {
   Action,
   ActionList,
@@ -43,6 +45,7 @@ export class VroClient {
   private blueprintBaseUrl: string;
   private sessionUrl: string;
   private loginHeader: string;
+  private packageDir: string;
   private token: string | null = null;
 
   constructor(private config: VroClientConfig) {
@@ -52,6 +55,9 @@ export class VroClient {
     this.deploymentBaseUrl = `https://${config.host}/deployment/api`;
     this.blueprintBaseUrl = `https://${config.host}/blueprint/api`;
     this.sessionUrl = `https://${config.host}/cloudapi/1.0.0/sessions`;
+    this.packageDir = resolve(
+      config.packageDir ?? join(tmpdir(), "mcp-vcf-orchestrator", "packages")
+    );
     // Basic Auth credential: username@organization:password
     this.loginHeader =
       "Basic " +
@@ -146,12 +152,10 @@ export class VroClient {
     }
 
     // Some endpoints return 202 Accepted with a Location header and no body,
-    // or 204 No Content. Handle both gracefully.
-    const contentLength = res.headers.get("content-length");
-    const hasBody = res.status !== 204 && contentLength !== "0";
-
-    if (!hasBody) {
-      // Extract ID from Location header if present (e.g. POST /executions)
+    // or 204 No Content. Read once so bodyless 202 responses do not throw
+    // JSON parse errors.
+    const text = await res.text();
+    if (!text) {
       const location = res.headers.get("location");
       if (location) {
         const id = location.split("/").pop() ?? "";
@@ -160,7 +164,7 @@ export class VroClient {
       return {} as T;
     }
 
-    return (await res.json()) as T;
+    return JSON.parse(text) as T;
   }
 
   private get<T>(path: string, overrideBaseUrl?: string): Promise<T> {
@@ -400,13 +404,7 @@ export class VroClient {
       body.description = description;
     }
     if (attributes && attributes.length > 0) {
-      body.attributes = attributes.map((a) => ({
-        name: a.name,
-        type: a.type,
-        value: a.value
-          ? { [a.type]: { value: a.value } }
-          : undefined,
-      }));
+      body.attribute = this.toVroParameters(attributes);
     }
     return this.post<ConfigElement>("/configurations", body);
   }
@@ -427,11 +425,7 @@ export class VroClient {
     if (params.name !== undefined) body.name = params.name;
     if (params.description !== undefined) body.description = params.description;
     if (params.attributes !== undefined) {
-      body.attribute = params.attributes.map((a) => ({
-        name: a.name,
-        type: a.type,
-        value: a.value ? { [a.type]: { value: a.value } } : undefined,
-      }));
+      body.attribute = this.toVroParameters(params.attributes);
     }
     await this.put<unknown>(`/configurations/${encodeURIComponent(id)}`, body);
   }
@@ -686,7 +680,55 @@ export class VroClient {
     };
   }
 
-  async exportPackage(name: string, destPath: string): Promise<void> {
+  private toVroParameters(
+    params: { name: string; type: string; value?: string }[]
+  ): { name: string; type: string; value?: Record<string, { value: string }> }[] {
+    return params.map((p) => ({
+      name: p.name,
+      type: p.type,
+      value: p.value !== undefined ? { [p.type]: { value: p.value } } : undefined,
+    }));
+  }
+
+  getPackageDirectory(): string {
+    return this.packageDir;
+  }
+
+  private async resolvePackagePath(fileName: string): Promise<string> {
+    if (isAbsolute(fileName)) {
+      throw new Error("Package file name must be relative to VCFA_PACKAGE_DIR, not absolute");
+    }
+    if (fileName !== basename(fileName)) {
+      throw new Error("Package file name must not contain path separators");
+    }
+    const ext = extname(fileName).toLowerCase();
+    if (ext !== ".package" && ext !== ".zip") {
+      throw new Error("Package file name must end with .package or .zip");
+    }
+
+    await mkdir(this.packageDir, { recursive: true });
+    const root = await realpath(this.packageDir);
+    const target = resolve(root, fileName);
+    if (target !== root && !target.startsWith(`${root}${sep}`)) {
+      throw new Error("Package file path escapes VCFA_PACKAGE_DIR");
+    }
+    return target;
+  }
+
+  async exportPackage(name: string, fileName: string, overwrite = false): Promise<string> {
+    const destPath = await this.resolvePackagePath(fileName);
+    const existingFile = await lstat(destPath).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== "ENOENT") throw error;
+      return null;
+    });
+    if (existingFile?.isSymbolicLink()) {
+      throw new Error("Package export target must not be a symbolic link");
+    }
+    if (existingFile && !overwrite) {
+      throw new Error(
+        `Package file already exists: ${fileName}. Set overwrite to true to replace it.`
+      );
+    }
     if (!this.token) {
       await this.authenticate();
     }
@@ -713,10 +755,21 @@ export class VroClient {
       throw new Error(`vRO API error: ${res.status} ${res.statusText} — export package\n${text}`);
     }
     const buffer = Buffer.from(await res.arrayBuffer());
-    await writeFile(destPath, buffer);
+    await writeFile(destPath, buffer, { flag: overwrite ? "w" : "wx" });
+    return destPath;
   }
 
-  async importPackage(srcPath: string, overwrite = true): Promise<void> {
+  async importPackage(fileName: string, overwrite = true): Promise<void> {
+    const srcPath = await this.resolvePackagePath(fileName);
+    const sourceFile = await lstat(srcPath);
+    if (sourceFile.isSymbolicLink()) {
+      throw new Error("Package import source must not be a symbolic link");
+    }
+    const root = await realpath(this.packageDir);
+    const realSrcPath = await realpath(srcPath);
+    if (realSrcPath !== root && !realSrcPath.startsWith(`${root}${sep}`)) {
+      throw new Error("Package file path resolves outside VCFA_PACKAGE_DIR");
+    }
     if (!this.token) {
       await this.authenticate();
     }

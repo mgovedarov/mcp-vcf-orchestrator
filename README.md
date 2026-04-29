@@ -48,6 +48,7 @@ Set the following environment variables (see `.env.example`):
 | `VCFA_ORGANIZATION` | Yes | Organization/tenant (e.g. `System` or `vsphere.local`) |
 | `VCFA_PASSWORD` | Yes | Password |
 | `VCFA_IGNORE_TLS` | No | Set to `true` to skip TLS certificate verification (lab environments) |
+| `VCFA_PACKAGE_DIR` | No | Directory used for package import/export files (defaults to a temp directory) |
 
 The server authenticates by POSTing to `https://{VCFA_HOST}/cloudapi/1.0.0/sessions` with Basic Auth as `{VCFA_USERNAME}@{VCFA_ORGANIZATION}:{VCFA_PASSWORD}` and uses the returned bearer token for all VCFA API calls.
 
@@ -175,8 +176,8 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 |------|-------------|
 | `list-packages` | List vRO packages on the Orchestrator instance, optionally filtered by name |
 | `get-package` | Get details of a specific package by its fully-qualified name |
-| `export-package` | Export a package as a ZIP file to a local path |
-| `import-package` | Import a package from a local ZIP file into the Orchestrator instance |
+| `export-package` | Export a package as a ZIP file under `VCFA_PACKAGE_DIR` |
+| `import-package` | Import a package file from `VCFA_PACKAGE_DIR` into the Orchestrator instance |
 | `delete-package` | Delete a package, optionally deleting all its contained elements |
 
 ### vRO Plugins

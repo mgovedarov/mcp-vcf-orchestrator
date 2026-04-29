@@ -14,6 +14,7 @@
   "scripts": {
     "start": "tsx src/index.ts",
     "build": "tsc",
+    "test": "npm run build && node --test test/*.test.mjs",
     "prepublishOnly": "npm run build",
     "inspect": "npx @modelcontextprotocol/inspector node dist/index.js"
   },

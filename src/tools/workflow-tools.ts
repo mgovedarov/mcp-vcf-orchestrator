@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
+import type { VroParameter, Workflow, WorkflowExecution } from "../types.js";
 import type { VroClient } from "../vro-client.js";
 
 const workflowExecutionStatusMap = {
@@ -10,6 +11,18 @@ const workflowExecutionStatusMap = {
   canceled: "CANCELED",
   "waiting-signal": "STATE_WAITING_ON_SIGNAL",
 } as const;
+
+export function getWorkflowInputParameters(workflow: Workflow): VroParameter[] {
+  return workflow.inputParameters ?? workflow["input-parameters"] ?? [];
+}
+
+export function getWorkflowOutputParameters(workflow: Workflow): VroParameter[] {
+  return workflow.outputParameters ?? workflow["output-parameters"] ?? [];
+}
+
+export function getExecutionOutputParameters(execution: WorkflowExecution): VroParameter[] {
+  return execution.outputParameters ?? execution["output-parameters"] ?? [];
+}
 
 export function registerWorkflowTools(
   server: McpServer,
@@ -80,8 +93,8 @@ export function registerWorkflowTools(
     async ({ id }): Promise<CallToolResult> => {
       try {
         const wf = await client.getWorkflow(id);
-        const inputParams = wf["input-parameters"] ?? [];
-        const outputParams = wf["output-parameters"] ?? [];
+        const inputParams = getWorkflowInputParameters(wf);
+        const outputParams = getWorkflowOutputParameters(wf);
 
         let text = `Workflow: ${wf.name}\nID: ${wf.id}\n`;
         if (wf.description) text += `Description: ${wf.description}\n`;
@@ -235,7 +248,7 @@ export function registerWorkflowTools(
           text += `\nError: ${exec["content-exception"]}\n`;
         }
 
-        const outputs = exec["output-parameters"] ?? [];
+        const outputs = getExecutionOutputParameters(exec);
         if (outputs.length > 0) {
           text += `\nOutput Parameters:\n`;
           for (const p of outputs) {

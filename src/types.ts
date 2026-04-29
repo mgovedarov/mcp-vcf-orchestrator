@@ -37,6 +37,8 @@ export interface Workflow {
   customizedIcon?: string;
   "input-parameters"?: VroParameter[];
   "output-parameters"?: VroParameter[];
+  inputParameters?: VroParameter[];
+  outputParameters?: VroParameter[];
   href?: string;
   relations?: {
     link: WorkflowLink[];
@@ -61,6 +63,7 @@ export interface WorkflowExecution {
   "started-by"?: string;
   "content-exception"?: string;
   "output-parameters"?: VroParameter[];
+  outputParameters?: VroParameter[];
   href?: string;
   name?: string;
 }
@@ -297,4 +300,5 @@ export interface VroClientConfig {
   organization: string;
   password: string;
   ignoreTls?: boolean;
+  packageDir?: string;
 }

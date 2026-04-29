@@ -19,7 +19,7 @@ export function registerPackageTools(
           .optional()
           .describe("Filter packages by name (substring match)"),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: false },
     },
     async ({ filter }): Promise<CallToolResult> => {
       try {
@@ -67,7 +67,7 @@ export function registerPackageTools(
           .string()
           .describe("The fully-qualified package name (e.g. com.example.mypackage)"),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: false },
     },
     async ({ name }): Promise<CallToolResult> => {
       try {
@@ -95,27 +95,31 @@ export function registerPackageTools(
     {
       title: "Export vRO Package",
       description:
-        "Export a vRO package as a ZIP file to a local path on the server. " +
+        "Export a vRO package as a ZIP file under VCFA_PACKAGE_DIR on the server. " +
         "The package name should be fully qualified (e.g. com.example.mypackage). " +
-        "The destination path must be an absolute file path (e.g. /tmp/com.example.mypackage.package).",
+        "The fileName must be a plain .package or .zip file name, not a path.",
       inputSchema: z.object({
         name: z
           .string()
           .describe("The fully-qualified package name to export (e.g. com.example.mypackage)"),
-        destPath: z
+        fileName: z
           .string()
-          .describe("Absolute local file path where the ZIP will be saved (e.g. /tmp/com.example.mypackage.package)"),
+          .describe("Package file name to save under VCFA_PACKAGE_DIR (e.g. com.example.mypackage.package)"),
+        overwrite: z
+          .boolean()
+          .optional()
+          .describe("Overwrite the file if it already exists (default: false)"),
       }),
       annotations: { readOnlyHint: true },
     },
-    async ({ name, destPath }): Promise<CallToolResult> => {
+    async ({ name, fileName, overwrite }): Promise<CallToolResult> => {
       try {
-        await client.exportPackage(name, destPath);
+        const savedPath = await client.exportPackage(name, fileName, overwrite ?? false);
         return {
           content: [
             {
               type: "text",
-              text: `Package '${name}' exported successfully to: ${destPath}`,
+              text: `Package '${name}' exported successfully to: ${savedPath}`,
             },
           ],
         };
@@ -138,28 +142,41 @@ export function registerPackageTools(
     {
       title: "Import vRO Package",
       description:
-        "Import a vRO package from a local ZIP file into the Orchestrator instance. " +
-        "The source path must be an absolute file path to a .package ZIP file. " +
-        "Set overwrite to true (default) to overwrite existing package contents.",
+        "Import a vRO package from VCFA_PACKAGE_DIR into the Orchestrator instance. " +
+        "The fileName must be a plain .package or .zip file name. " +
+        "Set confirm to true to proceed.",
       inputSchema: z.object({
-        srcPath: z
+        fileName: z
           .string()
-          .describe("Absolute local file path of the .package ZIP to import (e.g. /tmp/com.example.mypackage.package)"),
+          .describe("Package file name under VCFA_PACKAGE_DIR to import (e.g. com.example.mypackage.package)"),
         overwrite: z
           .boolean()
           .optional()
           .describe("Whether to overwrite existing package contents (default: true)"),
+        confirm: z
+          .boolean()
+          .describe("Must be set to true to confirm import. If false, the import will not proceed."),
       }),
       annotations: { readOnlyHint: false },
     },
-    async ({ srcPath, overwrite }): Promise<CallToolResult> => {
-      try {
-        await client.importPackage(srcPath, overwrite ?? true);
+    async ({ fileName, overwrite, confirm }): Promise<CallToolResult> => {
+      if (!confirm) {
         return {
           content: [
             {
               type: "text",
-              text: `Package imported successfully from: ${srcPath}`,
+              text: `Confirm import of package file ${fileName} from ${client.getPackageDirectory()} by setting confirm to true.`,
+            },
+          ],
+        };
+      }
+      try {
+        await client.importPackage(fileName, overwrite ?? true);
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Package imported successfully from: ${fileName}`,
             },
           ],
         };
