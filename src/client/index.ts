@@ -112,6 +112,26 @@ export class VroClient {
     return this.workflows.deleteWorkflow(id);
   }
 
+  getWorkflowDirectory(): string {
+    return this.workflows.getWorkflowDirectory();
+  }
+
+  exportWorkflowFile(
+    id: string,
+    fileName: string,
+    overwrite = false
+  ): Promise<string> {
+    return this.workflows.exportWorkflowFile(id, fileName, overwrite);
+  }
+
+  importWorkflowFile(
+    categoryId: string,
+    fileName: string,
+    overwrite = true
+  ): Promise<void> {
+    return this.workflows.importWorkflowFile(categoryId, fileName, overwrite);
+  }
+
   listActions(filter?: string): Promise<ActionList> {
     return this.actions.listActions(filter);
   }

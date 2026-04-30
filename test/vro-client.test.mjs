@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
@@ -126,6 +126,119 @@ test("package import rejects symbolic links", async () => {
   }
 });
 
+test("workflow import rejects path traversal before network calls", async () => {
+  const workflowDir = await mkdtemp(join(tmpdir(), "vcfa-workflows-"));
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    return authResponse();
+  };
+
+  try {
+    const client = new VroClient(config({ workflowDir }));
+    await assert.rejects(
+      () => client.importWorkflowFile("category-1", "../secret.workflow"),
+      /must not contain path separators/
+    );
+    assert.equal(calls.length, 0);
+  } finally {
+    await rm(workflowDir, { recursive: true, force: true });
+  }
+});
+
+test("workflow export rejects existing files unless overwrite is true", async () => {
+  const workflowDir = await mkdtemp(join(tmpdir(), "vcfa-workflows-"));
+  await writeFile(join(workflowDir, "existing.workflow"), "old");
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    return authResponse();
+  };
+
+  try {
+    const client = new VroClient(config({ workflowDir }));
+    await assert.rejects(
+      () => client.exportWorkflowFile("workflow-1", "existing.workflow"),
+      /already exists/
+    );
+    assert.equal(calls.length, 0);
+  } finally {
+    await rm(workflowDir, { recursive: true, force: true });
+  }
+});
+
+test("workflow import rejects symbolic links", async () => {
+  const workflowDir = await mkdtemp(join(tmpdir(), "vcfa-workflows-"));
+  const outsideFile = join(tmpdir(), `outside-${Date.now()}.workflow`);
+  await writeFile(outsideFile, "workflow");
+  await symlink(outsideFile, join(workflowDir, "linked.workflow"));
+
+  try {
+    const client = new VroClient(config({ workflowDir }));
+    await assert.rejects(
+      () => client.importWorkflowFile("category-1", "linked.workflow"),
+      /must not be a symbolic link/
+    );
+  } finally {
+    await rm(workflowDir, { recursive: true, force: true });
+    await rm(outsideFile, { force: true });
+  }
+});
+
+test("workflow import sends multipart file with category and overwrite query", async () => {
+  const workflowDir = await mkdtemp(join(tmpdir(), "vcfa-workflows-"));
+  await writeFile(join(workflowDir, "payload.workflow"), "workflow");
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return new Response("", { status: 200 });
+  };
+
+  try {
+    const client = new VroClient(config({ workflowDir }));
+    await client.importWorkflowFile("category-1", "payload.workflow", false);
+
+    assert.equal(
+      calls[1].url,
+      "https://vcfa.example.test/vco/api/workflows?categoryId=category-1&overwrite=false"
+    );
+    assert.equal(calls[1].init.method, "POST");
+    assert.equal(calls[1].init.headers["Content-Type"], undefined);
+    const body = calls[1].init.body;
+    assert.equal(body.get("file").name, "payload.workflow");
+  } finally {
+    await rm(workflowDir, { recursive: true, force: true });
+  }
+});
+
+test("workflow export writes only under workflow directory", async () => {
+  const workflowDir = await mkdtemp(join(tmpdir(), "vcfa-workflows-"));
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return new Response("workflow-bytes", { status: 200 });
+  };
+
+  try {
+    const client = new VroClient(config({ workflowDir }));
+    const savedPath = await client.exportWorkflowFile(
+      "workflow-1",
+      "saved.workflow"
+    );
+
+    assert.equal(savedPath, join(await realpath(workflowDir), "saved.workflow"));
+    assert.equal(
+      calls[1].url,
+      "https://vcfa.example.test/vco/api/content/workflows/workflow-1"
+    );
+    assert.equal(calls[1].init.method, "GET");
+  } finally {
+    await rm(workflowDir, { recursive: true, force: true });
+  }
+});
+
 test("listResources parses singular resource attributes", async () => {
   const calls = [];
   globalThis.fetch = async (url, init) => {
@@ -244,4 +357,48 @@ test("deleteResource includes force query only when requested", async () => {
 
   assert.equal(calls[1].url, "https://vcfa.example.test/vco/api/resources/resource-1?force=true");
   assert.equal(calls[1].init.method, "DELETE");
+});
+
+test("listWorkflowExecutions ignores non-execution relation links", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return Response.json({
+      relations: {
+        total: 1,
+        link: [
+          { href: "https://vcfa.example.test/vco/api/workflows/wf", rel: "up" },
+          { href: "https://vcfa.example.test/vco/api/workflows/wf/executions", rel: "add" },
+          {
+            href: "https://vcfa.example.test/vco/api/workflows/wf/executions/execution-1",
+            rel: "down",
+            attributes: [
+              { name: "id", value: "execution-1" },
+              { name: "state", value: "completed" },
+              { name: "startDate", value: "2026-04-28T07:24:10.429Z" },
+              { name: "endDate", value: "2026-04-28T07:24:11.701Z" },
+              { name: "startedBy", value: "admin" },
+            ],
+          },
+        ],
+      },
+    });
+  };
+
+  const client = new VroClient(config());
+  const executions = await client.listWorkflowExecutions("workflow-1", {
+    maxResults: 100,
+  });
+
+  assert.equal(executions.total, 1);
+  assert.deepEqual(executions.relations.link, [
+    {
+      id: "execution-1",
+      state: "completed",
+      "start-date": "2026-04-28T07:24:10.429Z",
+      "end-date": "2026-04-28T07:24:11.701Z",
+      "started-by": "admin",
+    },
+  ]);
 });

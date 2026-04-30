@@ -4,10 +4,11 @@ import { basename, isAbsolute, resolve, sep } from "node:path";
 export async function resolveFileInDirectory(
   rootDir: string,
   fileName: string,
-  label: string
+  label: string,
+  envName: string
 ): Promise<string> {
   if (isAbsolute(fileName)) {
-    throw new Error(`${label} file name must be relative to ${label === "Package" ? "VCFA_PACKAGE_DIR" : "VCFA_RESOURCE_DIR"}, not absolute`);
+    throw new Error(`${label} file name must be relative to ${envName}, not absolute`);
   }
   if (fileName !== basename(fileName)) {
     throw new Error(`${label} file name must not contain path separators`);
@@ -17,7 +18,7 @@ export async function resolveFileInDirectory(
   const root = await realpath(rootDir);
   const target = resolve(root, fileName);
   if (target !== root && !target.startsWith(`${root}${sep}`)) {
-    throw new Error(`${label} file path escapes ${label === "Package" ? "VCFA_PACKAGE_DIR" : "VCFA_RESOURCE_DIR"}`);
+    throw new Error(`${label} file path escapes ${envName}`);
   }
   return target;
 }

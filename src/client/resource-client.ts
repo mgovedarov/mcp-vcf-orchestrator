@@ -44,7 +44,12 @@ export class ResourceClient {
   }
 
   private resolveResourcePath(fileName: string): Promise<string> {
-    return resolveFileInDirectory(this.http.resourceDir, fileName, "Resource");
+    return resolveFileInDirectory(
+      this.http.resourceDir,
+      fileName,
+      "Resource",
+      "VCFA_RESOURCE_DIR"
+    );
   }
 
   async exportResource(id: string, fileName: string, overwrite = false): Promise<string> {

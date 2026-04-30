@@ -50,6 +50,7 @@ Set the following environment variables (see `.env.example`):
 | `VCFA_IGNORE_TLS` | No | Set to `true` to skip TLS certificate verification (lab environments) |
 | `VCFA_PACKAGE_DIR` | No | Directory used for package import/export files (defaults to a temp directory) |
 | `VCFA_RESOURCE_DIR` | No | Directory used for resource element import/export files (defaults to a temp directory) |
+| `VCFA_WORKFLOW_DIR` | No | Directory used for workflow artifact import/export files (defaults to a temp directory) |
 
 The server authenticates by POSTing to `https://{VCFA_HOST}/cloudapi/1.0.0/sessions` with Basic Auth as `{VCFA_USERNAME}@{VCFA_ORGANIZATION}:{VCFA_PASSWORD}` and uses the returned bearer token for all VCFA API calls.
 
@@ -120,6 +121,8 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `run-workflow` | Execute a workflow with optional input parameters |
 | `list-workflow-executions` | List past and current executions for a workflow, with optional status filter |
 | `get-workflow-execution` | Check execution status and retrieve outputs |
+| `export-workflow-file` | Export a workflow artifact to a `.workflow` file under `VCFA_WORKFLOW_DIR` |
+| `import-workflow-file` | Import a `.workflow` artifact from `VCFA_WORKFLOW_DIR` into a workflow category |
 
 ### Actions
 

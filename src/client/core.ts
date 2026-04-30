@@ -14,6 +14,7 @@ export class VroHttpClient {
   readonly blueprintBaseUrl: string;
   readonly packageDir: string;
   readonly resourceDir: string;
+  readonly workflowDir: string;
 
   private sessionUrl: string;
   private loginHeader: string;
@@ -31,6 +32,9 @@ export class VroHttpClient {
     );
     this.resourceDir = resolve(
       config.resourceDir ?? join(tmpdir(), "mcp-vcf-orchestrator", "resources")
+    );
+    this.workflowDir = resolve(
+      config.workflowDir ?? join(tmpdir(), "mcp-vcf-orchestrator", "workflows")
     );
     this.loginHeader =
       "Basic " +

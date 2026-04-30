@@ -11,3 +11,4 @@
 9. [ ] Add deployment day-2 actions support (list-deployment-actions, run-deployment-action)
 10. [x] Refactor vro-client.ts into separate modules
 11. [x] Add support for resource elements
+12. [ ] Implement import/export for actions, config elements and resource elements

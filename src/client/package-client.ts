@@ -51,7 +51,12 @@ export class PackageClient {
     if (ext !== ".package" && ext !== ".zip") {
       throw new Error("Package file name must end with .package or .zip");
     }
-    return resolveFileInDirectory(this.http.packageDir, fileName, "Package");
+    return resolveFileInDirectory(
+      this.http.packageDir,
+      fileName,
+      "Package",
+      "VCFA_PACKAGE_DIR"
+    );
   }
 
   async exportPackage(name: string, fileName: string, overwrite = false): Promise<string> {

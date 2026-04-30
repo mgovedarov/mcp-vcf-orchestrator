@@ -334,6 +334,111 @@ export function registerWorkflowTools(
   );
 
   server.registerTool(
+    "export-workflow-file",
+    {
+      title: "Export Workflow File",
+      description:
+        "Export a vRO workflow as a .workflow file under VCFA_WORKFLOW_DIR. The fileName must be a plain .workflow file name, not a path.",
+      inputSchema: z.object({
+        id: z.string().describe("The workflow ID to export"),
+        fileName: z
+          .string()
+          .describe("Workflow file name to save under VCFA_WORKFLOW_DIR"),
+        overwrite: z
+          .boolean()
+          .optional()
+          .describe("Overwrite the file if it already exists (default: false)"),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ id, fileName, overwrite }): Promise<CallToolResult> => {
+      try {
+        const savedPath = await client.exportWorkflowFile(
+          id,
+          fileName,
+          overwrite ?? false
+        );
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Workflow ${id} exported successfully to: ${savedPath}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to export workflow file: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  server.registerTool(
+    "import-workflow-file",
+    {
+      title: "Import Workflow File",
+      description:
+        "Import a .workflow file from VCFA_WORKFLOW_DIR into a workflow category. Use list-categories with type WorkflowCategory to find a category ID first. Set confirm to true to proceed.",
+      inputSchema: z.object({
+        categoryId: z
+          .string()
+          .describe("The workflow category ID to import into"),
+        fileName: z
+          .string()
+          .describe("Workflow file name under VCFA_WORKFLOW_DIR to import"),
+        overwrite: z
+          .boolean()
+          .optional()
+          .describe("Overwrite an existing workflow with the same identity (default: true)"),
+        confirm: z
+          .boolean()
+          .describe("Must be set to true to confirm import. If false, the import will not proceed."),
+      }),
+      annotations: { readOnlyHint: false },
+    },
+    async ({ categoryId, fileName, overwrite, confirm }): Promise<CallToolResult> => {
+      if (!confirm) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Confirm import of workflow file ${fileName} from ${client.getWorkflowDirectory()} by setting confirm to true.`,
+            },
+          ],
+        };
+      }
+      try {
+        await client.importWorkflowFile(categoryId, fileName, overwrite ?? true);
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Workflow imported successfully from: ${fileName}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to import workflow file: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  server.registerTool(
     "delete-workflow",
     {
       title: "Delete Workflow",
