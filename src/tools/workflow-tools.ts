@@ -1,8 +1,19 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import type { VroParameter, Workflow, WorkflowExecution } from "../types.js";
+import type {
+  SimpleParameter,
+  VroParameter,
+  Workflow,
+  WorkflowExecution,
+  WorkflowExecutionLog,
+  WorkflowExecutionStackItem,
+} from "../types.js";
 import type { VroClient } from "../vro-client.js";
+
+const DEFAULT_WORKFLOW_WAIT_TIMEOUT_SECONDS = 300;
+const DEFAULT_WORKFLOW_POLL_INTERVAL_SECONDS = 2;
+const DEFAULT_WORKFLOW_LOG_LIMIT = 20;
 
 const workflowExecutionStatusMap = {
   running: "RUNNING",
@@ -22,6 +33,290 @@ export function getWorkflowOutputParameters(workflow: Workflow): VroParameter[] 
 
 export function getExecutionOutputParameters(execution: WorkflowExecution): VroParameter[] {
   return execution.outputParameters ?? execution["output-parameters"] ?? [];
+}
+
+export function unwrapVroParameterValue(parameter: VroParameter): unknown {
+  const value = parameter.value;
+  if (value === undefined || value === null || typeof value !== "object") {
+    return value;
+  }
+
+  const byType = value[parameter.type];
+  if (hasValueProperty(byType)) {
+    return byType.value;
+  }
+
+  const entries = Object.values(value);
+  if (entries.length === 1 && hasValueProperty(entries[0])) {
+    return entries[0].value;
+  }
+
+  return value;
+}
+
+function hasValueProperty(value: unknown): value is { value: unknown } {
+  return typeof value === "object" && value !== null && "value" in value;
+}
+
+function getWorkflowExecutionStackItems(
+  execution: WorkflowExecution
+): WorkflowExecutionStackItem[] {
+  return (
+    execution.executionStack ??
+    execution["execution-stack"] ??
+    execution.workflowItem ??
+    execution["workflow-item"] ??
+    []
+  );
+}
+
+function normalizeExecutionState(state: string | undefined): string {
+  return (state ?? "").replaceAll("-", "_").toUpperCase();
+}
+
+function isCompletedState(state: string | undefined): boolean {
+  return normalizeExecutionState(state) === "COMPLETED";
+}
+
+function isFailureState(state: string | undefined): boolean {
+  return ["FAILED", "CANCELED", "CANCELLED"].includes(
+    normalizeExecutionState(state)
+  );
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function stringifyValue(value: unknown): string {
+  const json = JSON.stringify(value);
+  return json === undefined ? String(value) : json;
+}
+
+function validateParameterValue(type: string, value: unknown): string | null {
+  if (value === undefined) {
+    return "is missing a value";
+  }
+
+  const normalizedType = type.toLowerCase();
+  if (normalizedType === "string" && typeof value !== "string") {
+    return `must be a string for type ${type}`;
+  }
+  if (
+    normalizedType === "number" &&
+    (typeof value !== "number" || !Number.isFinite(value))
+  ) {
+    return `must be a finite number for type ${type}`;
+  }
+  if (normalizedType === "boolean" && typeof value !== "boolean") {
+    return `must be a boolean for type ${type}`;
+  }
+  if (normalizedType.startsWith("array/") && !Array.isArray(value)) {
+    return `must be an array for type ${type}`;
+  }
+
+  return null;
+}
+
+function validateWorkflowRunInputs(
+  workflow: Workflow,
+  inputs: { name: string; type?: string; value?: unknown }[] = []
+): { errors: string[]; inputs: SimpleParameter[] } {
+  const errors: string[] = [];
+  const definitions = getWorkflowInputParameters(workflow);
+  const definitionsByName = new Map(definitions.map((p) => [p.name, p]));
+  const seen = new Set<string>();
+  const normalizedInputs: SimpleParameter[] = [];
+
+  for (const input of inputs) {
+    if (seen.has(input.name)) {
+      errors.push(`Duplicate input: ${input.name}`);
+      continue;
+    }
+    seen.add(input.name);
+
+    const definition = definitionsByName.get(input.name);
+    if (!definition) {
+      errors.push(`Unknown input: ${input.name}`);
+      continue;
+    }
+
+    if (input.type !== undefined && input.type !== definition.type) {
+      errors.push(
+        `Input ${input.name} type ${input.type} does not match workflow type ${definition.type}`
+      );
+    }
+
+    const valueError = validateParameterValue(definition.type, input.value);
+    if (valueError) {
+      errors.push(`Input ${input.name} ${valueError}`);
+    }
+
+    normalizedInputs.push({
+      name: input.name,
+      type: definition.type,
+      value: input.value,
+    });
+  }
+
+  for (const definition of definitions) {
+    if (definition.value === undefined && !seen.has(definition.name)) {
+      errors.push(
+        `Missing required input: ${definition.name} (${definition.type})`
+      );
+    }
+  }
+
+  return { errors, inputs: normalizedInputs };
+}
+
+function formatValidationErrors(workflow: Workflow, errors: string[]): string {
+  return [
+    `Workflow input validation failed for ${workflow.name} (${workflow.id}).`,
+    "",
+    ...errors.map((error) => `• ${error}`),
+  ].join("\n");
+}
+
+function formatOutputParameters(execution: WorkflowExecution): string {
+  const outputs = getExecutionOutputParameters(execution);
+  if (outputs.length === 0) {
+    return "Output Parameters: none";
+  }
+
+  const lines = outputs.map(
+    (p) =>
+      `  • ${p.name} (${p.type}): ${stringifyValue(unwrapVroParameterValue(p))}`
+  );
+  return `Output Parameters:\n${lines.join("\n")}`;
+}
+
+function formatExecutionHeader(
+  title: string,
+  workflow: Workflow,
+  execution: WorkflowExecution,
+  elapsedMs?: number
+): string {
+  let text = `${title}\nWorkflow: ${workflow.name}\nWorkflow ID: ${workflow.id}\nExecution ID: ${execution.id}\nState: ${execution.state}\n`;
+  if (execution["start-date"]) text += `Started: ${execution["start-date"]}\n`;
+  if (execution["end-date"]) text += `Ended: ${execution["end-date"]}\n`;
+  if (execution["started-by"]) text += `Started by: ${execution["started-by"]}\n`;
+  if (elapsedMs !== undefined) {
+    text += `Elapsed wait: ${Math.round(elapsedMs / 1000)}s\n`;
+  }
+  return text.trimEnd();
+}
+
+function formatStackItem(item: WorkflowExecutionStackItem): string {
+  const label =
+    item.displayName ?? item.name ?? item.workflowDisplayName ?? item.href ?? "Unnamed item";
+  const details: string[] = [];
+  if (item.name && item.name !== label) details.push(`name: ${item.name}`);
+  if (item.workflowDisplayName) {
+    details.push(`workflow: ${item.workflowDisplayName}`);
+  }
+  return details.length > 0 ? `${label} (${details.join(", ")})` : label;
+}
+
+function formatLogEntry(log: WorkflowExecutionLog): string {
+  const prefix = [
+    log["time-stamp"],
+    log.severity ? `[${log.severity}]` : undefined,
+    log.origin,
+  ].filter(Boolean);
+  const shortDescription = log["short-description"];
+  const longDescription = log["long-description"];
+  const description =
+    shortDescription && longDescription && shortDescription !== longDescription
+      ? `${shortDescription} — ${longDescription}`
+      : shortDescription ?? longDescription ?? "(no description)";
+  return `${prefix.length > 0 ? `${prefix.join(" ")} ` : ""}${description}`;
+}
+
+function appendDiagnostics(
+  text: string,
+  execution: WorkflowExecution,
+  logs: WorkflowExecutionLog[],
+  warnings: string[]
+): string {
+  let result = text;
+  if (execution["business-state"]) {
+    result += `\nBusiness state: ${execution["business-state"]}`;
+  }
+  if (execution["current-item-display-name"]) {
+    result += `\nCurrent item: ${execution["current-item-display-name"]}`;
+  } else if (execution["current-item-for-display"]) {
+    result += `\nCurrent item: ${execution["current-item-for-display"]}`;
+  }
+  if (execution["content-exception"]) {
+    result += `\n\nError: ${execution["content-exception"]}`;
+  }
+
+  const stackItems = getWorkflowExecutionStackItems(execution);
+  if (stackItems.length > 0) {
+    result += `\n\nExecution Stack:\n${stackItems
+      .slice(0, 5)
+      .map((item) => `  • ${formatStackItem(item)}`)
+      .join("\n")}`;
+  }
+
+  if (logs.length > 0) {
+    result += `\n\nLog Excerpts:\n${logs
+      .map((log) => `  • ${formatLogEntry(log)}`)
+      .join("\n")}`;
+  }
+
+  if (warnings.length > 0) {
+    result += `\n\nWarnings:\n${warnings
+      .map((warning) => `  • ${warning}`)
+      .join("\n")}`;
+  }
+
+  return result;
+}
+
+async function collectExecutionDiagnostics(
+  client: VroClient,
+  workflowId: string,
+  execution: WorkflowExecution,
+  logLimit: number
+): Promise<{
+  execution: WorkflowExecution;
+  logs: WorkflowExecutionLog[];
+  warnings: string[];
+}> {
+  const warnings: string[] = [];
+  let detailedExecution = execution;
+
+  try {
+    detailedExecution = await client.getWorkflowExecution(
+      workflowId,
+      execution.id,
+      { showDetails: true }
+    );
+  } catch (error) {
+    warnings.push(`Unable to fetch detailed execution data: ${errorMessage(error)}`);
+  }
+
+  let logs: WorkflowExecutionLog[] = [];
+  if (logLimit > 0) {
+    try {
+      logs =
+        (
+          await client.getWorkflowExecutionLogs(workflowId, execution.id, {
+            maxResult: logLimit,
+          })
+        ).logs ?? [];
+    } catch (error) {
+      warnings.push(`Unable to fetch execution logs: ${errorMessage(error)}`);
+    }
+  }
+
+  return { execution: detailedExecution, logs, warnings };
 }
 
 export function registerWorkflowTools(
@@ -213,6 +508,177 @@ export function registerWorkflowTools(
             {
               type: "text",
               text: `Failed to run workflow: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  server.registerTool(
+    "run-workflow-and-wait",
+    {
+      title: "Run Workflow and Wait",
+      description:
+        "Validate inputs, execute a workflow, poll until completion/failure/timeout, and return outputs or useful failure diagnostics.",
+      inputSchema: z.object({
+        id: z.string().describe("The workflow ID to execute"),
+        inputs: z
+          .array(
+            z.object({
+              name: z.string().describe("Parameter name"),
+              type: z
+                .string()
+                .optional()
+                .describe(
+                  "Optional parameter type. If omitted, the workflow definition type is used."
+                ),
+              value: z.unknown().describe("Parameter value"),
+            })
+          )
+          .optional()
+          .describe("Input parameters for the workflow execution"),
+        timeoutSeconds: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe("Maximum time to wait for completion (default: 300)"),
+        pollIntervalSeconds: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe("Seconds between execution status polls (default: 2)"),
+        logLimit: z
+          .number()
+          .int()
+          .nonnegative()
+          .optional()
+          .describe("Maximum execution log entries to include on failure or timeout (default: 20)"),
+      }),
+      annotations: { readOnlyHint: false },
+    },
+    async ({
+      id,
+      inputs,
+      timeoutSeconds,
+      pollIntervalSeconds,
+      logLimit,
+    }): Promise<CallToolResult> => {
+      let startedExecution: WorkflowExecution | undefined;
+      try {
+        const workflow = await client.getWorkflow(id);
+        const validation = validateWorkflowRunInputs(workflow, inputs ?? []);
+        if (validation.errors.length > 0) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: formatValidationErrors(workflow, validation.errors),
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const timeoutMs = Math.max(
+          0,
+          (timeoutSeconds ?? DEFAULT_WORKFLOW_WAIT_TIMEOUT_SECONDS) * 1000
+        );
+        const pollIntervalMs = Math.max(
+          0,
+          (pollIntervalSeconds ?? DEFAULT_WORKFLOW_POLL_INTERVAL_SECONDS) * 1000
+        );
+        const maxLogs = Math.max(0, logLimit ?? DEFAULT_WORKFLOW_LOG_LIMIT);
+        const waitStartedAt = Date.now();
+        const deadline = waitStartedAt + timeoutMs;
+
+        startedExecution = await client.runWorkflow(id, validation.inputs);
+        if (!startedExecution.id) {
+          throw new Error("Workflow execution did not return an execution ID");
+        }
+
+        let lastExecution = startedExecution;
+        while (true) {
+          lastExecution = await client.getWorkflowExecution(
+            id,
+            startedExecution.id
+          );
+
+          if (isCompletedState(lastExecution.state)) {
+            const elapsedMs = Date.now() - waitStartedAt;
+            const text = [
+              formatExecutionHeader(
+                "Workflow execution completed.",
+                workflow,
+                lastExecution,
+                elapsedMs
+              ),
+              "",
+              formatOutputParameters(lastExecution),
+            ].join("\n");
+            return { content: [{ type: "text", text }] };
+          }
+
+          if (isFailureState(lastExecution.state)) {
+            const elapsedMs = Date.now() - waitStartedAt;
+            const diagnostics = await collectExecutionDiagnostics(
+              client,
+              id,
+              lastExecution,
+              maxLogs
+            );
+            const text = appendDiagnostics(
+              formatExecutionHeader(
+                "Workflow execution failed.",
+                workflow,
+                diagnostics.execution,
+                elapsedMs
+              ),
+              diagnostics.execution,
+              diagnostics.logs,
+              diagnostics.warnings
+            );
+            return { content: [{ type: "text", text }], isError: true };
+          }
+
+          const remainingMs = deadline - Date.now();
+          if (remainingMs <= 0) {
+            const elapsedMs = Date.now() - waitStartedAt;
+            const diagnostics = await collectExecutionDiagnostics(
+              client,
+              id,
+              lastExecution,
+              maxLogs
+            );
+            const text = appendDiagnostics(
+              formatExecutionHeader(
+                "Workflow execution timed out while waiting.",
+                workflow,
+                diagnostics.execution,
+                elapsedMs
+              ) +
+                `\nTimeout: ${Math.round(timeoutMs / 1000)}s\nThe remote workflow was not canceled.`,
+              diagnostics.execution,
+              diagnostics.logs,
+              diagnostics.warnings
+            );
+            return { content: [{ type: "text", text }], isError: true };
+          }
+
+          await sleep(Math.min(pollIntervalMs, remainingMs));
+        }
+      } catch (error) {
+        const prefix = startedExecution?.id
+          ? `Workflow execution ${startedExecution.id} started, but the wait loop failed`
+          : "Failed to run workflow and wait";
+        return {
+          content: [
+            {
+              type: "text",
+              text: `${prefix}: ${errorMessage(error)}`,
             },
           ],
           isError: true,

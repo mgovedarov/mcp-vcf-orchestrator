@@ -55,6 +55,7 @@ async function main(): Promise<void> {
         "This server connects to a VCF Automation instance.",
         "Use list-categories before creating workflows, actions, or configuration elements to find the target category ID.",
         "Use get-workflow to inspect a workflow's input parameters before running it with run-workflow.",
+        "Use run-workflow-and-wait for rapid development loops that validate workflow inputs, wait for completion, and return outputs or diagnostics.",
         "After starting a workflow execution with run-workflow, use get-workflow-execution to poll for completion and retrieve outputs.",
         "Use export-workflow-file to save a workflow artifact under VCFA_WORKFLOW_DIR; use import-workflow-file to upload a .workflow artifact from VCFA_WORKFLOW_DIR into a workflow category.",
         "Use export-action-file to save an action artifact under VCFA_ACTION_DIR; use import-action-file to upload a .action artifact from VCFA_ACTION_DIR into an action category by category name.",

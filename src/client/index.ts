@@ -25,6 +25,7 @@ import type {
   Workflow,
   WorkflowExecution,
   WorkflowExecutionList,
+  WorkflowExecutionLogs,
   WorkflowList,
 } from "../types.js";
 import { ActionClient } from "./action-client.js";
@@ -99,9 +100,22 @@ export class VroClient {
 
   getWorkflowExecution(
     workflowId: string,
-    executionId: string
+    executionId: string,
+    options?: { showDetails?: boolean }
   ): Promise<WorkflowExecution> {
-    return this.workflows.getWorkflowExecution(workflowId, executionId);
+    return this.workflows.getWorkflowExecution(workflowId, executionId, options);
+  }
+
+  getWorkflowExecutionLogs(
+    workflowId: string,
+    executionId: string,
+    options?: { maxResult?: number }
+  ): Promise<WorkflowExecutionLogs> {
+    return this.workflows.getWorkflowExecutionLogs(
+      workflowId,
+      executionId,
+      options
+    );
   }
 
   listWorkflowExecutions(
