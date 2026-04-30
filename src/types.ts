@@ -61,11 +61,28 @@ export interface WorkflowExecution {
   "start-date"?: string;
   "end-date"?: string;
   "started-by"?: string;
+  "business-state"?: string;
   "content-exception"?: string;
+  "current-item-display-name"?: string;
+  "current-item-for-display"?: string;
   "output-parameters"?: VroParameter[];
   outputParameters?: VroParameter[];
+  "execution-stack"?: WorkflowExecutionStackItem[];
+  executionStack?: WorkflowExecutionStackItem[];
+  "workflow-item"?: WorkflowExecutionStackItem[];
+  workflowItem?: WorkflowExecutionStackItem[];
   href?: string;
   name?: string;
+}
+
+export interface WorkflowExecutionStackItem {
+  name?: string;
+  displayName?: string;
+  workflowDisplayName?: string;
+  href?: string;
+  parameter?: VroParameter[];
+  attributes?: VroParameter[];
+  "workflow-attributes"?: VroParameter[];
 }
 
 export interface WorkflowExecutionList {
@@ -73,6 +90,21 @@ export interface WorkflowExecutionList {
   relations?: {
     link: WorkflowExecution[];
   };
+}
+
+export interface WorkflowExecutionLog {
+  severity?: string;
+  userName?: string;
+  user?: string;
+  origin?: string;
+  "short-description"?: string;
+  "long-description"?: string;
+  "time-stamp"?: string;
+  "time-stamp-val"?: number;
+}
+
+export interface WorkflowExecutionLogs {
+  logs?: WorkflowExecutionLog[];
 }
 
 // --- Actions ---

@@ -5,6 +5,7 @@ import type {
   Workflow,
   WorkflowExecution,
   WorkflowExecutionList,
+  WorkflowExecutionLogs,
   WorkflowList,
 } from "../types.js";
 import { parseAttrs } from "./attrs.js";
@@ -82,10 +83,31 @@ export class WorkflowClient {
 
   getWorkflowExecution(
     workflowId: string,
-    executionId: string
+    executionId: string,
+    options?: { showDetails?: boolean }
   ): Promise<WorkflowExecution> {
+    const params: string[] = [];
+    if (options?.showDetails) {
+      params.push("showDetails=true");
+    }
+    const query = params.length > 0 ? `?${params.join("&")}` : "";
     return this.http.get<WorkflowExecution>(
-      `/workflows/${encodeURIComponent(workflowId)}/executions/${encodeURIComponent(executionId)}`
+      `/workflows/${encodeURIComponent(workflowId)}/executions/${encodeURIComponent(executionId)}${query}`
+    );
+  }
+
+  getWorkflowExecutionLogs(
+    workflowId: string,
+    executionId: string,
+    options?: { maxResult?: number }
+  ): Promise<WorkflowExecutionLogs> {
+    const params: string[] = [];
+    if (options?.maxResult !== undefined) {
+      params.push(`maxResult=${options.maxResult}`);
+    }
+    const query = params.length > 0 ? `?${params.join("&")}` : "";
+    return this.http.get<WorkflowExecutionLogs>(
+      `/workflows/${encodeURIComponent(workflowId)}/executions/${encodeURIComponent(executionId)}/logs${query}`
     );
   }
 

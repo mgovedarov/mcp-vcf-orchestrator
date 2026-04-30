@@ -121,6 +121,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `create-workflow` | Create a new empty workflow in a category |
 | `delete-workflow` | Delete a workflow (irreversible) |
 | `run-workflow` | Execute a workflow with optional input parameters |
+| `run-workflow-and-wait` | Validate inputs, execute a workflow, wait for completion, and return outputs or diagnostics |
 | `list-workflow-executions` | List past and current executions for a workflow, with optional status filter |
 | `get-workflow-execution` | Check execution status and retrieve outputs |
 | `export-workflow-file` | Export a workflow artifact to a `.workflow` file under `VCFA_WORKFLOW_DIR` |
@@ -239,6 +240,9 @@ Assistant calls: run-workflow(id: "...", inputs: [{name: "vm", type: "VC:Virtual
   → Returns execution ID
 Assistant calls: get-workflow-execution(workflowId: "...", executionId: "...")
   → Returns state: "completed", outputs
+
+Assistant can also call: run-workflow-and-wait(id: "...", inputs: [{name: "vm", value: "..."}])
+  → Validates inputs, waits up to 5 minutes by default, and returns outputs or failure diagnostics
 ```
 
 ### Create a custom action

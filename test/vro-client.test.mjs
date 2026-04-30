@@ -39,6 +39,52 @@ test("bodyless 202 responses with Location return an execution id", async () => 
   assert.equal(calls.length, 2);
 });
 
+test("getWorkflowExecution can request detailed execution data", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return Response.json({ id: "execution-1", state: "RUNNING" });
+  };
+
+  const client = new VroClient(config());
+  const execution = await client.getWorkflowExecution("workflow 1", "exec/1", {
+    showDetails: true,
+  });
+
+  assert.equal(execution.id, "execution-1");
+  assert.equal(
+    calls[1].url,
+    "https://vcfa.example.test/vco/api/workflows/workflow%201/executions/exec%2F1?showDetails=true"
+  );
+  assert.equal(calls[1].init.method, "GET");
+});
+
+test("getWorkflowExecutionLogs calls workflow execution logs endpoint", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return Response.json({
+      logs: [{ severity: "INFO", "short-description": "hello" }],
+    });
+  };
+
+  const client = new VroClient(config());
+  const logs = await client.getWorkflowExecutionLogs(
+    "workflow-1",
+    "execution-1",
+    { maxResult: 3 }
+  );
+
+  assert.equal(logs.logs[0]["short-description"], "hello");
+  assert.equal(
+    calls[1].url,
+    "https://vcfa.example.test/vco/api/workflows/workflow-1/executions/execution-1/logs?maxResult=3"
+  );
+  assert.equal(calls[1].init.method, "GET");
+});
+
 test("createConfiguration sends singular attribute payload", async () => {
   const calls = [];
   globalThis.fetch = async (url, init) => {

@@ -6,7 +6,7 @@ trigger: "vcfa-orchestrator"
 
 # VCF Orchestrator Agent
 
-This custom agent is designed to assist with managing VCF Automation Orchestrator workflows, workflow executions, actions, configurations, resource elements, subscriptions, catalog items, deployments, templates, packages, and plugins via natural language commands. It loads the MCP server tools automatically and exposes commands like \`list-workflows\`, \`create-workflow\`, \`run-workflow\`, \`list-workflow-executions\`, \`list-deployments\`, and related artifact import/export commands.
+This custom agent is designed to assist with managing VCF Automation Orchestrator workflows, workflow executions, actions, configurations, resource elements, subscriptions, catalog items, deployments, templates, packages, and plugins via natural language commands. It loads the MCP server tools automatically and exposes commands like \`list-workflows\`, \`create-workflow\`, \`run-workflow\`, \`run-workflow-and-wait\`, \`list-workflow-executions\`, \`list-deployments\`, and related artifact import/export commands.
 
 ## When to Use
 
@@ -20,7 +20,7 @@ This custom agent is designed to assist with managing VCF Automation Orchestrato
 
 ## Commands
 
-- Workflows: \`list-workflows\`, \`get-workflow\`, \`create-workflow\`, \`run-workflow\`, \`list-workflow-executions\`, \`get-workflow-execution\`, \`export-workflow-file\`, \`import-workflow-file\`, \`delete-workflow\`
+- Workflows: \`list-workflows\`, \`get-workflow\`, \`create-workflow\`, \`run-workflow\`, \`run-workflow-and-wait\`, \`list-workflow-executions\`, \`get-workflow-execution\`, \`export-workflow-file\`, \`import-workflow-file\`, \`delete-workflow\`
 - Actions: \`list-actions\`, \`get-action\`, \`create-action\`, \`export-action-file\`, \`import-action-file\`, \`delete-action\`
 - Configuration elements: \`list-configurations\`, \`get-configuration\`, \`create-configuration\`, \`update-configuration\`, \`export-configuration-file\`, \`import-configuration-file\`, \`delete-configuration\`
 - Resource elements: \`list-resource-elements\`, \`export-resource-element\`, \`import-resource-element\`, \`update-resource-element\`, \`delete-resource-element\`
