@@ -13,6 +13,7 @@ import type {
   DeploymentRequest,
   EventTopicList,
   ResourceElementList,
+  ScaffoldWorkflowFileParams,
   SimpleParameter,
   Subscription,
   SubscriptionList,
@@ -151,6 +152,10 @@ export class VroClient {
     overwrite = true,
   ): Promise<void> {
     return this.workflows.importWorkflowFile(categoryId, fileName, overwrite);
+  }
+
+  scaffoldWorkflowFile(params: ScaffoldWorkflowFileParams): Promise<string> {
+    return this.workflows.scaffoldWorkflowFile(params);
   }
 
   listActions(filter?: string): Promise<ActionList> {

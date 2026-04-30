@@ -932,6 +932,134 @@ export function registerWorkflowTools(
   );
 
   server.registerTool(
+    "scaffold-workflow-file",
+    {
+      title: "Scaffold Workflow File",
+      description:
+        "Generate a local importable .workflow artifact under VCFA_WORKFLOW_DIR from structured metadata, linear scriptable tasks, scripts, and bindings. Use import-workflow-file to upload it afterwards.",
+      inputSchema: z.object({
+        fileName: z
+          .string()
+          .describe("Workflow file name to save under VCFA_WORKFLOW_DIR"),
+        overwrite: z
+          .boolean()
+          .optional()
+          .describe("Overwrite the file if it already exists (default: false)"),
+        workflow: z.object({
+          id: z
+            .string()
+            .optional()
+            .describe("Optional workflow ID. Defaults to a generated UUID."),
+          name: z.string().describe("Workflow display name"),
+          description: z.string().optional().describe("Workflow description"),
+          version: z
+            .string()
+            .optional()
+            .describe("Workflow version (default: 1.0.0)"),
+          apiVersion: z
+            .string()
+            .optional()
+            .describe("Workflow API version (default: 6.0.0)"),
+          inputs: z
+            .array(
+              z.object({
+                name: z.string().describe("Workflow input parameter name"),
+                type: z.string().describe("vRO parameter type"),
+                description: z.string().optional(),
+              }),
+            )
+            .optional(),
+          outputs: z
+            .array(
+              z.object({
+                name: z.string().describe("Workflow output parameter name"),
+                type: z.string().describe("vRO parameter type"),
+                description: z.string().optional(),
+              }),
+            )
+            .optional(),
+          attributes: z
+            .array(
+              z.object({
+                name: z.string().describe("Workflow attribute name"),
+                type: z.string().describe("vRO parameter type"),
+                description: z.string().optional(),
+              }),
+            )
+            .optional(),
+          tasks: z
+            .array(
+              z.object({
+                name: z
+                  .string()
+                  .optional()
+                  .describe("Internal workflow item name. Defaults to itemN."),
+                displayName: z
+                  .string()
+                  .optional()
+                  .describe("Task display name"),
+                description: z.string().optional(),
+                script: z.string().describe("Scriptable task JavaScript body"),
+                inBindings: z
+                  .array(
+                    z.object({
+                      name: z.string().describe("Script variable name"),
+                      type: z.string().describe("vRO parameter type"),
+                      source: z
+                        .string()
+                        .describe("Workflow input or attribute name"),
+                    }),
+                  )
+                  .optional(),
+                outBindings: z
+                  .array(
+                    z.object({
+                      name: z.string().describe("Script variable name"),
+                      type: z.string().describe("vRO parameter type"),
+                      target: z
+                        .string()
+                        .describe("Workflow output or attribute name"),
+                    }),
+                  )
+                  .optional(),
+              }),
+            )
+            .min(1)
+            .describe("Linear sequence of scriptable tasks"),
+        }),
+      }),
+      annotations: { readOnlyHint: false },
+    },
+    async ({ fileName, overwrite, workflow }): Promise<CallToolResult> => {
+      try {
+        const savedPath = await client.scaffoldWorkflowFile({
+          fileName,
+          overwrite: overwrite ?? false,
+          workflow,
+        });
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Workflow scaffold generated successfully at: ${savedPath}\nUse import-workflow-file to upload it into a workflow category.`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to scaffold workflow file: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  server.registerTool(
     "delete-workflow",
     {
       title: "Delete Workflow",

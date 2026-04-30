@@ -41,18 +41,18 @@ npm run build
 
 Set the following environment variables (see `.env.example`):
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `VCFA_HOST` | Yes | VCFA hostname (e.g. `vcfa.example.com`) |
-| `VCFA_USERNAME` | Yes | Username without organization (e.g. `admin`) |
-| `VCFA_ORGANIZATION` | Yes | Organization/tenant (e.g. `System` or `vsphere.local`) |
-| `VCFA_PASSWORD` | Yes | Password |
-| `VCFA_IGNORE_TLS` | No | Set to `true` to skip TLS certificate verification (lab environments) |
-| `VCFA_PACKAGE_DIR` | No | Directory used for package import/export files (defaults to a temp directory) |
-| `VCFA_RESOURCE_DIR` | No | Directory used for resource element import/export files (defaults to a temp directory) |
-| `VCFA_WORKFLOW_DIR` | No | Directory used for workflow artifact import/export files (defaults to a temp directory) |
-| `VCFA_ACTION_DIR` | No | Directory used for action artifact import/export files (defaults to a temp directory) |
-| `VCFA_CONFIGURATION_DIR` | No | Directory used for configuration artifact import/export files (defaults to a temp directory) |
+| Variable                 | Required | Description                                                                                  |
+| ------------------------ | -------- | -------------------------------------------------------------------------------------------- |
+| `VCFA_HOST`              | Yes      | VCFA hostname (e.g. `vcfa.example.com`)                                                      |
+| `VCFA_USERNAME`          | Yes      | Username without organization (e.g. `admin`)                                                 |
+| `VCFA_ORGANIZATION`      | Yes      | Organization/tenant (e.g. `System` or `vsphere.local`)                                       |
+| `VCFA_PASSWORD`          | Yes      | Password                                                                                     |
+| `VCFA_IGNORE_TLS`        | No       | Set to `true` to skip TLS certificate verification (lab environments)                        |
+| `VCFA_PACKAGE_DIR`       | No       | Directory used for package import/export files (defaults to a temp directory)                |
+| `VCFA_RESOURCE_DIR`      | No       | Directory used for resource element import/export files (defaults to a temp directory)       |
+| `VCFA_WORKFLOW_DIR`      | No       | Directory used for workflow artifact import/export files (defaults to a temp directory)      |
+| `VCFA_ACTION_DIR`        | No       | Directory used for action artifact import/export files (defaults to a temp directory)        |
+| `VCFA_CONFIGURATION_DIR` | No       | Directory used for configuration artifact import/export files (defaults to a temp directory) |
 
 The server authenticates by POSTing to `https://{VCFA_HOST}/cloudapi/1.0.0/sessions` with Basic Auth as `{VCFA_USERNAME}@{VCFA_ORGANIZATION}:{VCFA_PASSWORD}` and uses the returned bearer token for all VCFA API calls.
 
@@ -114,274 +114,320 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 ### Workflows
 
-| Tool | Description |
-|------|-------------|
-| `list-workflows` | List workflows, optionally filtered by name |
-| `get-workflow` | Get workflow details including input/output parameters |
-| `create-workflow` | Create a new empty workflow in a category |
-| `delete-workflow` | Delete a workflow (irreversible) |
-| `run-workflow` | Execute a workflow with optional input parameters |
-| `run-workflow-and-wait` | Validate inputs, execute a workflow, wait for completion, and return outputs or diagnostics |
-| `list-workflow-executions` | List past and current executions for a workflow, with optional status filter |
-| `get-workflow-execution` | Check execution status and retrieve outputs |
-| `export-workflow-file` | Export a workflow artifact to a `.workflow` file under `VCFA_WORKFLOW_DIR` |
-| `import-workflow-file` | Import a `.workflow` artifact from `VCFA_WORKFLOW_DIR` into a workflow category |
+| Tool                       | Description                                                                                 |
+| -------------------------- | ------------------------------------------------------------------------------------------- |
+| `list-workflows`           | List workflows, optionally filtered by name                                                 |
+| `get-workflow`             | Get workflow details including input/output parameters                                      |
+| `create-workflow`          | Create a new empty workflow in a category                                                   |
+| `delete-workflow`          | Delete a workflow (irreversible)                                                            |
+| `run-workflow`             | Execute a workflow with optional input parameters                                           |
+| `run-workflow-and-wait`    | Validate inputs, execute a workflow, wait for completion, and return outputs or diagnostics |
+| `list-workflow-executions` | List past and current executions for a workflow, with optional status filter                |
+| `get-workflow-execution`   | Check execution status and retrieve outputs                                                 |
+| `export-workflow-file`     | Export a workflow artifact to a `.workflow` file under `VCFA_WORKFLOW_DIR`                  |
+| `scaffold-workflow-file`   | Generate a local `.workflow` artifact from structured metadata and linear scriptable tasks  |
+| `import-workflow-file`     | Import a `.workflow` artifact from `VCFA_WORKFLOW_DIR` into a workflow category             |
 
 ### Actions
 
-| Tool | Description |
-|------|-------------|
-| `list-actions` | List actions (scriptable tasks), optionally filtered by name |
-| `get-action` | Get action details including script content and parameters |
-| `create-action` | Create a new action with script content |
-| `export-action-file` | Export an action artifact to a `.action` file under `VCFA_ACTION_DIR` |
+| Tool                 | Description                                                                |
+| -------------------- | -------------------------------------------------------------------------- |
+| `list-actions`       | List actions (scriptable tasks), optionally filtered by name               |
+| `get-action`         | Get action details including script content and parameters                 |
+| `create-action`      | Create a new action with script content                                    |
+| `export-action-file` | Export an action artifact to a `.action` file under `VCFA_ACTION_DIR`      |
 | `import-action-file` | Import a `.action` artifact from `VCFA_ACTION_DIR` into an action category |
-| `delete-action` | Delete an action (irreversible) |
+| `delete-action`      | Delete an action (irreversible)                                            |
 
 ### Configuration Elements
 
-| Tool | Description |
-|------|-------------|
-| `list-configurations` | List configuration elements, optionally filtered by name |
-| `get-configuration` | Get configuration element details and attributes |
-| `create-configuration` | Create a new configuration element with attributes |
-| `update-configuration` | Update a configuration element's name, description, or attributes |
-| `export-configuration-file` | Export a configuration artifact to a `.vsoconf` file under `VCFA_CONFIGURATION_DIR` |
+| Tool                        | Description                                                                              |
+| --------------------------- | ---------------------------------------------------------------------------------------- |
+| `list-configurations`       | List configuration elements, optionally filtered by name                                 |
+| `get-configuration`         | Get configuration element details and attributes                                         |
+| `create-configuration`      | Create a new configuration element with attributes                                       |
+| `update-configuration`      | Update a configuration element's name, description, or attributes                        |
+| `export-configuration-file` | Export a configuration artifact to a `.vsoconf` file under `VCFA_CONFIGURATION_DIR`      |
 | `import-configuration-file` | Import a `.vsoconf` artifact from `VCFA_CONFIGURATION_DIR` into a configuration category |
-| `delete-configuration` | Delete a configuration element (irreversible) |
+| `delete-configuration`      | Delete a configuration element (irreversible)                                            |
 
 ### Resource Elements
 
-| Tool | Description |
-|------|-------------|
-| `list-resource-elements` | List resource elements, optionally filtered by name |
-| `export-resource-element` | Export a resource element by ID to a file under `VCFA_RESOURCE_DIR` |
-| `import-resource-element` | Import a resource element file from `VCFA_RESOURCE_DIR` into a resource category |
+| Tool                      | Description                                                                                 |
+| ------------------------- | ------------------------------------------------------------------------------------------- |
+| `list-resource-elements`  | List resource elements, optionally filtered by name                                         |
+| `export-resource-element` | Export a resource element by ID to a file under `VCFA_RESOURCE_DIR`                         |
+| `import-resource-element` | Import a resource element file from `VCFA_RESOURCE_DIR` into a resource category            |
 | `update-resource-element` | Replace an existing resource element's binary content from a file under `VCFA_RESOURCE_DIR` |
-| `delete-resource-element` | Delete a resource element, optionally forcing deletion when it is referenced |
+| `delete-resource-element` | Delete a resource element, optionally forcing deletion when it is referenced                |
 
 ### Categories
 
-| Tool | Description |
-|------|-------------|
+| Tool              | Description                                                                                                               |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | `list-categories` | List categories by type (`WorkflowCategory`, `ActionCategory`, `ConfigurationElementCategory`, `ResourceElementCategory`) |
 
 ### Catalog Items
 
-| Tool | Description |
-|------|-------------|
+| Tool                 | Description                                                              |
+| -------------------- | ------------------------------------------------------------------------ |
 | `list-catalog-items` | List available Service Broker catalog items, optionally searched by name |
-| `get-catalog-item` | Get catalog item details including type, source, and project assignments |
+| `get-catalog-item`   | Get catalog item details including type, source, and project assignments |
 
 ### Deployments
 
-| Tool | Description |
-|------|-------------|
-| `list-deployments` | List deployments, optionally filtered by name/keyword or project ID |
-| `get-deployment` | Get deployment details including status, project, and catalog item info |
-| `create-deployment` | Deploy a catalog item by providing its ID, a deployment name, and a project ID |
-| `delete-deployment` | Delete a deployment (irreversible) |
-| `list-deployment-actions` | List deployment-level day-2 actions available for a deployment |
-| `run-deployment-action` | Submit a deployment-level day-2 action request with optional inputs and reason |
+| Tool                      | Description                                                                    |
+| ------------------------- | ------------------------------------------------------------------------------ |
+| `list-deployments`        | List deployments, optionally filtered by name/keyword or project ID            |
+| `get-deployment`          | Get deployment details including status, project, and catalog item info        |
+| `create-deployment`       | Deploy a catalog item by providing its ID, a deployment name, and a project ID |
+| `delete-deployment`       | Delete a deployment (irreversible)                                             |
+| `list-deployment-actions` | List deployment-level day-2 actions available for a deployment                 |
+| `run-deployment-action`   | Submit a deployment-level day-2 action request with optional inputs and reason |
 
 ### Blueprint Templates
 
-| Tool | Description |
-|------|-------------|
-| `list-templates` | List blueprint templates, optionally filtered by name/keyword or project ID |
-| `get-template` | Get template details including status, project, validity, and full YAML content |
-| `create-template` | Create a new blueprint template with optional YAML content |
-| `delete-template` | Delete a blueprint template (irreversible) |
+| Tool              | Description                                                                     |
+| ----------------- | ------------------------------------------------------------------------------- |
+| `list-templates`  | List blueprint templates, optionally filtered by name/keyword or project ID     |
+| `get-template`    | Get template details including status, project, validity, and full YAML content |
+| `create-template` | Create a new blueprint template with optional YAML content                      |
+| `delete-template` | Delete a blueprint template (irreversible)                                      |
 
 ### vRO Packages
 
-| Tool | Description |
-|------|-------------|
-| `list-packages` | List vRO packages on the Orchestrator instance, optionally filtered by name |
-| `get-package` | Get details of a specific package by its fully-qualified name |
-| `export-package` | Export a package as a ZIP file under `VCFA_PACKAGE_DIR` |
-| `import-package` | Import a package file from `VCFA_PACKAGE_DIR` into the Orchestrator instance |
+| Tool             | Description                                                                         |
+| ---------------- | ----------------------------------------------------------------------------------- |
+| `list-packages`  | List vRO packages on the Orchestrator instance, optionally filtered by name         |
+| `get-package`    | Get details of a specific package by its fully-qualified name                       |
+| `export-package` | Export a package as a ZIP file under `VCFA_PACKAGE_DIR`                             |
+| `import-package` | Import a package file from `VCFA_PACKAGE_DIR` into the Orchestrator instance        |
 | `delete-package` | Delete a package after confirmation, optionally deleting all its contained elements |
 
 ### vRO Plugins
 
-| Tool | Description |
-|------|-------------|
+| Tool           | Description                                                                      |
+| -------------- | -------------------------------------------------------------------------------- |
 | `list-plugins` | List installed plugins on the Orchestrator instance, optionally filtered by name |
 
 ### Extensibility Subscriptions
 
-| Tool | Description |
-|------|-------------|
-| `list-event-topics` | List available event topics from the Event Broker |
-| `list-subscriptions` | List extensibility subscriptions, optionally filtered by project ID |
-| `get-subscription` | Get subscription details including constraints, blocking, and priority |
+| Tool                  | Description                                                                      |
+| --------------------- | -------------------------------------------------------------------------------- |
+| `list-event-topics`   | List available event topics from the Event Broker                                |
+| `list-subscriptions`  | List extensibility subscriptions, optionally filtered by project ID              |
+| `get-subscription`    | Get subscription details including constraints, blocking, and priority           |
 | `create-subscription` | Create a new subscription linking an event topic to a vRO workflow or ABX action |
-| `update-subscription` | Update a subscription (enable/disable, re-target, change priority) |
-| `delete-subscription` | Delete a subscription |
+| `update-subscription` | Update a subscription (enable/disable, re-target, change priority)               |
+| `delete-subscription` | Delete a subscription                                                            |
 
 ## Examples
 
-These examples show natural language prompts you can use with an AI assistant connected to this MCP server.
+These examples show developer-oriented prompts you can use with an AI assistant connected to this MCP server. The interesting bit is not just one tool call; it is the assistant chaining discovery, validation, execution, diagnostics, local artifact work, and guarded changes.
 
-### Discover and run a workflow
+### Debug a workflow run without memorizing its schema
 
 ```
-User: Find workflows related to "snapshot" and show me their parameters.
+User: Find the workflow we use to resize a deployment, show me the inputs,
+      then run it for deployment dep-123 with size large and wait for the result.
 
-Assistant calls: list-workflows(filter: "snapshot")
-  → Returns matching workflows with IDs
+Assistant calls: list-workflows(filter: "resize")
+  → Finds candidate workflows and IDs
 Assistant calls: get-workflow(id: "...")
-  → Returns input/output parameters
-
-User: Run the "Create a snapshot" workflow on the VM named "web-server-01".
-
-Assistant calls: run-workflow(id: "...", inputs: [{name: "vm", type: "VC:VirtualMachine", value: "..."}])
-  → Returns execution ID
-Assistant calls: get-workflow-execution(workflowId: "...", executionId: "...")
-  → Returns state: "completed", outputs
-
-Assistant can also call: run-workflow-and-wait(id: "...", inputs: [{name: "vm", value: "..."}])
-  → Validates inputs, waits up to 5 minutes by default, and returns outputs or failure diagnostics
-```
-
-### Create a custom action
-
-```
-User: Create an action in the com.example.util module that takes a VM name
-      and returns its IP address.
-
-Assistant calls: create-action(
-  moduleName: "com.example.util",
-  name: "getVmIpAddress",
-  script: "var vm = VcPlugin.getAllVirtualMachines(null, 'xpath:name=\"' + vmName + '\"')[0]; return vm.guest.ipAddress;",
-  inputParameters: [{name: "vmName", type: "string", description: "Name of the VM"}],
-  returnType: "string"
+  → Reads required input names and vRO types
+Assistant calls: run-workflow-and-wait(
+  id: "...",
+  inputs: [
+    {name: "deploymentId", value: "dep-123"},
+    {name: "size", value: "large"}
+  ],
+  timeoutSeconds: 600,
+  logLimit: 30
 )
-  → Action created: getVmIpAddress (id: ...)
+  → Validates inputs before running, polls until completion, and returns outputs.
+    If the workflow fails, the response includes current item, stack, log excerpts,
+    and warnings when diagnostics cannot be fetched.
 ```
 
-### Set up an extensibility subscription
+### Scaffold, import, and test a workflow artifact
 
 ```
-User: I want to run a vRO workflow every time a VM is provisioned.
-      Which event topics are available for compute provisioning?
+User: Create a simple workflow artifact called Echo Message. It should take
+      message as a string and return result as a string. Save it locally,
+      import it into the Dev workflows category, and run it once.
 
-Assistant calls: list-event-topics()
-  → Shows topics including "compute.provision.post" (blockable)
-
-User: Create a subscription that triggers workflow "Post-Provision Hardening"
-      on the compute.provision.post event. Make it blocking with priority 10.
-
-Assistant calls: list-workflows(filter: "Post-Provision Hardening")
-  → Returns workflow ID
-Assistant calls: create-subscription(
-  name: "Post-Provision VM Hardening",
-  eventTopicId: "compute.provision.post",
-  runnableType: "extensibility.vro",
-  runnableId: "<workflow-id>",
-  blocking: true,
-  priority: 10
+Assistant calls: scaffold-workflow-file(
+  fileName: "echo-message.workflow",
+  workflow: {
+    name: "Echo Message",
+    inputs: [{name: "message", type: "string", description: "Text to echo"}],
+    outputs: [{name: "result", type: "string", description: "Echo result"}],
+    tasks: [{
+      displayName: "Echo",
+      script: "result = message;",
+      inBindings: [{name: "message", type: "string", source: "message"}],
+      outBindings: [{name: "result", type: "string", target: "result"}]
+    }]
+  }
 )
-  → Subscription created: Post-Provision VM Hardening (ENABLED)
-```
+  → Writes echo-message.workflow under VCFA_WORKFLOW_DIR as an importable ZIP
+    with UTF-16 workflow-content
 
-### Browse and manage blueprint templates
-
-```
-User: List all blueprint templates in the system.
-
-Assistant calls: list-templates()
-  → Lists templates with IDs, status, and project names
-
-User: Show me the YAML content of the "Ubuntu OS Provisioning" template.
-
-Assistant calls: get-template(id: "...")
-  → Returns full blueprint YAML content and metadata
-
-User: Create a new blank blueprint template called "Web Tier" in the dev project.
-
-Assistant calls: create-template(
-  name: "Web Tier",
-  projectId: "<dev-project-id>",
-  description: "Blueprint for web tier VMs"
+Assistant calls: list-categories(type: "WorkflowCategory", filter: "Dev")
+  → Finds the target workflow category ID
+Assistant calls: import-workflow-file(
+  categoryId: "<dev-workflow-category-id>",
+  fileName: "echo-message.workflow",
+  overwrite: true,
+  confirm: true
 )
-  → Template created: Web Tier (id: ...) [DRAFT]
-
-User: Delete the "linux test" template.
-
-Assistant calls: delete-template(id: "...", confirm: true)
-  → Template deleted successfully.
+  → Imports the local artifact
+Assistant calls: list-workflows(filter: "Echo Message")
+Assistant calls: run-workflow-and-wait(
+  id: "<workflow-id>",
+  inputs: [{name: "message", value: "hello"}]
+)
+  → Returns result: "hello"
 ```
 
-### List and deploy a catalog item
+### Export, review, and promote vRO artifacts safely
 
 ```
-User: What catalog items are available in the Service Broker?
+User: Export the Netbox package and the IPAM workflow before I change them.
+      Then import the updated workflow artifact from my local workflow directory.
 
-Assistant calls: list-catalog-items()
-  → Lists all catalog items with IDs and types
+Assistant calls: list-packages(filter: "netbox")
+Assistant calls: export-package(
+  name: "com.example.netbox",
+  fileName: "com.example.netbox.package",
+  overwrite: true
+)
+  → Saves the package under VCFA_PACKAGE_DIR
 
-User: Deploy "Ubuntu 22.04 Server" to project "dev-team" and name it
-      "build-agent-01".
+Assistant calls: list-workflows(filter: "IPAM")
+Assistant calls: export-workflow-file(
+  id: "<workflow-id>",
+  fileName: "ipam-before-change.workflow",
+  overwrite: true
+)
+  → Saves the current workflow under VCFA_WORKFLOW_DIR
 
+Assistant calls: import-workflow-file(
+  categoryId: "<workflow-category-id>",
+  fileName: "ipam-updated.workflow",
+  overwrite: true,
+  confirm: true
+)
+  → Uploads only after confirmation and only from VCFA_WORKFLOW_DIR
+```
+
+### Deploy from the catalog and run day-2 actions
+
+```
+User: Find the Ubuntu catalog item, deploy a medium build agent in project
+      project-dev-123, then show me the actions available after it is created.
+
+Assistant calls: list-catalog-items(search: "Ubuntu")
+  → Lists matching Service Broker catalog items
 Assistant calls: get-catalog-item(id: "...")
-  → Shows inputs required: size, diskGb
+  → Shows item metadata, source, projects, and useful context
 Assistant calls: create-deployment(
   catalogItemId: "...",
   deploymentName: "build-agent-01",
-  projectId: "<dev-team-project-id>",
+  projectId: "project-dev-123",
+  reason: "Temporary CI build agent",
   inputs: {size: "medium", diskGb: 80}
 )
-  → Deployment request submitted. ID: ... Status: CREATE_IN_PROGRESS
-
-User: Check all deployments in the dev-team project.
-
-Assistant calls: list-deployments(projectId: "<dev-team-project-id>")
-  → Lists deployments with status
-
-User: Restart my app deployment.
-
+  → Deployment request submitted
+Assistant calls: list-deployments(search: "build-agent-01", projectId: "project-dev-123")
+  → Confirms current deployment state
 Assistant calls: list-deployment-actions(deploymentId: "<deployment-id>")
-  → Lists available day-2 actions and any visible input hints
+  → Shows day-2 actions and input hints
 Assistant calls: run-deployment-action(
   deploymentId: "<deployment-id>",
-  actionId: "<restart-action-id>",
-  reason: "Restart requested by owner",
+  actionId: "<power-or-reboot-action-id>",
+  reason: "Developer requested reboot after bootstrap",
   confirm: true
 )
-  → Deployment action request submitted. ID: ... Status: INPROGRESS
+  → Submits the action only after confirmation
 ```
 
-### Manage existing subscriptions
+### Create a reusable vRO action
 
 ```
-User: Show me all extensibility subscriptions and disable the one for
-      network tagging.
+User: Create a utility action that normalizes deployment names for our
+      provisioning workflows.
+
+Assistant calls: create-action(
+  moduleName: "com.example.naming",
+  name: "normalizeDeploymentName",
+  script: "return name.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-');",
+  inputParameters: [{name: "name", type: "string", description: "Raw deployment name"}],
+  returnType: "string"
+)
+  → Creates the action in the target module
+
+User: Show me what was created.
+
+Assistant calls: list-actions(filter: "normalizeDeploymentName")
+Assistant calls: get-action(id: "<action-id>")
+  → Returns the script, inputs, module, and return type for review
+```
+
+### Review and create blueprint templates
+
+```
+User: Show me the current Ubuntu template YAML, then create a starter template
+      for a small web tier in project project-dev-123.
+
+Assistant calls: list-templates(search: "Ubuntu")
+  → Finds matching Cloud Assembly blueprint templates
+Assistant calls: get-template(id: "<ubuntu-template-id>")
+  → Returns status, project metadata, validity, and YAML content
+Assistant calls: create-template(
+  name: "Web Tier Starter",
+  projectId: "project-dev-123",
+  description: "Starter web tier blueprint for development",
+  content: "formatVersion: 1\ninputs: {}\nresources: {}"
+)
+  → Creates a draft blueprint template that can be refined in Cloud Assembly
+```
+
+### Wire a vRO workflow to an event topic
+
+```
+User: Run the workflow "Post-Provision Hardening" whenever compute provisioning
+      completes. Make it blocking if the event topic supports blocking.
+
+Assistant calls: list-event-topics()
+  → Finds the provisioning topic and whether it is blockable
+Assistant calls: list-workflows(filter: "Post-Provision Hardening")
+  → Finds the vRO workflow ID
+Assistant calls: create-subscription(
+  name: "Post-Provision Hardening",
+  eventTopicId: "<provisioning-topic-id>",
+  runnableType: "extensibility.vro",
+  runnableId: "<workflow-id>",
+  blocking: true,
+  priority: 10,
+  description: "Run hardening workflow after VM provisioning"
+)
+  → Creates an enabled subscription
+
+User: Disable that hook while I test a new version.
 
 Assistant calls: list-subscriptions()
-  → Lists all subscriptions with status
-Assistant calls: get-subscription(id: "...")
-  → Shows full details for the network tagging subscription
-Assistant calls: update-subscription(id: "...", disabled: true)
-  → Subscription updated: DISABLED
+Assistant calls: update-subscription(id: "<subscription-id>", disabled: true)
+  → Disables the subscription without deleting it
 ```
 
-### Inspect and manage configuration elements
+### Manage runtime configuration and resource files
 
 ```
-User: Find configuration elements related to "SMTP" and show me their
-      attributes.
+User: Create a Netbox configuration element and upload a logo resource used by
+      the provisioning workflows.
 
-Assistant calls: list-configurations(filter: "SMTP")
-  → Returns matching config elements
-Assistant calls: get-configuration(id: "...")
-  → Shows attributes: smtpHost (string), smtpPort (number), useTls (boolean)
-
-User: Create a new configuration element for Netbox integration settings
-      under the Library category.
-
-Assistant calls: list-categories(type: "ConfigurationElementCategory", filter: "Library")
+Assistant calls: list-categories(type: "ConfigurationElementCategory", filter: "Integrations")
   → Returns category ID
 Assistant calls: create-configuration(
   categoryId: "<category-id>",
@@ -392,57 +438,46 @@ Assistant calls: create-configuration(
     {name: "apiToken", type: "string", value: "your-token-here"}
   ]
 )
-  → Configuration element created: Netbox Settings (id: ...)
-```
+  → Creates a typed configuration element
 
-### End-to-end: build a provisioning hook
-
-```
-User: I need a complete compute provisioning hook that assigns a custom
-      hostname. Create the action, then wire it up with a subscription
-      on the compute.allocation.pre event.
-
-Assistant calls: create-action(
-  moduleName: "com.example.naming",
-  name: "generateHostname",
-  script: "var prefix = inputProperties.get('customProperties').get('prefix') || 'vm'; ...",
-  inputParameters: [{name: "inputProperties", type: "Properties"}],
-  returnType: "Properties"
+Assistant calls: list-categories(type: "ResourceElementCategory", filter: "Assets")
+Assistant calls: import-resource-element(
+  categoryId: "<resource-category-id>",
+  fileName: "portal-logo.png",
+  confirm: true
 )
-  → Action created
+  → Imports a local file from VCFA_RESOURCE_DIR
 
-Assistant calls: list-event-topics()
-  → Confirms compute.allocation.pre is available and blockable
+User: Rotate the Netbox token and replace the logo without changing workflow code.
 
-Assistant calls: create-subscription(
-  name: "Custom Hostname Generator",
-  eventTopicId: "compute.allocation.pre",
-  runnableType: "extensibility.abx",
-  runnableId: "<action-id>",
-  blocking: true,
-  priority: 5,
-  description: "Assigns custom hostnames during VM provisioning"
+Assistant calls: list-configurations(filter: "Netbox Settings")
+Assistant calls: update-configuration(
+  id: "<config-id>",
+  attributes: [
+    {name: "netboxUrl", type: "string", value: "https://netbox.example.com"},
+    {name: "apiToken", type: "string", value: "new-token"}
+  ]
 )
-  → Subscription created and ENABLED
+Assistant calls: update-resource-element(
+  id: "<resource-id>",
+  fileName: "portal-logo-v2.png",
+  confirm: true
+)
+  → Updates shared runtime data safely from local artifact directories
 ```
 
-### List installed plugins
+### Inspect platform capabilities before writing code
 
 ```
-User: What plugins are installed on the Orchestrator?
+User: Before I write a workflow that talks to NSX and vCenter, show me the
+      installed plugins and any actions that already do VM lookup.
 
 Assistant calls: list-plugins()
-  → Found 12 plugin(s):
-     • vCenter Plugin (com.vmware.library.vc) v8.0.0 — vCenter Server integration
-     • SSH Plugin (com.vmware.library.ssh) v2.0.0 — SSH remote execution
-     ...
-
-User: Show me only plugins related to NSX.
-
 Assistant calls: list-plugins(filter: "nsx")
-  → Found 2 plugin(s):
-     • NSX-T Plugin (com.vmware.library.nsx-t) v3.2.0
-     • NSX ALB Plugin (com.vmware.library.nsxalb) v1.0.0
+Assistant calls: list-actions(filter: "getAllMachines")
+Assistant calls: get-action(id: "<candidate-action-id>")
+  → Shows installed plugin coverage and reusable library action code before
+    generating or importing new workflow artifacts
 ```
 
 ## Development

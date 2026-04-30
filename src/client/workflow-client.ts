@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { extname } from "node:path";
 import type {
+  ScaffoldWorkflowFileParams,
   SimpleParameter,
   Workflow,
   WorkflowExecution,
@@ -16,6 +17,7 @@ import {
   rejectSymlink,
   resolveFileInDirectory,
 } from "./files.js";
+import { buildWorkflowArtifact } from "./workflow-artifact.js";
 
 export class WorkflowClient {
   constructor(private http: VroHttpClient) {}
@@ -213,6 +215,27 @@ export class WorkflowClient {
     }
     const buffer = Buffer.from(await res.arrayBuffer());
     await writeFile(destPath, buffer, { flag: overwrite ? "w" : "wx" });
+    return destPath;
+  }
+
+  async scaffoldWorkflowFile(
+    params: ScaffoldWorkflowFileParams,
+  ): Promise<string> {
+    const destPath = await this.resolveWorkflowPath(params.fileName);
+    const existingFile = await getExistingFile(destPath);
+    if (existingFile?.isSymbolicLink()) {
+      throw new Error("Workflow scaffold target must not be a symbolic link");
+    }
+    if (existingFile && !params.overwrite) {
+      throw new Error(
+        `Workflow file already exists: ${params.fileName}. Set overwrite to true to replace it.`,
+      );
+    }
+
+    const artifact = buildWorkflowArtifact(params.workflow);
+    await writeFile(destPath, artifact, {
+      flag: params.overwrite ? "w" : "wx",
+    });
     return destPath;
   }
 
