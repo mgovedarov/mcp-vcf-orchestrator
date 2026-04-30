@@ -51,6 +51,46 @@ export interface WorkflowList {
   link: Workflow[];
 }
 
+export interface WorkflowArtifactParameter {
+  name: string;
+  type: string;
+  description?: string;
+}
+
+export interface WorkflowArtifactBinding {
+  name: string;
+  type: string;
+  source?: string;
+  target?: string;
+}
+
+export interface WorkflowArtifactTask {
+  name?: string;
+  displayName?: string;
+  description?: string;
+  script: string;
+  inBindings?: WorkflowArtifactBinding[];
+  outBindings?: WorkflowArtifactBinding[];
+}
+
+export interface WorkflowArtifactSpec {
+  id?: string;
+  name: string;
+  description?: string;
+  version?: string;
+  apiVersion?: string;
+  inputs?: WorkflowArtifactParameter[];
+  outputs?: WorkflowArtifactParameter[];
+  attributes?: WorkflowArtifactParameter[];
+  tasks: WorkflowArtifactTask[];
+}
+
+export interface ScaffoldWorkflowFileParams {
+  fileName: string;
+  overwrite?: boolean;
+  workflow: WorkflowArtifactSpec;
+}
+
 export interface WorkflowExecutionState {
   value: string; // "running" | "completed" | "failed" | "canceled" | "waiting"
 }

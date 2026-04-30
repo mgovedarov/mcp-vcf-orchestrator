@@ -125,6 +125,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `list-workflow-executions` | List past and current executions for a workflow, with optional status filter |
 | `get-workflow-execution` | Check execution status and retrieve outputs |
 | `export-workflow-file` | Export a workflow artifact to a `.workflow` file under `VCFA_WORKFLOW_DIR` |
+| `scaffold-workflow-file` | Generate a local `.workflow` artifact from structured metadata and linear scriptable tasks |
 | `import-workflow-file` | Import a `.workflow` artifact from `VCFA_WORKFLOW_DIR` into a workflow category |
 
 ### Actions

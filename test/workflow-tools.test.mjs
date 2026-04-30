@@ -250,3 +250,67 @@ test("run-workflow-and-wait reports log fetch warnings", async () => {
     /Unable to fetch execution logs: logs unavailable/,
   );
 });
+
+test("scaffold-workflow-file returns saved path", async () => {
+  let scaffoldParams;
+  const handlers = registeredWorkflowTools({
+    scaffoldWorkflowFile: async (params) => {
+      scaffoldParams = params;
+      return "/tmp/workflows/generated.workflow";
+    },
+  });
+
+  const result = await handlers.get("scaffold-workflow-file")({
+    fileName: "generated.workflow",
+    workflow: {
+      name: "Generated Workflow",
+      inputs: [{ name: "message", type: "string" }],
+      outputs: [{ name: "result", type: "string" }],
+      tasks: [
+        {
+          script: "result = message;",
+          inBindings: [{ name: "message", type: "string", source: "message" }],
+          outBindings: [{ name: "result", type: "string", target: "result" }],
+        },
+      ],
+    },
+  });
+
+  assert.deepEqual(scaffoldParams, {
+    fileName: "generated.workflow",
+    overwrite: false,
+    workflow: {
+      name: "Generated Workflow",
+      inputs: [{ name: "message", type: "string" }],
+      outputs: [{ name: "result", type: "string" }],
+      tasks: [
+        {
+          script: "result = message;",
+          inBindings: [{ name: "message", type: "string", source: "message" }],
+          outBindings: [{ name: "result", type: "string", target: "result" }],
+        },
+      ],
+    },
+  });
+  assert.match(result.content[0].text, /generated.workflow/);
+  assert.match(result.content[0].text, /import-workflow-file/);
+});
+
+test("scaffold-workflow-file surfaces validation errors", async () => {
+  const handlers = registeredWorkflowTools({
+    scaffoldWorkflowFile: async () => {
+      throw new Error("Invalid workflow artifact spec: missing binding");
+    },
+  });
+
+  const result = await handlers.get("scaffold-workflow-file")({
+    fileName: "generated.workflow",
+    workflow: {
+      name: "Generated Workflow",
+      tasks: [{ script: "System.log('hello');" }],
+    },
+  });
+
+  assert.equal(result.isError, true);
+  assert.match(result.content[0].text, /missing binding/);
+});
