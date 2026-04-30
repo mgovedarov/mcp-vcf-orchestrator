@@ -7,7 +7,10 @@ import type {
   ConfigElement,
   ConfigElementList,
   Deployment,
+  DeploymentActionList,
+  DeploymentActionRequestParams,
   DeploymentList,
+  DeploymentRequest,
   EventTopicList,
   ResourceElementList,
   SimpleParameter,
@@ -305,6 +308,16 @@ export class VroClient {
 
   deleteDeployment(id: string): Promise<void> {
     return this.deployments.deleteDeployment(id);
+  }
+
+  listDeploymentActions(deploymentId: string): Promise<DeploymentActionList> {
+    return this.deployments.listDeploymentActions(deploymentId);
+  }
+
+  runDeploymentAction(
+    params: DeploymentActionRequestParams
+  ): Promise<DeploymentRequest> {
+    return this.deployments.runDeploymentAction(params);
   }
 
   listTemplates(search?: string, projectId?: string): Promise<TemplateList> {

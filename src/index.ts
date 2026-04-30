@@ -62,7 +62,7 @@ async function main(): Promise<void> {
         "Use list-event-topics to discover available event topics before creating extensibility subscriptions.",
         "Use list-subscriptions to see existing event-driven triggers.",
         "Use list-catalog-items to browse the Service Broker catalog; use get-catalog-item to inspect a specific item by ID.",
-        "Use list-deployments to see existing deployments; use create-deployment to deploy a catalog item, providing the catalogItemId, deploymentName, and projectId.",
+        "Use list-deployments to see existing deployments; use create-deployment to deploy a catalog item, providing the catalogItemId, deploymentName, and projectId. Use list-deployment-actions to discover available deployment day-2 actions, then run-deployment-action with confirm set to true to submit one.",
         "Use list-templates to browse blueprint templates; use get-template to inspect a specific template by ID; use create-template to create a new template; use delete-template to remove one.",
         "Use list-packages to browse vRO packages; use export-package to save a package file under VCFA_PACKAGE_DIR; use import-package to upload a package file from VCFA_PACKAGE_DIR; use delete-package to remove a package.",
         "Use list-resource-elements to browse vRO resource elements; use list-categories with type ResourceElementCategory before importing a resource element; exported and imported resource files are stored under VCFA_RESOURCE_DIR.",

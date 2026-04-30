@@ -239,6 +239,58 @@ export interface DeploymentList {
   numberOfElements?: number;
 }
 
+export interface DeploymentActionInput {
+  name?: string;
+  label?: string;
+  type?: string;
+  description?: string;
+  required?: boolean;
+  [key: string]: unknown;
+}
+
+export interface DeploymentAction {
+  id: string;
+  name?: string;
+  displayName?: string;
+  description?: string;
+  inputParameters?: DeploymentActionInput[];
+  inputs?: DeploymentActionInput[] | Record<string, unknown>;
+  formDefinition?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface DeploymentActionList {
+  content: DeploymentAction[];
+  totalElements?: number;
+  numberOfElements?: number;
+}
+
+export interface DeploymentActionRequestParams {
+  deploymentId: string;
+  actionId: string;
+  reason?: string;
+  inputs?: Record<string, unknown>;
+}
+
+export interface DeploymentRequest {
+  id?: string;
+  actionId?: string;
+  deploymentId?: string;
+  name?: string;
+  status?: string;
+  details?: string;
+  requestedBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  completedAt?: string;
+  totalTasks?: number;
+  completedTasks?: number;
+  inputs?: Record<string, unknown>;
+  outputs?: Record<string, unknown>;
+  resourceIds?: string[];
+  resources?: { id?: string; name?: string; description?: string; version?: string }[];
+}
+
 // --- Blueprint Templates (Cloud Assembly) ---
 
 export interface Template {
