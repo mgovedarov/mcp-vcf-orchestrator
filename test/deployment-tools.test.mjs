@@ -59,6 +59,26 @@ test("list-deployment-actions formats actions and input hints", async () => {
   assert.match(result.content[0].text, /inputs: size \(string\) required/);
 });
 
+test("list-deployment-actions accepts bare array API responses", async () => {
+  const handlers = registeredDeploymentTools({
+    listDeploymentActions: async () => [
+      {
+        id: "Deployment.ChangeLease",
+        name: "ChangeLease",
+        displayName: "Change Lease",
+        description: "Set a deployment's expiration date",
+      },
+    ],
+  });
+
+  const result = await handlers.get("list-deployment-actions")({
+    deploymentId: "deployment-1",
+  });
+
+  assert.match(result.content[0].text, /Found 1 deployment action/);
+  assert.match(result.content[0].text, /ChangeLease \(id: Deployment\.ChangeLease\)/);
+});
+
 test("run-deployment-action refuses to submit unless confirmed", async () => {
   let calls = 0;
   const handlers = registeredDeploymentTools({

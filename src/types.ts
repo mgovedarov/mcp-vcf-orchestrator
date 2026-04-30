@@ -259,11 +259,13 @@ export interface DeploymentAction {
   [key: string]: unknown;
 }
 
-export interface DeploymentActionList {
+export interface DeploymentActionPage {
   content: DeploymentAction[];
   totalElements?: number;
   numberOfElements?: number;
 }
+
+export type DeploymentActionList = DeploymentAction[] | DeploymentActionPage;
 
 export interface DeploymentActionRequestParams {
   deploymentId: string;

@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import type { DeploymentAction, DeploymentRequest } from "../types.js";
+import type { DeploymentAction, DeploymentActionList, DeploymentRequest } from "../types.js";
 import type { VroClient } from "../vro-client.js";
 
 function isInputArray(value: unknown): value is { name?: string; label?: string; type?: string; description?: string; required?: boolean }[] {
@@ -29,6 +29,18 @@ function getDeploymentActionInputHints(action: DeploymentAction): string[] {
   }
 
   return [];
+}
+
+function normalizeDeploymentActionList(result: DeploymentActionList): {
+  actions: DeploymentAction[];
+  total: number;
+} {
+  if (Array.isArray(result)) {
+    return { actions: result, total: result.length };
+  }
+
+  const actions = result.content ?? [];
+  return { actions, total: result.totalElements ?? actions.length };
 }
 
 export function formatDeploymentActions(
@@ -278,8 +290,7 @@ export function registerDeploymentTools(
     async ({ deploymentId }): Promise<CallToolResult> => {
       try {
         const result = await client.listDeploymentActions(deploymentId);
-        const actions = result.content ?? [];
-        const total = result.totalElements ?? actions.length;
+        const { actions, total } = normalizeDeploymentActionList(result);
         return {
           content: [
             {
