@@ -6,7 +6,7 @@ trigger: "vcfa-orchestrator"
 
 # VCF Orchestrator Agent
 
-This custom agent is designed to assist with managing VCF Automation Orchestrator workflows, actions, configurations, subscriptions, catalog items, deployments, and templates via natural language commands. It loads the MCP server tools automatically and exposes commands like \`list-workflows\`, \`create-workflow\`, \`run-workflow\`, etc.
+This custom agent is designed to assist with managing VCF Automation Orchestrator workflows, actions, configurations, resource elements, subscriptions, catalog items, deployments, templates, packages, and plugins via natural language commands. It loads the MCP server tools automatically and exposes commands like \`list-workflows\`, \`create-workflow\`, \`run-workflow\`, \`list-deployments\`, and related artifact import/export commands.
 
 ## When to Use
 
@@ -18,11 +18,20 @@ This custom agent is designed to assist with managing VCF Automation Orchestrato
 
 ## Commands
 
-- \`list-workflows\` – list workflows, optionally filter   - *Prompt*: see `.github/prompts/vcfa-list-workflows.prompt.md` for trigger phrase details- \`get-workflow\` – retrieve workflow details
-- \`create-workflow\` – create a new workflow
-- \`run-workflow\` – execute a workflow with inputs
-- \`get-workflow-execution\` – check execution status
-- \`delete-workflow\` – remove a workflow
-- (and other similar commands from the MCP server)
+- Workflows: \`list-workflows\`, \`get-workflow\`, \`create-workflow\`, \`run-workflow\`, \`list-workflow-executions\`, \`get-workflow-execution\`, \`export-workflow-file\`, \`import-workflow-file\`, \`delete-workflow\`
+- Actions: \`list-actions\`, \`get-action\`, \`create-action\`, \`export-action-file\`, \`import-action-file\`, \`delete-action\`
+- Configuration elements: \`list-configurations\`, \`get-configuration\`, \`create-configuration\`, \`update-configuration\`, \`export-configuration-file\`, \`import-configuration-file\`, \`delete-configuration\`
+- Resource elements: \`list-resource-elements\`, \`export-resource-element\`, \`import-resource-element\`, \`update-resource-element\`, \`delete-resource-element\`
+- Categories: \`list-categories\`
+- Subscriptions: \`list-event-topics\`, \`list-subscriptions\`, \`get-subscription\`, \`create-subscription\`, \`update-subscription\`, \`delete-subscription\`
+- Catalog items: \`list-catalog-items\`, \`get-catalog-item\`
+- Deployments: \`list-deployments\`, \`get-deployment\`, \`create-deployment\`, \`list-deployment-actions\`, \`run-deployment-action\`, \`delete-deployment\`
+- Templates: \`list-templates\`, \`get-template\`, \`create-template\`, \`delete-template\`
+- Packages: \`list-packages\`, \`get-package\`, \`export-package\`, \`import-package\`, \`delete-package\`
+- Plugins: \`list-plugins\`
+
+Prompt-backed trigger phrases currently checked into the repo:
+- \`list-workflows\` – see `.github/prompts/vcfa-list-workflows.prompt.md`
+- \`list-deployments\` – see `.github/prompts/vcfa-list-deployments.prompt.md`
 
 This agent can be invoked by describing the desired operation in natural language; the agent will map it to the appropriate MCP tool calls.
