@@ -116,6 +116,273 @@ test("createConfiguration sends singular attribute payload", async () => {
   });
 });
 
+test("catalog client uses service broker endpoints and request payloads", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+
+    if (String(url).endsWith("/catalog/api/items?$search=ubuntu%2022")) {
+      return Response.json({
+        totalElements: 1,
+        content: [{ id: "catalog-1", name: "Ubuntu 22" }],
+      });
+    }
+
+    if (String(url).endsWith("/catalog/api/items/catalog%2F1")) {
+      return Response.json({ id: "catalog/1", name: "Ubuntu" });
+    }
+
+    return Response.json({ id: "deployment-1", name: "Ubuntu Deployment" });
+  };
+
+  const client = new VroClient(config());
+  const list = await client.listCatalogItems("ubuntu 22");
+  const item = await client.getCatalogItem("catalog/1");
+  const deployment = await client.createDeploymentFromCatalogItem({
+    catalogItemId: "catalog/1",
+    deploymentName: "Ubuntu Deployment",
+    projectId: "project-1",
+    version: "1.0.0",
+    reason: "Test",
+    inputs: { size: "small" },
+  });
+
+  assert.equal(list.content[0].id, "catalog-1");
+  assert.equal(item.id, "catalog/1");
+  assert.equal(deployment.id, "deployment-1");
+  assert.equal(
+    calls[1].url,
+    "https://vcfa.example.test/catalog/api/items?$search=ubuntu%2022",
+  );
+  assert.equal(
+    calls[2].url,
+    "https://vcfa.example.test/catalog/api/items/catalog%2F1",
+  );
+  assert.equal(
+    calls[3].url,
+    "https://vcfa.example.test/catalog/api/items/catalog%2F1/request",
+  );
+  assert.deepEqual(JSON.parse(calls[3].init.body), {
+    deploymentName: "Ubuntu Deployment",
+    projectId: "project-1",
+    version: "1.0.0",
+    reason: "Test",
+    inputs: { size: "small" },
+  });
+});
+
+test("template client uses blueprint endpoints and optional payload fields", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+
+    if (String(url).includes("/blueprint/api/blueprints?")) {
+      return Response.json({
+        totalElements: 1,
+        content: [{ id: "template-1", name: "Small VM" }],
+      });
+    }
+
+    if (init.method === "GET") {
+      return Response.json({ id: "template/1", name: "Small VM" });
+    }
+
+    if (init.method === "POST") {
+      return Response.json({ id: "template-2", name: "New VM" });
+    }
+
+    return new Response(null, { status: 204 });
+  };
+
+  const client = new VroClient(config());
+  const list = await client.listTemplates("small vm", "project/1");
+  const detail = await client.getTemplate("template/1");
+  const created = await client.createTemplate({
+    name: "New VM",
+    projectId: "project/1",
+    description: "Demo",
+    content: "formatVersion: 1",
+    requestScopeOrg: true,
+  });
+  await client.deleteTemplate("template/2");
+
+  assert.equal(list.content[0].id, "template-1");
+  assert.equal(detail.id, "template/1");
+  assert.equal(created.id, "template-2");
+  assert.equal(
+    calls[1].url,
+    "https://vcfa.example.test/blueprint/api/blueprints?$search=small%20vm&projectId=project%2F1",
+  );
+  assert.equal(
+    calls[2].url,
+    "https://vcfa.example.test/blueprint/api/blueprints/template%2F1",
+  );
+  assert.equal(
+    calls[3].url,
+    "https://vcfa.example.test/blueprint/api/blueprints",
+  );
+  assert.deepEqual(JSON.parse(calls[3].init.body), {
+    name: "New VM",
+    projectId: "project/1",
+    description: "Demo",
+    content: "formatVersion: 1",
+    requestScopeOrg: true,
+  });
+  assert.equal(
+    calls[4].url,
+    "https://vcfa.example.test/blueprint/api/blueprints/template%2F2",
+  );
+  assert.equal(calls[4].init.method, "DELETE");
+});
+
+test("subscription client uses event broker endpoints and payloads", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+
+    if (String(url).endsWith("/event-broker/api/topics")) {
+      return Response.json({ content: [{ id: "topic-1" }] });
+    }
+
+    if (init.method === "GET") {
+      return Response.json({ content: [{ id: "sub-1" }] });
+    }
+
+    if (init.method === "POST" || init.method === "PUT") {
+      return Response.json({ id: "sub-1", name: "Approval" });
+    }
+
+    return new Response(null, { status: 204 });
+  };
+
+  const client = new VroClient(config());
+  const topics = await client.listEventTopics();
+  const subscriptions = await client.listSubscriptions("project/1");
+  await client.createSubscription({
+    name: "Approval",
+    eventTopicId: "topic-1",
+    runnableType: "extensibility.vro",
+    runnableId: "workflow-1",
+    projectId: "project/1",
+    blocking: true,
+    priority: 10,
+    timeout: 30,
+    disabled: false,
+    constraints: { projectId: "project/1" },
+  });
+  await client.updateSubscription("sub/1", {
+    disabled: true,
+    runnableId: "workflow-2",
+  });
+  await client.deleteSubscription("sub/1");
+
+  assert.equal(topics.content[0].id, "topic-1");
+  assert.equal(subscriptions.content[0].id, "sub-1");
+  assert.equal(
+    calls[1].url,
+    "https://vcfa.example.test/event-broker/api/topics",
+  );
+  assert.equal(
+    calls[2].url,
+    "https://vcfa.example.test/event-broker/api/subscriptions?$filter=projectId eq 'project%2F1'",
+  );
+  assert.deepEqual(JSON.parse(calls[3].init.body), {
+    name: "Approval",
+    type: "RUNNABLE",
+    eventTopicId: "topic-1",
+    runnableType: "extensibility.vro",
+    runnableId: "workflow-1",
+    projectId: "project/1",
+    blocking: true,
+    priority: 10,
+    timeout: 30,
+    disabled: false,
+    constraints: { projectId: "project/1" },
+  });
+  assert.equal(
+    calls[4].url,
+    "https://vcfa.example.test/event-broker/api/subscriptions/sub%2F1",
+  );
+  assert.deepEqual(JSON.parse(calls[4].init.body), {
+    disabled: true,
+    runnableId: "workflow-2",
+  });
+  assert.equal(calls[5].init.method, "DELETE");
+});
+
+test("category and plugin clients parse attribute links", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+
+    if (String(url).includes("/categories")) {
+      return Response.json({
+        total: 1,
+        link: [
+          {
+            attributes: [
+              { name: "id", value: "category-1" },
+              { name: "name", value: "Provisioning" },
+              { name: "path", value: "/Library/Provisioning" },
+            ],
+          },
+        ],
+      });
+    }
+
+    return Response.json({
+      total: 1,
+      link: [
+        {
+          attributes: [
+            { name: "name", value: "com.vmware.library" },
+            { name: "display-name", value: "VMware Library" },
+            { name: "version", value: "1.0.0" },
+          ],
+        },
+      ],
+    });
+  };
+
+  const client = new VroClient(config());
+  const categories = await client.listCategories(
+    "WorkflowCategory",
+    "Provisioning",
+  );
+  const plugins = await client.listPlugins("library");
+
+  assert.deepEqual(categories.link, [
+    {
+      id: "category-1",
+      name: "Provisioning",
+      description: undefined,
+      type: "WorkflowCategory",
+      path: "/Library/Provisioning",
+    },
+  ]);
+  assert.deepEqual(plugins.link, [
+    {
+      name: "com.vmware.library",
+      displayName: "VMware Library",
+      version: "1.0.0",
+      description: undefined,
+      type: undefined,
+    },
+  ]);
+  assert.equal(
+    calls[1].url,
+    "https://vcfa.example.test/vco/api/categories?categoryType=WorkflowCategory&conditions=name~Provisioning",
+  );
+  assert.equal(
+    calls[2].url,
+    "https://vcfa.example.test/vco/api/plugins?conditions=name~library",
+  );
+});
+
 test("package import rejects path traversal before network calls", async () => {
   const packageDir = await mkdtemp(join(tmpdir(), "vcfa-packages-"));
   const calls = [];

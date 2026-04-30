@@ -15,6 +15,7 @@
     "start": "tsx src/index.ts",
     "build": "tsc",
     "test": "npm run build && node --test test/*.test.mjs",
+    "test:coverage": "npm run build && node --test --experimental-test-coverage test/*.test.mjs",
     "prepublishOnly": "npm run build",
     "inspect": "npx @modelcontextprotocol/inspector node dist/index.js"
   },
