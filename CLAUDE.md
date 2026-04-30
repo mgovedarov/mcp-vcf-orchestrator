@@ -7,17 +7,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Build**: `npm run build` – compiles TypeScript to `dist/` and produces the executable at `dist/index.js`.
 - **Start**: `npm start` – runs the server with `tsx src/index.ts` (requires runtime environment variables).
 - **Inspect**: `npm run inspect` – launches the MCP Inspector for debugging the server.
-- **Environment**: The server reads VCFA_HOST, VCFA_USERNAME, VCFA_ORGANIZATION, VCFA_PASSWORD, and optionally VCFA_IGNORE_TLS from the environment (see `.env.example`).
+- **Environment**: The server reads VCFA_HOST, VCFA_USERNAME, VCFA_ORGANIZATION, VCFA_PASSWORD, and optionally VCFA_IGNORE_TLS, VCFA_PACKAGE_DIR, VCFA_RESOURCE_DIR, and VCFA_WORKFLOW_DIR from the environment (see `.env.example`).
 
 ## Architecture Overview
 
 The repository implements an MCP server that exposes VCF Automation Orchestrator (vRO), Service Broker, and Cloud Assembly REST API operations. Core modules:
 
 1. **src/index.ts** – Entry point that registers MCP tools.
-2. **src/vro-client.ts** – Handles communication with VMware VCF (REST API, session token management).
-3. **src/tools/** – Directory containing individual tool implementations (workflow, action, deployment, catalog-item, subscription, template, configuration, event-topic).
-4. **src/types.ts** – Shared TypeScript types and interfaces used across the server.
-5. **dist/** – Compiled JavaScript output produced by `npm run build`.
+2. **src/vro-client.ts** – Compatibility export for the public `VroClient` import path.
+3. **src/client/** – Modular VCF/vRO clients split by responsibility: shared HTTP/auth core, workflows, actions, configurations, categories, subscriptions, catalog, deployments, templates, packages, resources, and plugins.
+4. **src/tools/** – Directory containing individual tool implementations (workflow, action, deployment, catalog-item, subscription, template, configuration, package, resource, plugin).
+5. **src/types.ts** – Shared TypeScript types and interfaces used across the server.
+6. **dist/** – Compiled JavaScript output produced by `npm run build`.
 
 Key architectural concepts:
 
@@ -29,7 +30,8 @@ Key architectural concepts:
 ## Key Files for Navigation
 
 - `src/index.ts` – Main server bootstrap and tool registration.
-- `src/vro-client.ts` – Central client for VCF interactions.
+- `src/vro-client.ts` – Stable compatibility shim exporting `VroClient`.
+- `src/client/` – Client implementation modules; start with `src/client/index.ts` for the facade and `src/client/core.ts` for authentication/HTTP behavior.
 - `src/tools/` – Individual tool implementations; filenames correspond to tool names.
 - `package.json` – Scripts and dependencies; useful for understanding build and runtime commands.
 
@@ -40,4 +42,4 @@ Key architectural concepts:
 3. Use `npm start` to run the server locally (ensure environment variables are set).
 4. For debugging, launch `npm run inspect` to open the MCP Inspector in a browser.
 
-No additional test framework is defined; verification is done via manual inspection or external test harnesses.
+Automated tests use Node's built-in test runner. Run `npm test` to build and execute `test/*.test.mjs`.

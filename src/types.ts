@@ -321,4 +321,5 @@ export interface VroClientConfig {
   ignoreTls?: boolean;
   packageDir?: string;
   resourceDir?: string;
+  workflowDir?: string;
 }

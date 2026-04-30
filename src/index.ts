@@ -33,6 +33,7 @@ async function main(): Promise<void> {
   const ignoreTls = process.env["VCFA_IGNORE_TLS"] === "true";
   const packageDir = process.env["VCFA_PACKAGE_DIR"];
   const resourceDir = process.env["VCFA_RESOURCE_DIR"];
+  const workflowDir = process.env["VCFA_WORKFLOW_DIR"];
 
   if (ignoreTls) {
     process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0";
@@ -42,7 +43,7 @@ async function main(): Promise<void> {
   }
 
   // Create vRO API client
-  const client = new VroClient({ host, username, organization, password, ignoreTls, packageDir, resourceDir });
+  const client = new VroClient({ host, username, organization, password, ignoreTls, packageDir, resourceDir, workflowDir });
 
   // Create MCP server
   const server = new McpServer(
@@ -53,6 +54,7 @@ async function main(): Promise<void> {
         "Use list-categories before creating workflows, actions, or configuration elements to find the target category ID.",
         "Use get-workflow to inspect a workflow's input parameters before running it with run-workflow.",
         "After starting a workflow execution with run-workflow, use get-workflow-execution to poll for completion and retrieve outputs.",
+        "Use export-workflow-file to save a workflow artifact under VCFA_WORKFLOW_DIR; use import-workflow-file to upload a .workflow artifact from VCFA_WORKFLOW_DIR into a workflow category.",
         "Use list-event-topics to discover available event topics before creating extensibility subscriptions.",
         "Use list-subscriptions to see existing event-driven triggers.",
         "Use list-catalog-items to browse the Service Broker catalog; use get-catalog-item to inspect a specific item by ID.",
