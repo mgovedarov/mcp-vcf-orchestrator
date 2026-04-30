@@ -228,6 +228,107 @@ export function registerConfigTools(
   );
 
   server.registerTool(
+    "export-configuration-file",
+    {
+      title: "Export Configuration File",
+      description:
+        "Export a vRO configuration element as a .vsoconf file under VCFA_CONFIGURATION_DIR. The fileName must be a plain .vsoconf file name, not a path.",
+      inputSchema: z.object({
+        id: z.string().describe("The configuration element ID to export"),
+        fileName: z
+          .string()
+          .describe("Configuration file name to save under VCFA_CONFIGURATION_DIR"),
+        overwrite: z
+          .boolean()
+          .optional()
+          .describe("Overwrite the file if it already exists (default: false)"),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ id, fileName, overwrite }): Promise<CallToolResult> => {
+      try {
+        const savedPath = await client.exportConfigurationFile(
+          id,
+          fileName,
+          overwrite ?? false
+        );
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Configuration element ${id} exported successfully to: ${savedPath}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to export configuration file: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  server.registerTool(
+    "import-configuration-file",
+    {
+      title: "Import Configuration File",
+      description:
+        "Import a .vsoconf file from VCFA_CONFIGURATION_DIR into a configuration element category. Use list-categories with type ConfigurationElementCategory to find a category ID first. Set confirm to true to proceed.",
+      inputSchema: z.object({
+        categoryId: z
+          .string()
+          .describe("The configuration element category ID to import into"),
+        fileName: z
+          .string()
+          .describe("Configuration file name under VCFA_CONFIGURATION_DIR to import"),
+        confirm: z
+          .boolean()
+          .describe("Must be set to true to confirm import. If false, the import will not proceed."),
+      }),
+      annotations: { readOnlyHint: false },
+    },
+    async ({ categoryId, fileName, confirm }): Promise<CallToolResult> => {
+      if (!confirm) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Confirm import of configuration file ${fileName} from ${client.getConfigurationDirectory()} by setting confirm to true.`,
+            },
+          ],
+        };
+      }
+      try {
+        await client.importConfigurationFile(categoryId, fileName);
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Configuration element imported successfully from: ${fileName}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to import configuration file: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  server.registerTool(
     "update-configuration",
     {
       title: "Update Configuration Element",

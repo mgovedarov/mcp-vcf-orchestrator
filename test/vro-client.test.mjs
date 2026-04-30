@@ -239,6 +239,228 @@ test("workflow export writes only under workflow directory", async () => {
   }
 });
 
+test("action import rejects path traversal before network calls", async () => {
+  const actionDir = await mkdtemp(join(tmpdir(), "vcfa-actions-"));
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    return authResponse();
+  };
+
+  try {
+    const client = new VroClient(config({ actionDir }));
+    await assert.rejects(
+      () => client.importActionFile("com.example", "../secret.action"),
+      /must not contain path separators/
+    );
+    assert.equal(calls.length, 0);
+  } finally {
+    await rm(actionDir, { recursive: true, force: true });
+  }
+});
+
+test("action export rejects existing files unless overwrite is true", async () => {
+  const actionDir = await mkdtemp(join(tmpdir(), "vcfa-actions-"));
+  await writeFile(join(actionDir, "existing.action"), "old");
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    return authResponse();
+  };
+
+  try {
+    const client = new VroClient(config({ actionDir }));
+    await assert.rejects(
+      () => client.exportActionFile("action-1", "existing.action"),
+      /already exists/
+    );
+    assert.equal(calls.length, 0);
+  } finally {
+    await rm(actionDir, { recursive: true, force: true });
+  }
+});
+
+test("action import rejects symbolic links", async () => {
+  const actionDir = await mkdtemp(join(tmpdir(), "vcfa-actions-"));
+  const outsideFile = join(tmpdir(), `outside-${Date.now()}.action`);
+  await writeFile(outsideFile, "action");
+  await symlink(outsideFile, join(actionDir, "linked.action"));
+
+  try {
+    const client = new VroClient(config({ actionDir }));
+    await assert.rejects(
+      () => client.importActionFile("com.example", "linked.action"),
+      /must not be a symbolic link/
+    );
+  } finally {
+    await rm(actionDir, { recursive: true, force: true });
+    await rm(outsideFile, { force: true });
+  }
+});
+
+test("action import sends multipart file and category name", async () => {
+  const actionDir = await mkdtemp(join(tmpdir(), "vcfa-actions-"));
+  await writeFile(join(actionDir, "payload.action"), "action");
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return new Response("", { status: 202 });
+  };
+
+  try {
+    const client = new VroClient(config({ actionDir }));
+    await client.importActionFile("com.example.actions", "payload.action");
+
+    assert.equal(calls[1].url, "https://vcfa.example.test/vco/api/actions");
+    assert.equal(calls[1].init.method, "POST");
+    assert.equal(calls[1].init.headers["Content-Type"], undefined);
+    const body = calls[1].init.body;
+    assert.equal(body.get("categoryName"), "com.example.actions");
+    assert.equal(body.get("file").name, "payload.action");
+  } finally {
+    await rm(actionDir, { recursive: true, force: true });
+  }
+});
+
+test("action export writes only under action directory", async () => {
+  const actionDir = await mkdtemp(join(tmpdir(), "vcfa-actions-"));
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return new Response("action-bytes", { status: 200 });
+  };
+
+  try {
+    const client = new VroClient(config({ actionDir }));
+    const savedPath = await client.exportActionFile(
+      "action-1",
+      "saved.action"
+    );
+
+    assert.equal(savedPath, join(await realpath(actionDir), "saved.action"));
+    assert.equal(
+      calls[1].url,
+      "https://vcfa.example.test/vco/api/actions/action-1"
+    );
+    assert.equal(calls[1].init.method, "GET");
+  } finally {
+    await rm(actionDir, { recursive: true, force: true });
+  }
+});
+
+test("configuration import rejects path traversal before network calls", async () => {
+  const configurationDir = await mkdtemp(join(tmpdir(), "vcfa-configurations-"));
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    return authResponse();
+  };
+
+  try {
+    const client = new VroClient(config({ configurationDir }));
+    await assert.rejects(
+      () => client.importConfigurationFile("category-1", "../secret.vsoconf"),
+      /must not contain path separators/
+    );
+    assert.equal(calls.length, 0);
+  } finally {
+    await rm(configurationDir, { recursive: true, force: true });
+  }
+});
+
+test("configuration export rejects existing files unless overwrite is true", async () => {
+  const configurationDir = await mkdtemp(join(tmpdir(), "vcfa-configurations-"));
+  await writeFile(join(configurationDir, "existing.vsoconf"), "old");
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    return authResponse();
+  };
+
+  try {
+    const client = new VroClient(config({ configurationDir }));
+    await assert.rejects(
+      () => client.exportConfigurationFile("configuration-1", "existing.vsoconf"),
+      /already exists/
+    );
+    assert.equal(calls.length, 0);
+  } finally {
+    await rm(configurationDir, { recursive: true, force: true });
+  }
+});
+
+test("configuration import rejects symbolic links", async () => {
+  const configurationDir = await mkdtemp(join(tmpdir(), "vcfa-configurations-"));
+  const outsideFile = join(tmpdir(), `outside-${Date.now()}.vsoconf`);
+  await writeFile(outsideFile, "configuration");
+  await symlink(outsideFile, join(configurationDir, "linked.vsoconf"));
+
+  try {
+    const client = new VroClient(config({ configurationDir }));
+    await assert.rejects(
+      () => client.importConfigurationFile("category-1", "linked.vsoconf"),
+      /must not be a symbolic link/
+    );
+  } finally {
+    await rm(configurationDir, { recursive: true, force: true });
+    await rm(outsideFile, { force: true });
+  }
+});
+
+test("configuration import sends multipart file and category id", async () => {
+  const configurationDir = await mkdtemp(join(tmpdir(), "vcfa-configurations-"));
+  await writeFile(join(configurationDir, "payload.vsoconf"), "configuration");
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return new Response("", { status: 202 });
+  };
+
+  try {
+    const client = new VroClient(config({ configurationDir }));
+    await client.importConfigurationFile("category-1", "payload.vsoconf");
+
+    assert.equal(calls[1].url, "https://vcfa.example.test/vco/api/configurations");
+    assert.equal(calls[1].init.method, "POST");
+    assert.equal(calls[1].init.headers["Content-Type"], undefined);
+    const body = calls[1].init.body;
+    assert.equal(body.get("categoryId"), "category-1");
+    assert.equal(body.get("file").name, "payload.vsoconf");
+  } finally {
+    await rm(configurationDir, { recursive: true, force: true });
+  }
+});
+
+test("configuration export writes only under configuration directory", async () => {
+  const configurationDir = await mkdtemp(join(tmpdir(), "vcfa-configurations-"));
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return new Response("configuration-bytes", { status: 200 });
+  };
+
+  try {
+    const client = new VroClient(config({ configurationDir }));
+    const savedPath = await client.exportConfigurationFile(
+      "configuration-1",
+      "saved.vsoconf"
+    );
+
+    assert.equal(savedPath, join(await realpath(configurationDir), "saved.vsoconf"));
+    assert.equal(
+      calls[1].url,
+      "https://vcfa.example.test/vco/api/configurations/configuration-1"
+    );
+    assert.equal(calls[1].init.method, "GET");
+  } finally {
+    await rm(configurationDir, { recursive: true, force: true });
+  }
+});
+
 test("listResources parses singular resource attributes", async () => {
   const calls = [];
   globalThis.fetch = async (url, init) => {

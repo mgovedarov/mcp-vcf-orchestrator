@@ -15,6 +15,8 @@ export class VroHttpClient {
   readonly packageDir: string;
   readonly resourceDir: string;
   readonly workflowDir: string;
+  readonly actionDir: string;
+  readonly configurationDir: string;
 
   private sessionUrl: string;
   private loginHeader: string;
@@ -35,6 +37,12 @@ export class VroHttpClient {
     );
     this.workflowDir = resolve(
       config.workflowDir ?? join(tmpdir(), "mcp-vcf-orchestrator", "workflows")
+    );
+    this.actionDir = resolve(
+      config.actionDir ?? join(tmpdir(), "mcp-vcf-orchestrator", "actions")
+    );
+    this.configurationDir = resolve(
+      config.configurationDir ?? join(tmpdir(), "mcp-vcf-orchestrator", "configurations")
     );
     this.loginHeader =
       "Basic " +

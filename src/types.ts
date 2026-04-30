@@ -322,4 +322,6 @@ export interface VroClientConfig {
   packageDir?: string;
   resourceDir?: string;
   workflowDir?: string;
+  actionDir?: string;
+  configurationDir?: string;
 }

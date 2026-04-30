@@ -14,6 +14,7 @@ This custom agent is designed to assist with managing VCF Automation Orchestrato
 - When you need to inspect workflow definitions and parameters
 - When you need to execute workflows with input parameters
 - When you need to manage deployments and blueprint templates
+- When authoring or importing real vRO workflow/action artifacts, first read `docs/vro-artifact-authoring.md`
 
 ## Commands
 

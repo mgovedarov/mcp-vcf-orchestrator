@@ -140,6 +140,22 @@ export class VroClient {
     return this.actions.getAction(id);
   }
 
+  getActionDirectory(): string {
+    return this.actions.getActionDirectory();
+  }
+
+  exportActionFile(
+    id: string,
+    fileName: string,
+    overwrite = false
+  ): Promise<string> {
+    return this.actions.exportActionFile(id, fileName, overwrite);
+  }
+
+  importActionFile(categoryName: string, fileName: string): Promise<void> {
+    return this.actions.importActionFile(categoryName, fileName);
+  }
+
   createAction(params: {
     moduleName: string;
     name: string;
@@ -160,6 +176,22 @@ export class VroClient {
 
   getConfiguration(id: string): Promise<ConfigElement> {
     return this.configurations.getConfiguration(id);
+  }
+
+  getConfigurationDirectory(): string {
+    return this.configurations.getConfigurationDirectory();
+  }
+
+  exportConfigurationFile(
+    id: string,
+    fileName: string,
+    overwrite = false
+  ): Promise<string> {
+    return this.configurations.exportConfigurationFile(id, fileName, overwrite);
+  }
+
+  importConfigurationFile(categoryId: string, fileName: string): Promise<void> {
+    return this.configurations.importConfigurationFile(categoryId, fileName);
   }
 
   createConfiguration(

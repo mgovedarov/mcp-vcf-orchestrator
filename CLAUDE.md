@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Build**: `npm run build` – compiles TypeScript to `dist/` and produces the executable at `dist/index.js`.
 - **Start**: `npm start` – runs the server with `tsx src/index.ts` (requires runtime environment variables).
 - **Inspect**: `npm run inspect` – launches the MCP Inspector for debugging the server.
-- **Environment**: The server reads VCFA_HOST, VCFA_USERNAME, VCFA_ORGANIZATION, VCFA_PASSWORD, and optionally VCFA_IGNORE_TLS, VCFA_PACKAGE_DIR, VCFA_RESOURCE_DIR, and VCFA_WORKFLOW_DIR from the environment (see `.env.example`).
+- **Environment**: The server reads VCFA_HOST, VCFA_USERNAME, VCFA_ORGANIZATION, VCFA_PASSWORD, and optionally VCFA_IGNORE_TLS, VCFA_PACKAGE_DIR, VCFA_RESOURCE_DIR, VCFA_WORKFLOW_DIR, VCFA_ACTION_DIR, and VCFA_CONFIGURATION_DIR from the environment (see `.env.example`).
 
 ## Architecture Overview
 

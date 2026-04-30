@@ -1,6 +1,14 @@
+import { readFile, writeFile } from "node:fs/promises";
+import { extname } from "node:path";
 import type { ConfigElement, ConfigElementList } from "../types.js";
 import { parseAttrs } from "./attrs.js";
 import type { VroHttpClient } from "./core.js";
+import {
+  assertRealPathInside,
+  getExistingFile,
+  rejectSymlink,
+  resolveFileInDirectory,
+} from "./files.js";
 import { toVroParameters } from "./parameters.js";
 
 export class ConfigurationClient {
@@ -33,6 +41,111 @@ export class ConfigurationClient {
     return this.http.get<ConfigElement>(
       `/configurations/${encodeURIComponent(id)}`
     );
+  }
+
+  getConfigurationDirectory(): string {
+    return this.http.configurationDir;
+  }
+
+  private async resolveConfigurationPath(fileName: string): Promise<string> {
+    const ext = extname(fileName).toLowerCase();
+    if (ext !== ".vsoconf") {
+      throw new Error("Configuration file name must end with .vsoconf");
+    }
+    return resolveFileInDirectory(
+      this.http.configurationDir,
+      fileName,
+      "Configuration",
+      "VCFA_CONFIGURATION_DIR"
+    );
+  }
+
+  async exportConfigurationFile(
+    id: string,
+    fileName: string,
+    overwrite = false
+  ): Promise<string> {
+    const destPath = await this.resolveConfigurationPath(fileName);
+    const existingFile = await getExistingFile(destPath);
+    if (existingFile?.isSymbolicLink()) {
+      throw new Error("Configuration export target must not be a symbolic link");
+    }
+    if (existingFile && !overwrite) {
+      throw new Error(
+        `Configuration file already exists: ${fileName}. Set overwrite to true to replace it.`
+      );
+    }
+
+    const token = await this.http.ensureAuthenticated();
+    const path = `/configurations/${encodeURIComponent(id)}`;
+    const url = `${this.http.baseUrl}${path}`;
+    console.error(`[vro-client] GET ${path}`);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60_000);
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/zip",
+        },
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`vRO API error: ${res.status} ${res.statusText} — export configuration\n${text}`);
+    }
+    const buffer = Buffer.from(await res.arrayBuffer());
+    await writeFile(destPath, buffer, { flag: overwrite ? "w" : "wx" });
+    return destPath;
+  }
+
+  async importConfigurationFile(
+    categoryId: string,
+    fileName: string
+  ): Promise<void> {
+    const srcPath = await this.resolveConfigurationPath(fileName);
+    await rejectSymlink(srcPath, "Configuration import source must not be a symbolic link");
+    await assertRealPathInside(
+      this.http.configurationDir,
+      srcPath,
+      "Configuration file path resolves outside VCFA_CONFIGURATION_DIR"
+    );
+    const token = await this.http.ensureAuthenticated();
+    const buffer = await readFile(srcPath);
+    const form = new FormData();
+    form.append("file", new Blob([new Uint8Array(buffer)]), fileName);
+    form.append("categoryId", categoryId);
+
+    const path = "/configurations";
+    const url = `${this.http.baseUrl}${path}`;
+    console.error(`[vro-client] POST ${path}`);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60_000);
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+        body: form,
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`vRO API error: ${res.status} ${res.statusText} — import configuration\n${text}`);
+    }
   }
 
   createConfiguration(
