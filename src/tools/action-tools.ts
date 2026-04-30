@@ -5,7 +5,7 @@ import type { VroClient } from "../vro-client.js";
 
 export function registerActionTools(
   server: McpServer,
-  client: VroClient
+  client: VroClient,
 ): void {
   server.registerTool(
     "list-actions",
@@ -32,7 +32,7 @@ export function registerActionTools(
         }
         const lines = actions.map(
           (a) =>
-            `• ${a.module}/${a.name} (id: ${a.id})${a.description ? ` — ${a.description}` : ""}`
+            `• ${a.module}/${a.name} (id: ${a.id})${a.description ? ` — ${a.description}` : ""}`,
         );
         return {
           content: [
@@ -53,7 +53,7 @@ export function registerActionTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.registerTool(
@@ -101,7 +101,7 @@ export function registerActionTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.registerTool(
@@ -114,7 +114,7 @@ export function registerActionTools(
         moduleName: z
           .string()
           .describe(
-            "The module (package) name to create the action in (e.g. com.example.myactions)"
+            "The module (package) name to create the action in (e.g. com.example.myactions)",
           ),
         name: z.string().describe("Name for the new action"),
         script: z
@@ -131,7 +131,7 @@ export function registerActionTools(
                 .string()
                 .optional()
                 .describe("Parameter description"),
-            })
+            }),
           )
           .optional()
           .describe("Input parameters for the action"),
@@ -178,7 +178,7 @@ export function registerActionTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.registerTool(
@@ -204,7 +204,7 @@ export function registerActionTools(
         const savedPath = await client.exportActionFile(
           id,
           fileName,
-          overwrite ?? false
+          overwrite ?? false,
         );
         return {
           content: [
@@ -225,7 +225,7 @@ export function registerActionTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.registerTool(
@@ -243,7 +243,9 @@ export function registerActionTools(
           .describe("Action file name under VCFA_ACTION_DIR to import"),
         confirm: z
           .boolean()
-          .describe("Must be set to true to confirm import. If false, the import will not proceed."),
+          .describe(
+            "Must be set to true to confirm import. If false, the import will not proceed.",
+          ),
       }),
       annotations: { readOnlyHint: false },
     },
@@ -279,7 +281,7 @@ export function registerActionTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.registerTool(
@@ -290,7 +292,11 @@ export function registerActionTools(
         "Delete an action (scriptable task) from VCF Automation Orchestrator. This action is irreversible. Set confirm to true to proceed.",
       inputSchema: z.object({
         id: z.string().describe("The action ID to delete"),
-        confirm: z.boolean().describe("Must be set to true to confirm deletion. If false, the deletion will not proceed."),
+        confirm: z
+          .boolean()
+          .describe(
+            "Must be set to true to confirm deletion. If false, the deletion will not proceed.",
+          ),
       }),
       annotations: { readOnlyHint: false, destructiveHint: true },
     },
@@ -326,6 +332,6 @@ export function registerActionTools(
           isError: true,
         };
       }
-    }
+    },
   );
 }

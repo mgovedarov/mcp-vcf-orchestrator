@@ -48,11 +48,15 @@ export class ResourceClient {
       this.http.resourceDir,
       fileName,
       "Resource",
-      "VCFA_RESOURCE_DIR"
+      "VCFA_RESOURCE_DIR",
     );
   }
 
-  async exportResource(id: string, fileName: string, overwrite = false): Promise<string> {
+  async exportResource(
+    id: string,
+    fileName: string,
+    overwrite = false,
+  ): Promise<string> {
     const destPath = await this.resolveResourcePath(fileName);
     const existingFile = await getExistingFile(destPath);
     if (existingFile?.isSymbolicLink()) {
@@ -60,7 +64,7 @@ export class ResourceClient {
     }
     if (existingFile && !overwrite) {
       throw new Error(
-        `Resource file already exists: ${fileName}. Set overwrite to true to replace it.`
+        `Resource file already exists: ${fileName}. Set overwrite to true to replace it.`,
       );
     }
     const token = await this.http.ensureAuthenticated();
@@ -85,7 +89,9 @@ export class ResourceClient {
     }
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      throw new Error(`vRO API error: ${res.status} ${res.statusText} — export resource\n${text}`);
+      throw new Error(
+        `vRO API error: ${res.status} ${res.statusText} — export resource\n${text}`,
+      );
     }
     const buffer = Buffer.from(await res.arrayBuffer());
     await writeFile(destPath, buffer, { flag: overwrite ? "w" : "wx" });
@@ -94,16 +100,23 @@ export class ResourceClient {
 
   private async readResourceFile(fileName: string): Promise<Buffer> {
     const srcPath = await this.resolveResourcePath(fileName);
-    await rejectSymlink(srcPath, "Resource import source must not be a symbolic link");
+    await rejectSymlink(
+      srcPath,
+      "Resource import source must not be a symbolic link",
+    );
     await assertRealPathInside(
       this.http.resourceDir,
       srcPath,
-      "Resource file path resolves outside VCFA_RESOURCE_DIR"
+      "Resource file path resolves outside VCFA_RESOURCE_DIR",
     );
     return readFile(srcPath);
   }
 
-  private async postResourceForm(path: string, form: FormData, changesetSha?: string): Promise<void> {
+  private async postResourceForm(
+    path: string,
+    form: FormData,
+    changesetSha?: string,
+  ): Promise<void> {
     const token = await this.http.ensureAuthenticated();
     const url = `${this.http.baseUrl}${path}`;
     console.error(`[vro-client] POST ${path}`);
@@ -131,7 +144,9 @@ export class ResourceClient {
     }
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      throw new Error(`vRO API error: ${res.status} ${res.statusText} — POST ${path}\n${text}`);
+      throw new Error(
+        `vRO API error: ${res.status} ${res.statusText} — POST ${path}\n${text}`,
+      );
     }
   }
 
@@ -143,11 +158,19 @@ export class ResourceClient {
     await this.postResourceForm("/resources", form);
   }
 
-  async updateResourceContent(id: string, fileName: string, changesetSha?: string): Promise<void> {
+  async updateResourceContent(
+    id: string,
+    fileName: string,
+    changesetSha?: string,
+  ): Promise<void> {
     const buffer = await this.readResourceFile(fileName);
     const form = new FormData();
     form.append("file", new Blob([new Uint8Array(buffer)]), fileName);
-    await this.postResourceForm(`/resources/${encodeURIComponent(id)}`, form, changesetSha);
+    await this.postResourceForm(
+      `/resources/${encodeURIComponent(id)}`,
+      form,
+      changesetSha,
+    );
   }
 
   async deleteResource(id: string, force = false): Promise<void> {

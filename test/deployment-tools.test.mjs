@@ -24,7 +24,7 @@ test("list-deployment-actions reports empty action lists", async () => {
 
   assert.equal(
     result.content[0].text,
-    "No deployment actions found for deployment deployment-1."
+    "No deployment actions found for deployment deployment-1.",
   );
 });
 
@@ -76,7 +76,10 @@ test("list-deployment-actions accepts bare array API responses", async () => {
   });
 
   assert.match(result.content[0].text, /Found 1 deployment action/);
-  assert.match(result.content[0].text, /ChangeLease \(id: Deployment\.ChangeLease\)/);
+  assert.match(
+    result.content[0].text,
+    /ChangeLease \(id: Deployment\.ChangeLease\)/,
+  );
 });
 
 test("run-deployment-action refuses to submit unless confirmed", async () => {

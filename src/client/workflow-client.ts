@@ -29,7 +29,10 @@ export class WorkflowClient {
     if (params.length > 0) {
       path += `?${params.join("&")}`;
     }
-    const raw = await this.http.get<{ link?: { attributes?: { name: string; value: string }[] }[]; total?: number }>(path);
+    const raw = await this.http.get<{
+      link?: { attributes?: { name: string; value: string }[] }[];
+      total?: number;
+    }>(path);
     const link: Workflow[] = (raw.link ?? []).map((item) => {
       const a = parseAttrs(item.attributes);
       return {
@@ -51,7 +54,7 @@ export class WorkflowClient {
   createWorkflow(
     categoryId: string,
     name: string,
-    description?: string
+    description?: string,
   ): Promise<Workflow> {
     const body: Record<string, unknown> = {
       name,
@@ -65,7 +68,7 @@ export class WorkflowClient {
 
   runWorkflow(
     id: string,
-    inputs?: SimpleParameter[]
+    inputs?: SimpleParameter[],
   ): Promise<WorkflowExecution> {
     const body: Record<string, unknown> = {};
     if (inputs && inputs.length > 0) {
@@ -77,14 +80,14 @@ export class WorkflowClient {
     }
     return this.http.post<WorkflowExecution>(
       `/workflows/${encodeURIComponent(id)}/executions`,
-      body
+      body,
     );
   }
 
   getWorkflowExecution(
     workflowId: string,
     executionId: string,
-    options?: { showDetails?: boolean }
+    options?: { showDetails?: boolean },
   ): Promise<WorkflowExecution> {
     const params: string[] = [];
     if (options?.showDetails) {
@@ -92,14 +95,14 @@ export class WorkflowClient {
     }
     const query = params.length > 0 ? `?${params.join("&")}` : "";
     return this.http.get<WorkflowExecution>(
-      `/workflows/${encodeURIComponent(workflowId)}/executions/${encodeURIComponent(executionId)}${query}`
+      `/workflows/${encodeURIComponent(workflowId)}/executions/${encodeURIComponent(executionId)}${query}`,
     );
   }
 
   getWorkflowExecutionLogs(
     workflowId: string,
     executionId: string,
-    options?: { maxResult?: number }
+    options?: { maxResult?: number },
   ): Promise<WorkflowExecutionLogs> {
     const params: string[] = [];
     if (options?.maxResult !== undefined) {
@@ -107,13 +110,13 @@ export class WorkflowClient {
     }
     const query = params.length > 0 ? `?${params.join("&")}` : "";
     return this.http.get<WorkflowExecutionLogs>(
-      `/workflows/${encodeURIComponent(workflowId)}/executions/${encodeURIComponent(executionId)}/logs${query}`
+      `/workflows/${encodeURIComponent(workflowId)}/executions/${encodeURIComponent(executionId)}/logs${query}`,
     );
   }
 
   async listWorkflowExecutions(
     workflowId: string,
-    options?: { maxResults?: number; status?: string }
+    options?: { maxResults?: number; status?: string },
   ): Promise<WorkflowExecutionList> {
     const params: string[] = [`maxResults=${options?.maxResults ?? 20}`];
     if (options?.status) {
@@ -162,14 +165,14 @@ export class WorkflowClient {
       this.http.workflowDir,
       fileName,
       "Workflow",
-      "VCFA_WORKFLOW_DIR"
+      "VCFA_WORKFLOW_DIR",
     );
   }
 
   async exportWorkflowFile(
     id: string,
     fileName: string,
-    overwrite = false
+    overwrite = false,
   ): Promise<string> {
     const destPath = await this.resolveWorkflowPath(fileName);
     const existingFile = await getExistingFile(destPath);
@@ -178,7 +181,7 @@ export class WorkflowClient {
     }
     if (existingFile && !overwrite) {
       throw new Error(
-        `Workflow file already exists: ${fileName}. Set overwrite to true to replace it.`
+        `Workflow file already exists: ${fileName}. Set overwrite to true to replace it.`,
       );
     }
 
@@ -204,7 +207,9 @@ export class WorkflowClient {
     }
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      throw new Error(`vRO API error: ${res.status} ${res.statusText} — export workflow\n${text}`);
+      throw new Error(
+        `vRO API error: ${res.status} ${res.statusText} — export workflow\n${text}`,
+      );
     }
     const buffer = Buffer.from(await res.arrayBuffer());
     await writeFile(destPath, buffer, { flag: overwrite ? "w" : "wx" });
@@ -214,14 +219,17 @@ export class WorkflowClient {
   async importWorkflowFile(
     categoryId: string,
     fileName: string,
-    overwrite = true
+    overwrite = true,
   ): Promise<void> {
     const srcPath = await this.resolveWorkflowPath(fileName);
-    await rejectSymlink(srcPath, "Workflow import source must not be a symbolic link");
+    await rejectSymlink(
+      srcPath,
+      "Workflow import source must not be a symbolic link",
+    );
     await assertRealPathInside(
       this.http.workflowDir,
       srcPath,
-      "Workflow file path resolves outside VCFA_WORKFLOW_DIR"
+      "Workflow file path resolves outside VCFA_WORKFLOW_DIR",
     );
     const token = await this.http.ensureAuthenticated();
     const buffer = await readFile(srcPath);
@@ -250,7 +258,9 @@ export class WorkflowClient {
     }
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      throw new Error(`vRO API error: ${res.status} ${res.statusText} — import workflow\n${text}`);
+      throw new Error(
+        `vRO API error: ${res.status} ${res.statusText} — import workflow\n${text}`,
+      );
     }
   }
 }

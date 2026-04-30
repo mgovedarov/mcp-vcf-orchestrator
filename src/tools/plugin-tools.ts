@@ -5,7 +5,7 @@ import type { VroClient } from "../vro-client.js";
 
 export function registerPluginTools(
   server: McpServer,
-  client: VroClient
+  client: VroClient,
 ): void {
   server.registerTool(
     "list-plugins",
@@ -57,6 +57,6 @@ export function registerPluginTools(
           isError: true,
         };
       }
-    }
+    },
   );
 }

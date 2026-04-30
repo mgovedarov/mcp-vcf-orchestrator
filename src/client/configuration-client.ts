@@ -23,7 +23,10 @@ export class ConfigurationClient {
     if (params.length > 0) {
       path += `?${params.join("&")}`;
     }
-    const raw = await this.http.get<{ link?: { attributes?: { name: string; value: string }[] }[]; total?: number }>(path);
+    const raw = await this.http.get<{
+      link?: { attributes?: { name: string; value: string }[] }[];
+      total?: number;
+    }>(path);
     const link: ConfigElement[] = (raw.link ?? []).map((item) => {
       const a = parseAttrs(item.attributes);
       return {
@@ -39,7 +42,7 @@ export class ConfigurationClient {
 
   getConfiguration(id: string): Promise<ConfigElement> {
     return this.http.get<ConfigElement>(
-      `/configurations/${encodeURIComponent(id)}`
+      `/configurations/${encodeURIComponent(id)}`,
     );
   }
 
@@ -56,23 +59,25 @@ export class ConfigurationClient {
       this.http.configurationDir,
       fileName,
       "Configuration",
-      "VCFA_CONFIGURATION_DIR"
+      "VCFA_CONFIGURATION_DIR",
     );
   }
 
   async exportConfigurationFile(
     id: string,
     fileName: string,
-    overwrite = false
+    overwrite = false,
   ): Promise<string> {
     const destPath = await this.resolveConfigurationPath(fileName);
     const existingFile = await getExistingFile(destPath);
     if (existingFile?.isSymbolicLink()) {
-      throw new Error("Configuration export target must not be a symbolic link");
+      throw new Error(
+        "Configuration export target must not be a symbolic link",
+      );
     }
     if (existingFile && !overwrite) {
       throw new Error(
-        `Configuration file already exists: ${fileName}. Set overwrite to true to replace it.`
+        `Configuration file already exists: ${fileName}. Set overwrite to true to replace it.`,
       );
     }
 
@@ -98,7 +103,9 @@ export class ConfigurationClient {
     }
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      throw new Error(`vRO API error: ${res.status} ${res.statusText} — export configuration\n${text}`);
+      throw new Error(
+        `vRO API error: ${res.status} ${res.statusText} — export configuration\n${text}`,
+      );
     }
     const buffer = Buffer.from(await res.arrayBuffer());
     await writeFile(destPath, buffer, { flag: overwrite ? "w" : "wx" });
@@ -107,14 +114,17 @@ export class ConfigurationClient {
 
   async importConfigurationFile(
     categoryId: string,
-    fileName: string
+    fileName: string,
   ): Promise<void> {
     const srcPath = await this.resolveConfigurationPath(fileName);
-    await rejectSymlink(srcPath, "Configuration import source must not be a symbolic link");
+    await rejectSymlink(
+      srcPath,
+      "Configuration import source must not be a symbolic link",
+    );
     await assertRealPathInside(
       this.http.configurationDir,
       srcPath,
-      "Configuration file path resolves outside VCFA_CONFIGURATION_DIR"
+      "Configuration file path resolves outside VCFA_CONFIGURATION_DIR",
     );
     const token = await this.http.ensureAuthenticated();
     const buffer = await readFile(srcPath);
@@ -144,7 +154,9 @@ export class ConfigurationClient {
     }
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      throw new Error(`vRO API error: ${res.status} ${res.statusText} — import configuration\n${text}`);
+      throw new Error(
+        `vRO API error: ${res.status} ${res.statusText} — import configuration\n${text}`,
+      );
     }
   }
 
@@ -152,7 +164,7 @@ export class ConfigurationClient {
     categoryId: string,
     name: string,
     description?: string,
-    attributes?: { name: string; type: string; value?: string }[]
+    attributes?: { name: string; type: string; value?: string }[],
   ): Promise<ConfigElement> {
     const body: Record<string, unknown> = {
       name,
@@ -177,7 +189,7 @@ export class ConfigurationClient {
       name?: string;
       description?: string;
       attributes?: { name: string; type: string; value?: string }[];
-    }
+    },
   ): Promise<void> {
     const body: Record<string, unknown> = {};
     if (params.name !== undefined) body.name = params.name;
@@ -185,6 +197,9 @@ export class ConfigurationClient {
     if (params.attributes !== undefined) {
       body.attribute = toVroParameters(params.attributes);
     }
-    await this.http.put<unknown>(`/configurations/${encodeURIComponent(id)}`, body);
+    await this.http.put<unknown>(
+      `/configurations/${encodeURIComponent(id)}`,
+      body,
+    );
   }
 }

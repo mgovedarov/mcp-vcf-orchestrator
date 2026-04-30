@@ -15,7 +15,7 @@ export interface AttributeLink {
  * This helper converts that array to a plain key/value object.
  */
 export function parseAttrs(
-  attrs: Attribute[] | undefined
+  attrs: Attribute[] | undefined,
 ): Record<string, string> {
   const obj: Record<string, string> = {};
   for (const a of attrs ?? []) {

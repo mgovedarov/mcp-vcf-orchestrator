@@ -86,14 +86,14 @@ export class VroClient {
   createWorkflow(
     categoryId: string,
     name: string,
-    description?: string
+    description?: string,
   ): Promise<Workflow> {
     return this.workflows.createWorkflow(categoryId, name, description);
   }
 
   runWorkflow(
     id: string,
-    inputs?: SimpleParameter[]
+    inputs?: SimpleParameter[],
   ): Promise<WorkflowExecution> {
     return this.workflows.runWorkflow(id, inputs);
   }
@@ -101,26 +101,30 @@ export class VroClient {
   getWorkflowExecution(
     workflowId: string,
     executionId: string,
-    options?: { showDetails?: boolean }
+    options?: { showDetails?: boolean },
   ): Promise<WorkflowExecution> {
-    return this.workflows.getWorkflowExecution(workflowId, executionId, options);
+    return this.workflows.getWorkflowExecution(
+      workflowId,
+      executionId,
+      options,
+    );
   }
 
   getWorkflowExecutionLogs(
     workflowId: string,
     executionId: string,
-    options?: { maxResult?: number }
+    options?: { maxResult?: number },
   ): Promise<WorkflowExecutionLogs> {
     return this.workflows.getWorkflowExecutionLogs(
       workflowId,
       executionId,
-      options
+      options,
     );
   }
 
   listWorkflowExecutions(
     workflowId: string,
-    options?: { maxResults?: number; status?: string }
+    options?: { maxResults?: number; status?: string },
   ): Promise<WorkflowExecutionList> {
     return this.workflows.listWorkflowExecutions(workflowId, options);
   }
@@ -136,7 +140,7 @@ export class VroClient {
   exportWorkflowFile(
     id: string,
     fileName: string,
-    overwrite = false
+    overwrite = false,
   ): Promise<string> {
     return this.workflows.exportWorkflowFile(id, fileName, overwrite);
   }
@@ -144,7 +148,7 @@ export class VroClient {
   importWorkflowFile(
     categoryId: string,
     fileName: string,
-    overwrite = true
+    overwrite = true,
   ): Promise<void> {
     return this.workflows.importWorkflowFile(categoryId, fileName, overwrite);
   }
@@ -164,7 +168,7 @@ export class VroClient {
   exportActionFile(
     id: string,
     fileName: string,
-    overwrite = false
+    overwrite = false,
   ): Promise<string> {
     return this.actions.exportActionFile(id, fileName, overwrite);
   }
@@ -202,7 +206,7 @@ export class VroClient {
   exportConfigurationFile(
     id: string,
     fileName: string,
-    overwrite = false
+    overwrite = false,
   ): Promise<string> {
     return this.configurations.exportConfigurationFile(id, fileName, overwrite);
   }
@@ -215,13 +219,13 @@ export class VroClient {
     categoryId: string,
     name: string,
     description?: string,
-    attributes?: { name: string; type: string; value?: string }[]
+    attributes?: { name: string; type: string; value?: string }[],
   ): Promise<ConfigElement> {
     return this.configurations.createConfiguration(
       categoryId,
       name,
       description,
-      attributes
+      attributes,
     );
   }
 
@@ -235,7 +239,7 @@ export class VroClient {
       name?: string;
       description?: string;
       attributes?: { name: string; type: string; value?: string }[];
-    }
+    },
   ): Promise<void> {
     return this.configurations.updateConfiguration(id, params);
   }
@@ -280,7 +284,7 @@ export class VroClient {
       priority?: number;
       timeout?: number;
       constraints?: Record<string, unknown>;
-    }
+    },
   ): Promise<Subscription> {
     return this.subscriptions.updateSubscription(id, params);
   }
@@ -312,7 +316,10 @@ export class VroClient {
     return this.catalog.createDeploymentFromCatalogItem(params);
   }
 
-  listDeployments(search?: string, projectId?: string): Promise<DeploymentList> {
+  listDeployments(
+    search?: string,
+    projectId?: string,
+  ): Promise<DeploymentList> {
     return this.deployments.listDeployments(search, projectId);
   }
 
@@ -329,7 +336,7 @@ export class VroClient {
   }
 
   runDeploymentAction(
-    params: DeploymentActionRequestParams
+    params: DeploymentActionRequestParams,
   ): Promise<DeploymentRequest> {
     return this.deployments.runDeploymentAction(params);
   }
@@ -368,7 +375,11 @@ export class VroClient {
     return this.packages.getPackageDirectory();
   }
 
-  exportPackage(name: string, fileName: string, overwrite = false): Promise<string> {
+  exportPackage(
+    name: string,
+    fileName: string,
+    overwrite = false,
+  ): Promise<string> {
     return this.packages.exportPackage(name, fileName, overwrite);
   }
 
@@ -388,7 +399,11 @@ export class VroClient {
     return this.resources.getResourceDirectory();
   }
 
-  exportResource(id: string, fileName: string, overwrite = false): Promise<string> {
+  exportResource(
+    id: string,
+    fileName: string,
+    overwrite = false,
+  ): Promise<string> {
     return this.resources.exportResource(id, fileName, overwrite);
   }
 
@@ -399,7 +414,7 @@ export class VroClient {
   updateResourceContent(
     id: string,
     fileName: string,
-    changesetSha?: string
+    changesetSha?: string,
   ): Promise<void> {
     return this.resources.updateResourceContent(id, fileName, changesetSha);
   }

@@ -1,11 +1,11 @@
-import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { z } from "zod";
 import type { VroClient } from "../vro-client.js";
 
 export function registerPackageTools(
   server: McpServer,
-  client: VroClient
+  client: VroClient,
 ): void {
   server.registerTool(
     "list-packages",
@@ -32,7 +32,7 @@ export function registerPackageTools(
         }
         const lines = packages.map(
           (p) =>
-            `• ${p.name}${p.version ? ` v${p.version}` : ""}${p.description ? ` — ${p.description}` : ""}`
+            `• ${p.name}${p.version ? ` v${p.version}` : ""}${p.description ? ` — ${p.description}` : ""}`,
         );
         return {
           content: [
@@ -53,7 +53,7 @@ export function registerPackageTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.registerTool(
@@ -65,7 +65,9 @@ export function registerPackageTools(
       inputSchema: z.object({
         name: z
           .string()
-          .describe("The fully-qualified package name (e.g. com.example.mypackage)"),
+          .describe(
+            "The fully-qualified package name (e.g. com.example.mypackage)",
+          ),
       }),
       annotations: { readOnlyHint: false },
     },
@@ -87,7 +89,7 @@ export function registerPackageTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.registerTool(
@@ -101,10 +103,14 @@ export function registerPackageTools(
       inputSchema: z.object({
         name: z
           .string()
-          .describe("The fully-qualified package name to export (e.g. com.example.mypackage)"),
+          .describe(
+            "The fully-qualified package name to export (e.g. com.example.mypackage)",
+          ),
         fileName: z
           .string()
-          .describe("Package file name to save under VCFA_PACKAGE_DIR (e.g. com.example.mypackage.package)"),
+          .describe(
+            "Package file name to save under VCFA_PACKAGE_DIR (e.g. com.example.mypackage.package)",
+          ),
         overwrite: z
           .boolean()
           .optional()
@@ -114,7 +120,11 @@ export function registerPackageTools(
     },
     async ({ name, fileName, overwrite }): Promise<CallToolResult> => {
       try {
-        const savedPath = await client.exportPackage(name, fileName, overwrite ?? false);
+        const savedPath = await client.exportPackage(
+          name,
+          fileName,
+          overwrite ?? false,
+        );
         return {
           content: [
             {
@@ -134,7 +144,7 @@ export function registerPackageTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.registerTool(
@@ -148,14 +158,20 @@ export function registerPackageTools(
       inputSchema: z.object({
         fileName: z
           .string()
-          .describe("Package file name under VCFA_PACKAGE_DIR to import (e.g. com.example.mypackage.package)"),
+          .describe(
+            "Package file name under VCFA_PACKAGE_DIR to import (e.g. com.example.mypackage.package)",
+          ),
         overwrite: z
           .boolean()
           .optional()
-          .describe("Whether to overwrite existing package contents (default: true)"),
+          .describe(
+            "Whether to overwrite existing package contents (default: true)",
+          ),
         confirm: z
           .boolean()
-          .describe("Must be set to true to confirm import. If false, the import will not proceed."),
+          .describe(
+            "Must be set to true to confirm import. If false, the import will not proceed.",
+          ),
       }),
       annotations: { readOnlyHint: false },
     },
@@ -191,7 +207,7 @@ export function registerPackageTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.registerTool(
@@ -204,14 +220,20 @@ export function registerPackageTools(
       inputSchema: z.object({
         name: z
           .string()
-          .describe("The fully-qualified package name to delete (e.g. com.example.mypackage)"),
+          .describe(
+            "The fully-qualified package name to delete (e.g. com.example.mypackage)",
+          ),
         deleteContents: z
           .boolean()
           .optional()
-          .describe("Also delete all elements (workflows, actions, configs) inside the package (default: false)"),
+          .describe(
+            "Also delete all elements (workflows, actions, configs) inside the package (default: false)",
+          ),
         confirm: z
           .boolean()
-          .describe("Must be set to true to confirm deletion. If false, the deletion will not proceed."),
+          .describe(
+            "Must be set to true to confirm deletion. If false, the deletion will not proceed.",
+          ),
       }),
       annotations: { readOnlyHint: false, destructiveHint: true },
     },
@@ -247,6 +269,6 @@ export function registerPackageTools(
           isError: true,
         };
       }
-    }
+    },
   );
 }

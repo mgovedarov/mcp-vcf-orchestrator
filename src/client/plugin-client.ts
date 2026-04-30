@@ -10,7 +10,10 @@ export class PluginClient {
     if (filter) {
       path += `?conditions=name~${encodeURIComponent(filter)}`;
     }
-    const raw = await this.http.get<{ link?: { attributes?: { name: string; value: string }[] }[]; total?: number }>(path);
+    const raw = await this.http.get<{
+      link?: { attributes?: { name: string; value: string }[] }[];
+      total?: number;
+    }>(path);
     const link: VroPlugin[] = (raw.link ?? []).map((item) => {
       const a = parseAttrs(item.attributes);
       return {

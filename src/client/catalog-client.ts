@@ -15,7 +15,7 @@ export class CatalogClient {
   getCatalogItem(id: string): Promise<CatalogItem> {
     return this.http.get<CatalogItem>(
       `/items/${encodeURIComponent(id)}`,
-      this.http.catalogBaseUrl
+      this.http.catalogBaseUrl,
     );
   }
 
@@ -37,7 +37,7 @@ export class CatalogClient {
     return this.http.post<Deployment>(
       `/items/${encodeURIComponent(params.catalogItemId)}/request`,
       body,
-      this.http.catalogBaseUrl
+      this.http.catalogBaseUrl,
     );
   }
 }

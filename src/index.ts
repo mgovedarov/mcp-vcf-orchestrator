@@ -40,12 +40,23 @@ async function main(): Promise<void> {
   if (ignoreTls) {
     process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0";
     console.error(
-      "[vcfa-server] WARNING: TLS certificate verification disabled (VCFA_IGNORE_TLS=true)"
+      "[vcfa-server] WARNING: TLS certificate verification disabled (VCFA_IGNORE_TLS=true)",
     );
   }
 
   // Create vRO API client
-  const client = new VroClient({ host, username, organization, password, ignoreTls, packageDir, resourceDir, workflowDir, actionDir, configurationDir });
+  const client = new VroClient({
+    host,
+    username,
+    organization,
+    password,
+    ignoreTls,
+    packageDir,
+    resourceDir,
+    workflowDir,
+    actionDir,
+    configurationDir,
+  });
 
   // Create MCP server
   const server = new McpServer(
@@ -69,7 +80,7 @@ async function main(): Promise<void> {
         "Use list-resource-elements to browse vRO resource elements; use list-categories with type ResourceElementCategory before importing a resource element; exported and imported resource files are stored under VCFA_RESOURCE_DIR.",
         "Use list-plugins to see all installed vRO plugins.",
       ].join(" "),
-    }
+    },
   );
 
   // Register all tools

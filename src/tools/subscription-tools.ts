@@ -5,7 +5,7 @@ import type { VroClient } from "../vro-client.js";
 
 export function registerSubscriptionTools(
   server: McpServer,
-  client: VroClient
+  client: VroClient,
 ): void {
   // --- Event Topics ---
 
@@ -29,7 +29,7 @@ export function registerSubscriptionTools(
         }
         const lines = topics.map(
           (t) =>
-            `• ${t.name} (id: ${t.id})${t.blockable ? " [blockable]" : ""}${t.description ? ` — ${t.description}` : ""}`
+            `• ${t.name} (id: ${t.id})${t.blockable ? " [blockable]" : ""}${t.description ? ` — ${t.description}` : ""}`,
         );
         return {
           content: [
@@ -50,7 +50,7 @@ export function registerSubscriptionTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   // --- Subscriptions ---
@@ -80,7 +80,7 @@ export function registerSubscriptionTools(
         }
         const lines = subs.map(
           (s) =>
-            `• ${s.name} (id: ${s.id}) — topic: ${s.eventTopicId ?? "N/A"}, runnable: ${s.runnableType ?? "N/A"}/${s.runnableId ?? "N/A"}, ${s.disabled ? "DISABLED" : "ENABLED"}`
+            `• ${s.name} (id: ${s.id}) — topic: ${s.eventTopicId ?? "N/A"}, runnable: ${s.runnableType ?? "N/A"}/${s.runnableId ?? "N/A"}, ${s.disabled ? "DISABLED" : "ENABLED"}`,
         );
         return {
           content: [
@@ -101,7 +101,7 @@ export function registerSubscriptionTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.registerTool(
@@ -146,7 +146,7 @@ export function registerSubscriptionTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.registerTool(
@@ -160,12 +160,12 @@ export function registerSubscriptionTools(
         eventTopicId: z
           .string()
           .describe(
-            "The event topic ID to subscribe to (use list-event-topics to find)"
+            "The event topic ID to subscribe to (use list-event-topics to find)",
           ),
         runnableType: z
           .enum(["extensibility.vro", "extensibility.abx"])
           .describe(
-            "Type of runnable to trigger: extensibility.vro for a vRO workflow, extensibility.abx for an ABX action"
+            "Type of runnable to trigger: extensibility.vro for a vRO workflow, extensibility.abx for an ABX action",
           ),
         runnableId: z
           .string()
@@ -174,10 +174,7 @@ export function registerSubscriptionTools(
           .string()
           .optional()
           .describe("Project ID to scope the subscription to"),
-        description: z
-          .string()
-          .optional()
-          .describe("Optional description"),
+        description: z.string().optional().describe("Optional description"),
         blocking: z
           .boolean()
           .optional()
@@ -241,7 +238,7 @@ export function registerSubscriptionTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.registerTool(
@@ -313,7 +310,7 @@ export function registerSubscriptionTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.registerTool(
@@ -324,7 +321,11 @@ export function registerSubscriptionTools(
         "Delete an extensibility subscription from the VCF Automation Event Broker. Set confirm to true to proceed.",
       inputSchema: z.object({
         id: z.string().describe("The subscription ID to delete"),
-        confirm: z.boolean().describe("Must be set to true to confirm deletion. If false, the deletion will not proceed."),
+        confirm: z
+          .boolean()
+          .describe(
+            "Must be set to true to confirm deletion. If false, the deletion will not proceed.",
+          ),
       }),
       annotations: { readOnlyHint: false, destructiveHint: true },
     },
@@ -360,6 +361,6 @@ export function registerSubscriptionTools(
           isError: true,
         };
       }
-    }
+    },
   );
 }

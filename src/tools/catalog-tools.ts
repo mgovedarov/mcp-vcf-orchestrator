@@ -5,7 +5,7 @@ import type { VroClient } from "../vro-client.js";
 
 export function registerCatalogTools(
   server: McpServer,
-  client: VroClient
+  client: VroClient,
 ): void {
   server.registerTool(
     "list-catalog-items",
@@ -56,7 +56,7 @@ export function registerCatalogTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.registerTool(
@@ -83,8 +83,10 @@ export function registerCatalogTools(
         }
         if (item.createdBy) text += `Created By: ${item.createdBy}\n`;
         if (item.createdAt) text += `Created At: ${item.createdAt}\n`;
-        if (item.lastUpdatedBy) text += `Last Updated By: ${item.lastUpdatedBy}\n`;
-        if (item.lastUpdatedAt) text += `Last Updated At: ${item.lastUpdatedAt}\n`;
+        if (item.lastUpdatedBy)
+          text += `Last Updated By: ${item.lastUpdatedBy}\n`;
+        if (item.lastUpdatedAt)
+          text += `Last Updated At: ${item.lastUpdatedAt}\n`;
         return { content: [{ type: "text", text }] };
       } catch (error) {
         return {
@@ -97,6 +99,6 @@ export function registerCatalogTools(
           isError: true,
         };
       }
-    }
+    },
   );
 }

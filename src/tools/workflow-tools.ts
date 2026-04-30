@@ -27,11 +27,15 @@ export function getWorkflowInputParameters(workflow: Workflow): VroParameter[] {
   return workflow.inputParameters ?? workflow["input-parameters"] ?? [];
 }
 
-export function getWorkflowOutputParameters(workflow: Workflow): VroParameter[] {
+export function getWorkflowOutputParameters(
+  workflow: Workflow,
+): VroParameter[] {
   return workflow.outputParameters ?? workflow["output-parameters"] ?? [];
 }
 
-export function getExecutionOutputParameters(execution: WorkflowExecution): VroParameter[] {
+export function getExecutionOutputParameters(
+  execution: WorkflowExecution,
+): VroParameter[] {
   return execution.outputParameters ?? execution["output-parameters"] ?? [];
 }
 
@@ -59,7 +63,7 @@ function hasValueProperty(value: unknown): value is { value: unknown } {
 }
 
 function getWorkflowExecutionStackItems(
-  execution: WorkflowExecution
+  execution: WorkflowExecution,
 ): WorkflowExecutionStackItem[] {
   return (
     execution.executionStack ??
@@ -80,7 +84,7 @@ function isCompletedState(state: string | undefined): boolean {
 
 function isFailureState(state: string | undefined): boolean {
   return ["FAILED", "CANCELED", "CANCELLED"].includes(
-    normalizeExecutionState(state)
+    normalizeExecutionState(state),
   );
 }
 
@@ -124,7 +128,7 @@ function validateParameterValue(type: string, value: unknown): string | null {
 
 function validateWorkflowRunInputs(
   workflow: Workflow,
-  inputs: { name: string; type?: string; value?: unknown }[] = []
+  inputs: { name: string; type?: string; value?: unknown }[] = [],
 ): { errors: string[]; inputs: SimpleParameter[] } {
   const errors: string[] = [];
   const definitions = getWorkflowInputParameters(workflow);
@@ -147,7 +151,7 @@ function validateWorkflowRunInputs(
 
     if (input.type !== undefined && input.type !== definition.type) {
       errors.push(
-        `Input ${input.name} type ${input.type} does not match workflow type ${definition.type}`
+        `Input ${input.name} type ${input.type} does not match workflow type ${definition.type}`,
       );
     }
 
@@ -166,7 +170,7 @@ function validateWorkflowRunInputs(
   for (const definition of definitions) {
     if (definition.value === undefined && !seen.has(definition.name)) {
       errors.push(
-        `Missing required input: ${definition.name} (${definition.type})`
+        `Missing required input: ${definition.name} (${definition.type})`,
       );
     }
   }
@@ -190,7 +194,7 @@ function formatOutputParameters(execution: WorkflowExecution): string {
 
   const lines = outputs.map(
     (p) =>
-      `  • ${p.name} (${p.type}): ${stringifyValue(unwrapVroParameterValue(p))}`
+      `  • ${p.name} (${p.type}): ${stringifyValue(unwrapVroParameterValue(p))}`,
   );
   return `Output Parameters:\n${lines.join("\n")}`;
 }
@@ -199,12 +203,13 @@ function formatExecutionHeader(
   title: string,
   workflow: Workflow,
   execution: WorkflowExecution,
-  elapsedMs?: number
+  elapsedMs?: number,
 ): string {
   let text = `${title}\nWorkflow: ${workflow.name}\nWorkflow ID: ${workflow.id}\nExecution ID: ${execution.id}\nState: ${execution.state}\n`;
   if (execution["start-date"]) text += `Started: ${execution["start-date"]}\n`;
   if (execution["end-date"]) text += `Ended: ${execution["end-date"]}\n`;
-  if (execution["started-by"]) text += `Started by: ${execution["started-by"]}\n`;
+  if (execution["started-by"])
+    text += `Started by: ${execution["started-by"]}\n`;
   if (elapsedMs !== undefined) {
     text += `Elapsed wait: ${Math.round(elapsedMs / 1000)}s\n`;
   }
@@ -213,7 +218,11 @@ function formatExecutionHeader(
 
 function formatStackItem(item: WorkflowExecutionStackItem): string {
   const label =
-    item.displayName ?? item.name ?? item.workflowDisplayName ?? item.href ?? "Unnamed item";
+    item.displayName ??
+    item.name ??
+    item.workflowDisplayName ??
+    item.href ??
+    "Unnamed item";
   const details: string[] = [];
   if (item.name && item.name !== label) details.push(`name: ${item.name}`);
   if (item.workflowDisplayName) {
@@ -233,7 +242,7 @@ function formatLogEntry(log: WorkflowExecutionLog): string {
   const description =
     shortDescription && longDescription && shortDescription !== longDescription
       ? `${shortDescription} — ${longDescription}`
-      : shortDescription ?? longDescription ?? "(no description)";
+      : (shortDescription ?? longDescription ?? "(no description)");
   return `${prefix.length > 0 ? `${prefix.join(" ")} ` : ""}${description}`;
 }
 
@@ -241,7 +250,7 @@ function appendDiagnostics(
   text: string,
   execution: WorkflowExecution,
   logs: WorkflowExecutionLog[],
-  warnings: string[]
+  warnings: string[],
 ): string {
   let result = text;
   if (execution["business-state"]) {
@@ -283,7 +292,7 @@ async function collectExecutionDiagnostics(
   client: VroClient,
   workflowId: string,
   execution: WorkflowExecution,
-  logLimit: number
+  logLimit: number,
 ): Promise<{
   execution: WorkflowExecution;
   logs: WorkflowExecutionLog[];
@@ -296,10 +305,12 @@ async function collectExecutionDiagnostics(
     detailedExecution = await client.getWorkflowExecution(
       workflowId,
       execution.id,
-      { showDetails: true }
+      { showDetails: true },
     );
   } catch (error) {
-    warnings.push(`Unable to fetch detailed execution data: ${errorMessage(error)}`);
+    warnings.push(
+      `Unable to fetch detailed execution data: ${errorMessage(error)}`,
+    );
   }
 
   let logs: WorkflowExecutionLog[] = [];
@@ -321,7 +332,7 @@ async function collectExecutionDiagnostics(
 
 export function registerWorkflowTools(
   server: McpServer,
-  client: VroClient
+  client: VroClient,
 ): void {
   server.registerTool(
     "list-workflows",
@@ -343,14 +354,12 @@ export function registerWorkflowTools(
         const workflows = result.link ?? [];
         if (workflows.length === 0) {
           return {
-            content: [
-              { type: "text", text: "No workflows found." },
-            ],
+            content: [{ type: "text", text: "No workflows found." }],
           };
         }
         const lines = workflows.map(
           (w) =>
-            `• ${w.name} (id: ${w.id})${w.description ? ` — ${w.description}` : ""}`
+            `• ${w.name} (id: ${w.id})${w.description ? ` — ${w.description}` : ""}`,
         );
         return {
           content: [
@@ -371,7 +380,7 @@ export function registerWorkflowTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.registerTool(
@@ -420,7 +429,7 @@ export function registerWorkflowTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.registerTool(
@@ -463,7 +472,7 @@ export function registerWorkflowTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.registerTool(
@@ -481,10 +490,10 @@ export function registerWorkflowTools(
               type: z
                 .string()
                 .describe(
-                  "Parameter type (e.g. string, number, boolean, Array/string)"
+                  "Parameter type (e.g. string, number, boolean, Array/string)",
                 ),
               value: z.unknown().describe("Parameter value"),
-            })
+            }),
           )
           .optional()
           .describe("Input parameters for the workflow execution"),
@@ -513,7 +522,7 @@ export function registerWorkflowTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.registerTool(
@@ -532,10 +541,10 @@ export function registerWorkflowTools(
                 .string()
                 .optional()
                 .describe(
-                  "Optional parameter type. If omitted, the workflow definition type is used."
+                  "Optional parameter type. If omitted, the workflow definition type is used.",
                 ),
               value: z.unknown().describe("Parameter value"),
-            })
+            }),
           )
           .optional()
           .describe("Input parameters for the workflow execution"),
@@ -556,7 +565,9 @@ export function registerWorkflowTools(
           .int()
           .nonnegative()
           .optional()
-          .describe("Maximum execution log entries to include on failure or timeout (default: 20)"),
+          .describe(
+            "Maximum execution log entries to include on failure or timeout (default: 20)",
+          ),
       }),
       annotations: { readOnlyHint: false },
     },
@@ -585,11 +596,12 @@ export function registerWorkflowTools(
 
         const timeoutMs = Math.max(
           0,
-          (timeoutSeconds ?? DEFAULT_WORKFLOW_WAIT_TIMEOUT_SECONDS) * 1000
+          (timeoutSeconds ?? DEFAULT_WORKFLOW_WAIT_TIMEOUT_SECONDS) * 1000,
         );
         const pollIntervalMs = Math.max(
           0,
-          (pollIntervalSeconds ?? DEFAULT_WORKFLOW_POLL_INTERVAL_SECONDS) * 1000
+          (pollIntervalSeconds ?? DEFAULT_WORKFLOW_POLL_INTERVAL_SECONDS) *
+            1000,
         );
         const maxLogs = Math.max(0, logLimit ?? DEFAULT_WORKFLOW_LOG_LIMIT);
         const waitStartedAt = Date.now();
@@ -604,7 +616,7 @@ export function registerWorkflowTools(
         while (true) {
           lastExecution = await client.getWorkflowExecution(
             id,
-            startedExecution.id
+            startedExecution.id,
           );
 
           if (isCompletedState(lastExecution.state)) {
@@ -614,7 +626,7 @@ export function registerWorkflowTools(
                 "Workflow execution completed.",
                 workflow,
                 lastExecution,
-                elapsedMs
+                elapsedMs,
               ),
               "",
               formatOutputParameters(lastExecution),
@@ -628,18 +640,18 @@ export function registerWorkflowTools(
               client,
               id,
               lastExecution,
-              maxLogs
+              maxLogs,
             );
             const text = appendDiagnostics(
               formatExecutionHeader(
                 "Workflow execution failed.",
                 workflow,
                 diagnostics.execution,
-                elapsedMs
+                elapsedMs,
               ),
               diagnostics.execution,
               diagnostics.logs,
-              diagnostics.warnings
+              diagnostics.warnings,
             );
             return { content: [{ type: "text", text }], isError: true };
           }
@@ -651,19 +663,19 @@ export function registerWorkflowTools(
               client,
               id,
               lastExecution,
-              maxLogs
+              maxLogs,
             );
             const text = appendDiagnostics(
               formatExecutionHeader(
                 "Workflow execution timed out while waiting.",
                 workflow,
                 diagnostics.execution,
-                elapsedMs
+                elapsedMs,
               ) +
                 `\nTimeout: ${Math.round(timeoutMs / 1000)}s\nThe remote workflow was not canceled.`,
               diagnostics.execution,
               diagnostics.logs,
-              diagnostics.warnings
+              diagnostics.warnings,
             );
             return { content: [{ type: "text", text }], isError: true };
           }
@@ -684,15 +696,14 @@ export function registerWorkflowTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.registerTool(
     "get-workflow-execution",
     {
       title: "Get Workflow Execution",
-      description:
-        "Check the status and outputs of a workflow execution.",
+      description: "Check the status and outputs of a workflow execution.",
       inputSchema: z.object({
         workflowId: z.string().describe("The workflow ID"),
         executionId: z.string().describe("The execution ID"),
@@ -701,10 +712,7 @@ export function registerWorkflowTools(
     },
     async ({ workflowId, executionId }): Promise<CallToolResult> => {
       try {
-        const exec = await client.getWorkflowExecution(
-          workflowId,
-          executionId
-        );
+        const exec = await client.getWorkflowExecution(workflowId, executionId);
         let text = `Execution: ${exec.id}\nState: ${exec.state}\n`;
         if (exec["start-date"]) text += `Started: ${exec["start-date"]}\n`;
         if (exec["end-date"]) text += `Ended: ${exec["end-date"]}\n`;
@@ -733,7 +741,7 @@ export function registerWorkflowTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.registerTool(
@@ -751,7 +759,13 @@ export function registerWorkflowTools(
           .optional()
           .describe("Maximum number of executions to return (default: 20)"),
         status: z
-          .enum(["running", "completed", "failed", "canceled", "waiting-signal"])
+          .enum([
+            "running",
+            "completed",
+            "failed",
+            "canceled",
+            "waiting-signal",
+          ])
           .optional()
           .describe("Filter executions by status"),
       }),
@@ -796,7 +810,7 @@ export function registerWorkflowTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.registerTool(
@@ -822,7 +836,7 @@ export function registerWorkflowTools(
         const savedPath = await client.exportWorkflowFile(
           id,
           fileName,
-          overwrite ?? false
+          overwrite ?? false,
         );
         return {
           content: [
@@ -843,7 +857,7 @@ export function registerWorkflowTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.registerTool(
@@ -862,14 +876,23 @@ export function registerWorkflowTools(
         overwrite: z
           .boolean()
           .optional()
-          .describe("Overwrite an existing workflow with the same identity (default: true)"),
+          .describe(
+            "Overwrite an existing workflow with the same identity (default: true)",
+          ),
         confirm: z
           .boolean()
-          .describe("Must be set to true to confirm import. If false, the import will not proceed."),
+          .describe(
+            "Must be set to true to confirm import. If false, the import will not proceed.",
+          ),
       }),
       annotations: { readOnlyHint: false },
     },
-    async ({ categoryId, fileName, overwrite, confirm }): Promise<CallToolResult> => {
+    async ({
+      categoryId,
+      fileName,
+      overwrite,
+      confirm,
+    }): Promise<CallToolResult> => {
       if (!confirm) {
         return {
           content: [
@@ -881,7 +904,11 @@ export function registerWorkflowTools(
         };
       }
       try {
-        await client.importWorkflowFile(categoryId, fileName, overwrite ?? true);
+        await client.importWorkflowFile(
+          categoryId,
+          fileName,
+          overwrite ?? true,
+        );
         return {
           content: [
             {
@@ -901,7 +928,7 @@ export function registerWorkflowTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.registerTool(
@@ -912,7 +939,11 @@ export function registerWorkflowTools(
         "Delete a workflow from VCF Automation Orchestrator. This action is irreversible. Set confirm to true to proceed.",
       inputSchema: z.object({
         id: z.string().describe("The workflow ID to delete"),
-        confirm: z.boolean().describe("Must be set to true to confirm deletion. If false, the deletion will not proceed."),
+        confirm: z
+          .boolean()
+          .describe(
+            "Must be set to true to confirm deletion. If false, the deletion will not proceed.",
+          ),
       }),
       annotations: { readOnlyHint: false, destructiveHint: true },
     },
@@ -948,6 +979,6 @@ export function registerWorkflowTools(
           isError: true,
         };
       }
-    }
+    },
   );
 }

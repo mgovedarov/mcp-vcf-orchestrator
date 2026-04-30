@@ -18,7 +18,10 @@ export class PackageClient {
     if (filter) {
       path += `?conditions=name~${encodeURIComponent(filter)}`;
     }
-    const raw = await this.http.get<{ link?: { attributes?: { name: string; value: string }[] }[]; total?: number }>(path);
+    const raw = await this.http.get<{
+      link?: { attributes?: { name: string; value: string }[] }[];
+      total?: number;
+    }>(path);
     const link: VroPackage[] = (raw.link ?? []).map((item) => {
       const a = parseAttrs(item.attributes);
       return {
@@ -31,9 +34,9 @@ export class PackageClient {
   }
 
   async getPackage(name: string): Promise<VroPackage> {
-    const raw = await this.http.get<{ attributes?: { name: string; value: string }[] }>(
-      `/packages/${encodeURIComponent(name)}`
-    );
+    const raw = await this.http.get<{
+      attributes?: { name: string; value: string }[];
+    }>(`/packages/${encodeURIComponent(name)}`);
     const a = parseAttrs(raw.attributes);
     return {
       name: a["name"] ?? name,
@@ -55,11 +58,15 @@ export class PackageClient {
       this.http.packageDir,
       fileName,
       "Package",
-      "VCFA_PACKAGE_DIR"
+      "VCFA_PACKAGE_DIR",
     );
   }
 
-  async exportPackage(name: string, fileName: string, overwrite = false): Promise<string> {
+  async exportPackage(
+    name: string,
+    fileName: string,
+    overwrite = false,
+  ): Promise<string> {
     const destPath = await this.resolvePackagePath(fileName);
     const existingFile = await getExistingFile(destPath);
     if (existingFile?.isSymbolicLink()) {
@@ -67,7 +74,7 @@ export class PackageClient {
     }
     if (existingFile && !overwrite) {
       throw new Error(
-        `Package file already exists: ${fileName}. Set overwrite to true to replace it.`
+        `Package file already exists: ${fileName}. Set overwrite to true to replace it.`,
       );
     }
     const token = await this.http.ensureAuthenticated();
@@ -91,7 +98,9 @@ export class PackageClient {
     }
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      throw new Error(`vRO API error: ${res.status} ${res.statusText} — export package\n${text}`);
+      throw new Error(
+        `vRO API error: ${res.status} ${res.statusText} — export package\n${text}`,
+      );
     }
     const buffer = Buffer.from(await res.arrayBuffer());
     await writeFile(destPath, buffer, { flag: overwrite ? "w" : "wx" });
@@ -100,11 +109,14 @@ export class PackageClient {
 
   async importPackage(fileName: string, overwrite = true): Promise<void> {
     const srcPath = await this.resolvePackagePath(fileName);
-    await rejectSymlink(srcPath, "Package import source must not be a symbolic link");
+    await rejectSymlink(
+      srcPath,
+      "Package import source must not be a symbolic link",
+    );
     await assertRealPathInside(
       this.http.packageDir,
       srcPath,
-      "Package file path resolves outside VCFA_PACKAGE_DIR"
+      "Package file path resolves outside VCFA_PACKAGE_DIR",
     );
     const token = await this.http.ensureAuthenticated();
     const buffer = await readFile(srcPath);
@@ -131,14 +143,18 @@ export class PackageClient {
     }
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      throw new Error(`vRO API error: ${res.status} ${res.statusText} — import package\n${text}`);
+      throw new Error(
+        `vRO API error: ${res.status} ${res.statusText} — import package\n${text}`,
+      );
     }
   }
 
   async deletePackage(name: string, deleteContents = false): Promise<void> {
-    const option = deleteContents ? "deletePackageWithContent" : "deletePackage";
+    const option = deleteContents
+      ? "deletePackageWithContent"
+      : "deletePackage";
     await this.http.del<unknown>(
-      `/packages/${encodeURIComponent(name)}?option=${option}`
+      `/packages/${encodeURIComponent(name)}?option=${option}`,
     );
   }
 }

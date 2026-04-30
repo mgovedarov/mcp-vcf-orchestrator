@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import { VroClient } from "../dist/vro-client.js";
 
@@ -27,7 +27,10 @@ test("bodyless 202 responses with Location return an execution id", async () => 
     if (calls.length === 1) return authResponse();
     return new Response("", {
       status: 202,
-      headers: { location: "https://vcfa.example.test/vco/api/workflows/wf/executions/execution-123" },
+      headers: {
+        location:
+          "https://vcfa.example.test/vco/api/workflows/wf/executions/execution-123",
+      },
     });
   };
 
@@ -55,7 +58,7 @@ test("getWorkflowExecution can request detailed execution data", async () => {
   assert.equal(execution.id, "execution-1");
   assert.equal(
     calls[1].url,
-    "https://vcfa.example.test/vco/api/workflows/workflow%201/executions/exec%2F1?showDetails=true"
+    "https://vcfa.example.test/vco/api/workflows/workflow%201/executions/exec%2F1?showDetails=true",
   );
   assert.equal(calls[1].init.method, "GET");
 });
@@ -74,13 +77,13 @@ test("getWorkflowExecutionLogs calls workflow execution logs endpoint", async ()
   const logs = await client.getWorkflowExecutionLogs(
     "workflow-1",
     "execution-1",
-    { maxResult: 3 }
+    { maxResult: 3 },
   );
 
   assert.equal(logs.logs[0]["short-description"], "hello");
   assert.equal(
     calls[1].url,
-    "https://vcfa.example.test/vco/api/workflows/workflow-1/executions/execution-1/logs?maxResult=3"
+    "https://vcfa.example.test/vco/api/workflows/workflow-1/executions/execution-1/logs?maxResult=3",
   );
   assert.equal(calls[1].init.method, "GET");
 });
@@ -125,7 +128,7 @@ test("package import rejects path traversal before network calls", async () => {
     const client = new VroClient(config({ packageDir }));
     await assert.rejects(
       () => client.importPackage("../secret.package"),
-      /must not contain path separators/
+      /must not contain path separators/,
     );
     assert.equal(calls.length, 0);
   } finally {
@@ -146,7 +149,7 @@ test("package export rejects existing files unless overwrite is true", async () 
     const client = new VroClient(config({ packageDir }));
     await assert.rejects(
       () => client.exportPackage("com.example", "existing.package"),
-      /already exists/
+      /already exists/,
     );
     assert.equal(calls.length, 0);
   } finally {
@@ -164,7 +167,7 @@ test("package import rejects symbolic links", async () => {
     const client = new VroClient(config({ packageDir }));
     await assert.rejects(
       () => client.importPackage("linked.package"),
-      /must not be a symbolic link/
+      /must not be a symbolic link/,
     );
   } finally {
     await rm(packageDir, { recursive: true, force: true });
@@ -188,7 +191,7 @@ test("package import sends multipart file and overwrite query", async () => {
 
     assert.equal(
       calls[1].url,
-      "https://vcfa.example.test/vco/api/packages?overwrite=false"
+      "https://vcfa.example.test/vco/api/packages?overwrite=false",
     );
     assert.equal(calls[1].init.method, "POST");
     assert.equal(calls[1].init.headers["Content-Type"], undefined);
@@ -212,7 +215,7 @@ test("deletePackage sends documented option query", async () => {
 
   assert.equal(
     calls[1].url,
-    "https://vcfa.example.test/vco/api/packages/com.example?option=deletePackageWithContent"
+    "https://vcfa.example.test/vco/api/packages/com.example?option=deletePackageWithContent",
   );
   assert.equal(calls[1].init.method, "DELETE");
 });
@@ -245,7 +248,7 @@ test("workflow import rejects path traversal before network calls", async () => 
     const client = new VroClient(config({ workflowDir }));
     await assert.rejects(
       () => client.importWorkflowFile("category-1", "../secret.workflow"),
-      /must not contain path separators/
+      /must not contain path separators/,
     );
     assert.equal(calls.length, 0);
   } finally {
@@ -266,7 +269,7 @@ test("workflow export rejects existing files unless overwrite is true", async ()
     const client = new VroClient(config({ workflowDir }));
     await assert.rejects(
       () => client.exportWorkflowFile("workflow-1", "existing.workflow"),
-      /already exists/
+      /already exists/,
     );
     assert.equal(calls.length, 0);
   } finally {
@@ -284,7 +287,7 @@ test("workflow import rejects symbolic links", async () => {
     const client = new VroClient(config({ workflowDir }));
     await assert.rejects(
       () => client.importWorkflowFile("category-1", "linked.workflow"),
-      /must not be a symbolic link/
+      /must not be a symbolic link/,
     );
   } finally {
     await rm(workflowDir, { recursive: true, force: true });
@@ -308,7 +311,7 @@ test("workflow import sends multipart file with category and overwrite query", a
 
     assert.equal(
       calls[1].url,
-      "https://vcfa.example.test/vco/api/workflows?categoryId=category-1&overwrite=false"
+      "https://vcfa.example.test/vco/api/workflows?categoryId=category-1&overwrite=false",
     );
     assert.equal(calls[1].init.method, "POST");
     assert.equal(calls[1].init.headers["Content-Type"], undefined);
@@ -332,13 +335,16 @@ test("workflow export writes only under workflow directory", async () => {
     const client = new VroClient(config({ workflowDir }));
     const savedPath = await client.exportWorkflowFile(
       "workflow-1",
-      "saved.workflow"
+      "saved.workflow",
     );
 
-    assert.equal(savedPath, join(await realpath(workflowDir), "saved.workflow"));
+    assert.equal(
+      savedPath,
+      join(await realpath(workflowDir), "saved.workflow"),
+    );
     assert.equal(
       calls[1].url,
-      "https://vcfa.example.test/vco/api/content/workflows/workflow-1"
+      "https://vcfa.example.test/vco/api/content/workflows/workflow-1",
     );
     assert.equal(calls[1].init.method, "GET");
   } finally {
@@ -358,7 +364,7 @@ test("action import rejects path traversal before network calls", async () => {
     const client = new VroClient(config({ actionDir }));
     await assert.rejects(
       () => client.importActionFile("com.example", "../secret.action"),
-      /must not contain path separators/
+      /must not contain path separators/,
     );
     assert.equal(calls.length, 0);
   } finally {
@@ -379,7 +385,7 @@ test("action export rejects existing files unless overwrite is true", async () =
     const client = new VroClient(config({ actionDir }));
     await assert.rejects(
       () => client.exportActionFile("action-1", "existing.action"),
-      /already exists/
+      /already exists/,
     );
     assert.equal(calls.length, 0);
   } finally {
@@ -397,7 +403,7 @@ test("action import rejects symbolic links", async () => {
     const client = new VroClient(config({ actionDir }));
     await assert.rejects(
       () => client.importActionFile("com.example", "linked.action"),
-      /must not be a symbolic link/
+      /must not be a symbolic link/,
     );
   } finally {
     await rm(actionDir, { recursive: true, force: true });
@@ -461,7 +467,7 @@ test("getAction resolves listed action ids to definition endpoint", async () => 
 
   assert.equal(
     calls[2].url,
-    "https://vcfa.example.test/vco/api/actions/com.example.actions/getVmIp"
+    "https://vcfa.example.test/vco/api/actions/com.example.actions/getVmIp",
   );
   assert.equal(calls[2].init.method, "GET");
   assert.equal(action.script, "return vm.ipAddress;");
@@ -484,7 +490,7 @@ test("getAction accepts fully-qualified action names", async () => {
 
   assert.equal(
     calls[1].url,
-    "https://vcfa.example.test/vco/api/actions/com.example.actions/getVmIp"
+    "https://vcfa.example.test/vco/api/actions/com.example.actions/getVmIp",
   );
 });
 
@@ -499,15 +505,12 @@ test("action export writes only under action directory", async () => {
 
   try {
     const client = new VroClient(config({ actionDir }));
-    const savedPath = await client.exportActionFile(
-      "action-1",
-      "saved.action"
-    );
+    const savedPath = await client.exportActionFile("action-1", "saved.action");
 
     assert.equal(savedPath, join(await realpath(actionDir), "saved.action"));
     assert.equal(
       calls[1].url,
-      "https://vcfa.example.test/vco/api/actions/action-1"
+      "https://vcfa.example.test/vco/api/actions/action-1",
     );
     assert.equal(calls[1].init.method, "GET");
   } finally {
@@ -516,7 +519,9 @@ test("action export writes only under action directory", async () => {
 });
 
 test("configuration import rejects path traversal before network calls", async () => {
-  const configurationDir = await mkdtemp(join(tmpdir(), "vcfa-configurations-"));
+  const configurationDir = await mkdtemp(
+    join(tmpdir(), "vcfa-configurations-"),
+  );
   const calls = [];
   globalThis.fetch = async (url, init) => {
     calls.push({ url: String(url), init });
@@ -527,7 +532,7 @@ test("configuration import rejects path traversal before network calls", async (
     const client = new VroClient(config({ configurationDir }));
     await assert.rejects(
       () => client.importConfigurationFile("category-1", "../secret.vsoconf"),
-      /must not contain path separators/
+      /must not contain path separators/,
     );
     assert.equal(calls.length, 0);
   } finally {
@@ -536,7 +541,9 @@ test("configuration import rejects path traversal before network calls", async (
 });
 
 test("configuration export rejects existing files unless overwrite is true", async () => {
-  const configurationDir = await mkdtemp(join(tmpdir(), "vcfa-configurations-"));
+  const configurationDir = await mkdtemp(
+    join(tmpdir(), "vcfa-configurations-"),
+  );
   await writeFile(join(configurationDir, "existing.vsoconf"), "old");
   const calls = [];
   globalThis.fetch = async (url, init) => {
@@ -547,8 +554,9 @@ test("configuration export rejects existing files unless overwrite is true", asy
   try {
     const client = new VroClient(config({ configurationDir }));
     await assert.rejects(
-      () => client.exportConfigurationFile("configuration-1", "existing.vsoconf"),
-      /already exists/
+      () =>
+        client.exportConfigurationFile("configuration-1", "existing.vsoconf"),
+      /already exists/,
     );
     assert.equal(calls.length, 0);
   } finally {
@@ -557,7 +565,9 @@ test("configuration export rejects existing files unless overwrite is true", asy
 });
 
 test("configuration import rejects symbolic links", async () => {
-  const configurationDir = await mkdtemp(join(tmpdir(), "vcfa-configurations-"));
+  const configurationDir = await mkdtemp(
+    join(tmpdir(), "vcfa-configurations-"),
+  );
   const outsideFile = join(tmpdir(), `outside-${Date.now()}.vsoconf`);
   await writeFile(outsideFile, "configuration");
   await symlink(outsideFile, join(configurationDir, "linked.vsoconf"));
@@ -566,7 +576,7 @@ test("configuration import rejects symbolic links", async () => {
     const client = new VroClient(config({ configurationDir }));
     await assert.rejects(
       () => client.importConfigurationFile("category-1", "linked.vsoconf"),
-      /must not be a symbolic link/
+      /must not be a symbolic link/,
     );
   } finally {
     await rm(configurationDir, { recursive: true, force: true });
@@ -575,7 +585,9 @@ test("configuration import rejects symbolic links", async () => {
 });
 
 test("configuration import sends multipart file and category id", async () => {
-  const configurationDir = await mkdtemp(join(tmpdir(), "vcfa-configurations-"));
+  const configurationDir = await mkdtemp(
+    join(tmpdir(), "vcfa-configurations-"),
+  );
   await writeFile(join(configurationDir, "payload.vsoconf"), "configuration");
   const calls = [];
   globalThis.fetch = async (url, init) => {
@@ -588,7 +600,10 @@ test("configuration import sends multipart file and category id", async () => {
     const client = new VroClient(config({ configurationDir }));
     await client.importConfigurationFile("category-1", "payload.vsoconf");
 
-    assert.equal(calls[1].url, "https://vcfa.example.test/vco/api/configurations");
+    assert.equal(
+      calls[1].url,
+      "https://vcfa.example.test/vco/api/configurations",
+    );
     assert.equal(calls[1].init.method, "POST");
     assert.equal(calls[1].init.headers["Content-Type"], undefined);
     const body = calls[1].init.body;
@@ -600,7 +615,9 @@ test("configuration import sends multipart file and category id", async () => {
 });
 
 test("configuration export writes only under configuration directory", async () => {
-  const configurationDir = await mkdtemp(join(tmpdir(), "vcfa-configurations-"));
+  const configurationDir = await mkdtemp(
+    join(tmpdir(), "vcfa-configurations-"),
+  );
   const calls = [];
   globalThis.fetch = async (url, init) => {
     calls.push({ url: String(url), init });
@@ -612,13 +629,16 @@ test("configuration export writes only under configuration directory", async () 
     const client = new VroClient(config({ configurationDir }));
     const savedPath = await client.exportConfigurationFile(
       "configuration-1",
-      "saved.vsoconf"
+      "saved.vsoconf",
     );
 
-    assert.equal(savedPath, join(await realpath(configurationDir), "saved.vsoconf"));
+    assert.equal(
+      savedPath,
+      join(await realpath(configurationDir), "saved.vsoconf"),
+    );
     assert.equal(
       calls[1].url,
-      "https://vcfa.example.test/vco/api/configurations/configuration-1"
+      "https://vcfa.example.test/vco/api/configurations/configuration-1",
     );
     assert.equal(calls[1].init.method, "GET");
   } finally {
@@ -650,7 +670,10 @@ test("listResources parses singular resource attributes", async () => {
   const client = new VroClient(config());
   const resources = await client.listResources("logo");
 
-  assert.equal(calls[1].url, "https://vcfa.example.test/vco/api/resources?conditions=name~logo");
+  assert.equal(
+    calls[1].url,
+    "https://vcfa.example.test/vco/api/resources?conditions=name~logo",
+  );
   assert.deepEqual(resources.link, [
     {
       id: "resource-1",
@@ -677,7 +700,7 @@ test("resource import rejects path traversal before network calls", async () => 
     const client = new VroClient(config({ resourceDir }));
     await assert.rejects(
       () => client.importResource("category-1", "../secret.txt"),
-      /must not contain path separators/
+      /must not contain path separators/,
     );
     assert.equal(calls.length, 0);
   } finally {
@@ -698,7 +721,7 @@ test("resource export rejects existing files unless overwrite is true", async ()
     const client = new VroClient(config({ resourceDir }));
     await assert.rejects(
       () => client.exportResource("resource-1", "existing.txt"),
-      /already exists/
+      /already exists/,
     );
     assert.equal(calls.length, 0);
   } finally {
@@ -742,7 +765,10 @@ test("deleteResource includes force query only when requested", async () => {
   const client = new VroClient(config());
   await client.deleteResource("resource-1", true);
 
-  assert.equal(calls[1].url, "https://vcfa.example.test/vco/api/resources/resource-1?force=true");
+  assert.equal(
+    calls[1].url,
+    "https://vcfa.example.test/vco/api/resources/resource-1?force=true",
+  );
   assert.equal(calls[1].init.method, "DELETE");
 });
 
@@ -756,7 +782,10 @@ test("listWorkflowExecutions ignores non-execution relation links", async () => 
         total: 1,
         link: [
           { href: "https://vcfa.example.test/vco/api/workflows/wf", rel: "up" },
-          { href: "https://vcfa.example.test/vco/api/workflows/wf/executions", rel: "add" },
+          {
+            href: "https://vcfa.example.test/vco/api/workflows/wf/executions",
+            rel: "add",
+          },
           {
             href: "https://vcfa.example.test/vco/api/workflows/wf/executions/execution-1",
             rel: "down",
@@ -806,7 +835,7 @@ test("listDeploymentActions calls deployment actions endpoint", async () => {
 
   assert.equal(
     calls[1].url,
-    "https://vcfa.example.test/deployment/api/deployments/dep%201%2F2/actions"
+    "https://vcfa.example.test/deployment/api/deployments/dep%201%2F2/actions",
   );
   assert.equal(calls[1].init.method, "GET");
   assert.deepEqual(actions.content, [
@@ -837,7 +866,7 @@ test("runDeploymentAction posts action request with optional fields", async () =
 
   assert.equal(
     calls[1].url,
-    "https://vcfa.example.test/deployment/api/deployments/dep%201%2F2/requests"
+    "https://vcfa.example.test/deployment/api/deployments/dep%201%2F2/requests",
   );
   assert.equal(calls[1].init.method, "POST");
   assert.deepEqual(JSON.parse(calls[1].init.body), {

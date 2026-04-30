@@ -1,4 +1,8 @@
-import type { EventTopicList, Subscription, SubscriptionList } from "../types.js";
+import type {
+  EventTopicList,
+  Subscription,
+  SubscriptionList,
+} from "../types.js";
 import type { VroHttpClient } from "./core.js";
 
 export class SubscriptionClient {
@@ -15,7 +19,7 @@ export class SubscriptionClient {
   getSubscription(id: string): Promise<Subscription> {
     return this.http.get<Subscription>(
       `/subscriptions/${encodeURIComponent(id)}`,
-      this.http.eventBrokerBaseUrl
+      this.http.eventBrokerBaseUrl,
     );
   }
 
@@ -46,7 +50,11 @@ export class SubscriptionClient {
     if (params.timeout !== undefined) body.timeout = params.timeout;
     if (params.disabled !== undefined) body.disabled = params.disabled;
     if (params.constraints !== undefined) body.constraints = params.constraints;
-    return this.http.post<Subscription>("/subscriptions", body, this.http.eventBrokerBaseUrl);
+    return this.http.post<Subscription>(
+      "/subscriptions",
+      body,
+      this.http.eventBrokerBaseUrl,
+    );
   }
 
   updateSubscription(
@@ -61,23 +69,26 @@ export class SubscriptionClient {
       priority?: number;
       timeout?: number;
       constraints?: Record<string, unknown>;
-    }
+    },
   ): Promise<Subscription> {
     return this.http.put<Subscription>(
       `/subscriptions/${encodeURIComponent(id)}`,
       params,
-      this.http.eventBrokerBaseUrl
+      this.http.eventBrokerBaseUrl,
     );
   }
 
   async deleteSubscription(id: string): Promise<void> {
     await this.http.del<unknown>(
       `/subscriptions/${encodeURIComponent(id)}`,
-      this.http.eventBrokerBaseUrl
+      this.http.eventBrokerBaseUrl,
     );
   }
 
   listEventTopics(): Promise<EventTopicList> {
-    return this.http.get<EventTopicList>("/topics", this.http.eventBrokerBaseUrl);
+    return this.http.get<EventTopicList>(
+      "/topics",
+      this.http.eventBrokerBaseUrl,
+    );
   }
 }

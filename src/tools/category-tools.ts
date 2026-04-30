@@ -5,7 +5,7 @@ import type { VroClient } from "../vro-client.js";
 
 export function registerCategoryTools(
   server: McpServer,
-  client: VroClient
+  client: VroClient,
 ): void {
   server.registerTool(
     "list-categories",
@@ -35,14 +35,12 @@ export function registerCategoryTools(
         const categories = result.link ?? [];
         if (categories.length === 0) {
           return {
-            content: [
-              { type: "text", text: `No ${type} categories found.` },
-            ],
+            content: [{ type: "text", text: `No ${type} categories found.` }],
           };
         }
         const lines = categories.map(
           (c) =>
-            `• ${c.name} (id: ${c.id})${c.path ? ` — path: ${c.path}` : ""}${c.description ? ` — ${c.description}` : ""}`
+            `• ${c.name} (id: ${c.id})${c.path ? ` — path: ${c.path}` : ""}${c.description ? ` — ${c.description}` : ""}`,
         );
         return {
           content: [
@@ -63,6 +61,6 @@ export function registerCategoryTools(
           isError: true,
         };
       }
-    }
+    },
   );
 }

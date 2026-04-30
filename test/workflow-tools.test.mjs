@@ -26,8 +26,14 @@ test("workflow parameter helpers accept camelCase response fields", () => {
     outputParameters: [{ name: "result", type: "string" }],
   };
 
-  assert.deepEqual(getWorkflowInputParameters(workflow), workflow.inputParameters);
-  assert.deepEqual(getWorkflowOutputParameters(workflow), workflow.outputParameters);
+  assert.deepEqual(
+    getWorkflowInputParameters(workflow),
+    workflow.inputParameters,
+  );
+  assert.deepEqual(
+    getWorkflowOutputParameters(workflow),
+    workflow.outputParameters,
+  );
 });
 
 test("workflow parameter helpers fall back to kebab-case response fields", () => {
@@ -43,9 +49,18 @@ test("workflow parameter helpers fall back to kebab-case response fields", () =>
     "output-parameters": [{ name: "result", type: "string" }],
   };
 
-  assert.deepEqual(getWorkflowInputParameters(workflow), workflow["input-parameters"]);
-  assert.deepEqual(getWorkflowOutputParameters(workflow), workflow["output-parameters"]);
-  assert.deepEqual(getExecutionOutputParameters(execution), execution["output-parameters"]);
+  assert.deepEqual(
+    getWorkflowInputParameters(workflow),
+    workflow["input-parameters"],
+  );
+  assert.deepEqual(
+    getWorkflowOutputParameters(workflow),
+    workflow["output-parameters"],
+  );
+  assert.deepEqual(
+    getExecutionOutputParameters(execution),
+    execution["output-parameters"],
+  );
 });
 
 test("run-workflow-and-wait rejects strict validation errors before running", async () => {
@@ -104,7 +119,11 @@ test("run-workflow-and-wait fills omitted input types and returns outputs", asyn
         id: "execution-1",
         state: "COMPLETED",
         outputParameters: [
-          { name: "result", type: "string", value: { string: { value: "ok" } } },
+          {
+            name: "result",
+            type: "string",
+            value: { string: { value: "ok" } },
+          },
         ],
       };
     },
@@ -140,9 +159,7 @@ test("run-workflow-and-wait reports failure diagnostics and log excerpts", async
           state: "FAILED",
           "content-exception": "boom",
           "current-item-display-name": "Scriptable task",
-          "execution-stack": [
-            { name: "item1", displayName: "Validate input" },
-          ],
+          "execution-stack": [{ name: "item1", displayName: "Validate input" }],
         };
       }
       return { id: "execution-1", state: "FAILED" };
@@ -228,5 +245,8 @@ test("run-workflow-and-wait reports log fetch warnings", async () => {
   });
 
   assert.equal(result.isError, true);
-  assert.match(result.content[0].text, /Unable to fetch execution logs: logs unavailable/);
+  assert.match(
+    result.content[0].text,
+    /Unable to fetch execution logs: logs unavailable/,
+  );
 });

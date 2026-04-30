@@ -322,7 +322,12 @@ export interface DeploymentRequest {
   inputs?: Record<string, unknown>;
   outputs?: Record<string, unknown>;
   resourceIds?: string[];
-  resources?: { id?: string; name?: string; description?: string; version?: string }[];
+  resources?: {
+    id?: string;
+    name?: string;
+    description?: string;
+    version?: string;
+  }[];
 }
 
 // --- Blueprint Templates (Cloud Assembly) ---

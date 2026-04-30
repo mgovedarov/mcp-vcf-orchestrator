@@ -5,7 +5,7 @@ import type { VroClient } from "../vro-client.js";
 
 export function registerConfigTools(
   server: McpServer,
-  client: VroClient
+  client: VroClient,
 ): void {
   server.registerTool(
     "list-configurations",
@@ -37,7 +37,7 @@ export function registerConfigTools(
         }
         const lines = configs.map(
           (c) =>
-            `• ${c.name} (id: ${c.id})${c.description ? ` — ${c.description}` : ""}`
+            `• ${c.name} (id: ${c.id})${c.description ? ` — ${c.description}` : ""}`,
         );
         return {
           content: [
@@ -58,7 +58,7 @@ export function registerConfigTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.registerTool(
@@ -77,17 +77,14 @@ export function registerConfigTools(
         const config = await client.getConfiguration(id);
 
         let text = `Configuration: ${config.name}\nID: ${config.id}\n`;
-        if (config.description)
-          text += `Description: ${config.description}\n`;
+        if (config.description) text += `Description: ${config.description}\n`;
         if (config.version) text += `Version: ${config.version}\n`;
 
         const attrs = config.attributes ?? [];
         if (attrs.length > 0) {
           text += `\nAttributes:\n`;
           for (const a of attrs) {
-            const val = a.value
-              ? JSON.stringify(a.value)
-              : "(no value)";
+            const val = a.value ? JSON.stringify(a.value) : "(no value)";
             text += `  • ${a.name} (${a.type}): ${val}${a.description ? ` — ${a.description}` : ""}\n`;
           }
         } else {
@@ -105,7 +102,7 @@ export function registerConfigTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.registerTool(
@@ -117,16 +114,9 @@ export function registerConfigTools(
       inputSchema: z.object({
         categoryId: z
           .string()
-          .describe(
-            "The category ID to create the configuration element in"
-          ),
-        name: z
-          .string()
-          .describe("Name for the new configuration element"),
-        description: z
-          .string()
-          .optional()
-          .describe("Optional description"),
+          .describe("The category ID to create the configuration element in"),
+        name: z.string().describe("Name for the new configuration element"),
+        description: z.string().optional().describe("Optional description"),
         attributes: z
           .array(
             z.object({
@@ -138,7 +128,7 @@ export function registerConfigTools(
                 .string()
                 .optional()
                 .describe("Attribute value as string"),
-            })
+            }),
           )
           .optional()
           .describe("Initial attributes for the configuration element"),
@@ -156,7 +146,7 @@ export function registerConfigTools(
           categoryId,
           name,
           description,
-          attributes
+          attributes,
         );
         return {
           content: [
@@ -177,7 +167,7 @@ export function registerConfigTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.registerTool(
@@ -188,7 +178,11 @@ export function registerConfigTools(
         "Delete a configuration element from VCF Automation Orchestrator. This action is irreversible. Set confirm to true to proceed.",
       inputSchema: z.object({
         id: z.string().describe("The configuration element ID to delete"),
-        confirm: z.boolean().describe("Must be set to true to confirm deletion. If false, the deletion will not proceed."),
+        confirm: z
+          .boolean()
+          .describe(
+            "Must be set to true to confirm deletion. If false, the deletion will not proceed.",
+          ),
       }),
       annotations: { readOnlyHint: false, destructiveHint: true },
     },
@@ -224,7 +218,7 @@ export function registerConfigTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.registerTool(
@@ -237,7 +231,9 @@ export function registerConfigTools(
         id: z.string().describe("The configuration element ID to export"),
         fileName: z
           .string()
-          .describe("Configuration file name to save under VCFA_CONFIGURATION_DIR"),
+          .describe(
+            "Configuration file name to save under VCFA_CONFIGURATION_DIR",
+          ),
         overwrite: z
           .boolean()
           .optional()
@@ -250,7 +246,7 @@ export function registerConfigTools(
         const savedPath = await client.exportConfigurationFile(
           id,
           fileName,
-          overwrite ?? false
+          overwrite ?? false,
         );
         return {
           content: [
@@ -271,7 +267,7 @@ export function registerConfigTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.registerTool(
@@ -286,10 +282,14 @@ export function registerConfigTools(
           .describe("The configuration element category ID to import into"),
         fileName: z
           .string()
-          .describe("Configuration file name under VCFA_CONFIGURATION_DIR to import"),
+          .describe(
+            "Configuration file name under VCFA_CONFIGURATION_DIR to import",
+          ),
         confirm: z
           .boolean()
-          .describe("Must be set to true to confirm import. If false, the import will not proceed."),
+          .describe(
+            "Must be set to true to confirm import. If false, the import will not proceed.",
+          ),
       }),
       annotations: { readOnlyHint: false },
     },
@@ -325,7 +325,7 @@ export function registerConfigTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.registerTool(
@@ -336,15 +336,23 @@ export function registerConfigTools(
         "Update an existing configuration element's name, description, or attributes. Only the fields you provide will be updated.",
       inputSchema: z.object({
         id: z.string().describe("The configuration element ID to update"),
-        name: z.string().optional().describe("New name for the configuration element"),
+        name: z
+          .string()
+          .optional()
+          .describe("New name for the configuration element"),
         description: z.string().optional().describe("New description"),
         attributes: z
           .array(
             z.object({
               name: z.string().describe("Attribute name"),
-              type: z.string().describe("Attribute type (e.g. string, number, boolean)"),
-              value: z.string().optional().describe("Attribute value as a string"),
-            })
+              type: z
+                .string()
+                .describe("Attribute type (e.g. string, number, boolean)"),
+              value: z
+                .string()
+                .optional()
+                .describe("Attribute value as a string"),
+            }),
           )
           .optional()
           .describe("New attributes (replaces existing ones)"),
@@ -373,6 +381,6 @@ export function registerConfigTools(
           isError: true,
         };
       }
-    }
+    },
   );
 }

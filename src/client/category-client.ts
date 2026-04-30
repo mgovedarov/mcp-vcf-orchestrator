@@ -7,15 +7,20 @@ export class CategoryClient {
 
   async listCategories(
     categoryType: string,
-    filter?: string
+    filter?: string,
   ): Promise<CategoryList> {
     let path = "/categories";
-    const params: string[] = [`categoryType=${encodeURIComponent(categoryType)}`];
+    const params: string[] = [
+      `categoryType=${encodeURIComponent(categoryType)}`,
+    ];
     if (filter) {
       params.push(`conditions=name~${encodeURIComponent(filter)}`);
     }
     path += `?${params.join("&")}`;
-    const raw = await this.http.get<{ link?: { attributes?: { name: string; value: string }[] }[]; total?: number }>(path);
+    const raw = await this.http.get<{
+      link?: { attributes?: { name: string; value: string }[] }[];
+      total?: number;
+    }>(path);
     const link: Category[] = (raw.link ?? []).map((item) => {
       const a = parseAttrs(item.attributes);
       return {

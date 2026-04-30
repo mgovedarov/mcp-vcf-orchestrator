@@ -1,5 +1,5 @@
-import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import type { VroClientConfig } from "../types.js";
 
 /**
@@ -33,24 +33,25 @@ export class VroHttpClient {
     this.blueprintBaseUrl = `https://${config.host}/blueprint/api`;
     this.sessionUrl = `https://${config.host}/cloudapi/1.0.0/sessions`;
     this.packageDir = resolve(
-      config.packageDir ?? join(tmpdir(), "mcp-vcf-orchestrator", "packages")
+      config.packageDir ?? join(tmpdir(), "mcp-vcf-orchestrator", "packages"),
     );
     this.resourceDir = resolve(
-      config.resourceDir ?? join(tmpdir(), "mcp-vcf-orchestrator", "resources")
+      config.resourceDir ?? join(tmpdir(), "mcp-vcf-orchestrator", "resources"),
     );
     this.workflowDir = resolve(
-      config.workflowDir ?? join(tmpdir(), "mcp-vcf-orchestrator", "workflows")
+      config.workflowDir ?? join(tmpdir(), "mcp-vcf-orchestrator", "workflows"),
     );
     this.actionDir = resolve(
-      config.actionDir ?? join(tmpdir(), "mcp-vcf-orchestrator", "actions")
+      config.actionDir ?? join(tmpdir(), "mcp-vcf-orchestrator", "actions"),
     );
     this.configurationDir = resolve(
-      config.configurationDir ?? join(tmpdir(), "mcp-vcf-orchestrator", "configurations")
+      config.configurationDir ??
+        join(tmpdir(), "mcp-vcf-orchestrator", "configurations"),
     );
     this.loginHeader =
       "Basic " +
       Buffer.from(
-        `${config.username}@${config.organization}:${config.password}`
+        `${config.username}@${config.organization}:${config.password}`,
       ).toString("base64");
   }
 
@@ -87,14 +88,14 @@ export class VroHttpClient {
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(
-        `VCF authentication failed: ${res.status} ${res.statusText}\n${text}`
+        `VCF authentication failed: ${res.status} ${res.statusText}\n${text}`,
       );
     }
 
     const token = res.headers.get("x-vmware-vcloud-access-token");
     if (!token) {
       throw new Error(
-        "VCF authentication succeeded but x-vmware-vcloud-access-token header was missing"
+        "VCF authentication succeeded but x-vmware-vcloud-access-token header was missing",
       );
     }
 
@@ -106,7 +107,7 @@ export class VroHttpClient {
     method: string,
     path: string,
     body?: unknown,
-    overrideBaseUrl?: string
+    overrideBaseUrl?: string,
   ): Promise<T> {
     const token = await this.ensureAuthenticated();
     const url = `${overrideBaseUrl ?? this.baseUrl}${path}`;
@@ -139,7 +140,7 @@ export class VroHttpClient {
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(
-        `vRO API error: ${res.status} ${res.statusText} — ${method} ${path}\n${text}`
+        `vRO API error: ${res.status} ${res.statusText} — ${method} ${path}\n${text}`,
       );
     }
 

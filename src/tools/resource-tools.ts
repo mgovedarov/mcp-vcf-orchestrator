@@ -5,7 +5,7 @@ import type { VroClient } from "../vro-client.js";
 
 export function registerResourceTools(
   server: McpServer,
-  client: VroClient
+  client: VroClient,
 ): void {
   server.registerTool(
     "list-resource-elements",
@@ -57,7 +57,7 @@ export function registerResourceTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.registerTool(
@@ -80,7 +80,11 @@ export function registerResourceTools(
     },
     async ({ id, fileName, overwrite }): Promise<CallToolResult> => {
       try {
-        const savedPath = await client.exportResource(id, fileName, overwrite ?? false);
+        const savedPath = await client.exportResource(
+          id,
+          fileName,
+          overwrite ?? false,
+        );
         return {
           content: [
             {
@@ -100,7 +104,7 @@ export function registerResourceTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.registerTool(
@@ -118,7 +122,9 @@ export function registerResourceTools(
           .describe("File name under VCFA_RESOURCE_DIR to import"),
         confirm: z
           .boolean()
-          .describe("Must be set to true to confirm import. If false, the import will not proceed."),
+          .describe(
+            "Must be set to true to confirm import. If false, the import will not proceed.",
+          ),
       }),
       annotations: { readOnlyHint: false },
     },
@@ -154,7 +160,7 @@ export function registerResourceTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.registerTool(
@@ -167,18 +173,29 @@ export function registerResourceTools(
         id: z.string().describe("The resource element ID to update"),
         fileName: z
           .string()
-          .describe("File name under VCFA_RESOURCE_DIR containing the replacement content"),
+          .describe(
+            "File name under VCFA_RESOURCE_DIR containing the replacement content",
+          ),
         changesetSha: z
           .string()
           .optional()
-          .describe("Optional X-VRO-Changeset-Sha value for version-controlled content"),
+          .describe(
+            "Optional X-VRO-Changeset-Sha value for version-controlled content",
+          ),
         confirm: z
           .boolean()
-          .describe("Must be set to true to confirm update. If false, the update will not proceed."),
+          .describe(
+            "Must be set to true to confirm update. If false, the update will not proceed.",
+          ),
       }),
       annotations: { readOnlyHint: false },
     },
-    async ({ id, fileName, changesetSha, confirm }): Promise<CallToolResult> => {
+    async ({
+      id,
+      fileName,
+      changesetSha,
+      confirm,
+    }): Promise<CallToolResult> => {
       if (!confirm) {
         return {
           content: [
@@ -210,7 +227,7 @@ export function registerResourceTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.registerTool(
@@ -224,10 +241,14 @@ export function registerResourceTools(
         force: z
           .boolean()
           .optional()
-          .describe("Delete even if the resource is referenced by workflows (default: false)"),
+          .describe(
+            "Delete even if the resource is referenced by workflows (default: false)",
+          ),
         confirm: z
           .boolean()
-          .describe("Must be set to true to confirm deletion. If false, the deletion will not proceed."),
+          .describe(
+            "Must be set to true to confirm deletion. If false, the deletion will not proceed.",
+          ),
       }),
       annotations: { readOnlyHint: false, destructiveHint: true },
     },
@@ -263,6 +284,6 @@ export function registerResourceTools(
           isError: true,
         };
       }
-    }
+    },
   );
 }

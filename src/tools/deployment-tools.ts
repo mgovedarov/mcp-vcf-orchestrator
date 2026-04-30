@@ -1,10 +1,20 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import type { DeploymentAction, DeploymentActionList, DeploymentRequest } from "../types.js";
+import type {
+  DeploymentAction,
+  DeploymentActionList,
+  DeploymentRequest,
+} from "../types.js";
 import type { VroClient } from "../vro-client.js";
 
-function isInputArray(value: unknown): value is { name?: string; label?: string; type?: string; description?: string; required?: boolean }[] {
+function isInputArray(value: unknown): value is {
+  name?: string;
+  label?: string;
+  type?: string;
+  description?: string;
+  required?: boolean;
+}[] {
   return Array.isArray(value);
 }
 
@@ -46,7 +56,7 @@ function normalizeDeploymentActionList(result: DeploymentActionList): {
 export function formatDeploymentActions(
   deploymentId: string,
   actions: DeploymentAction[],
-  total = actions.length
+  total = actions.length,
 ): string {
   if (actions.length === 0) {
     return `No deployment actions found for deployment ${deploymentId}.`;
@@ -80,7 +90,7 @@ export function formatDeploymentRequest(request: DeploymentRequest): string {
 
 export function registerDeploymentTools(
   server: McpServer,
-  client: VroClient
+  client: VroClient,
 ): void {
   server.registerTool(
     "list-deployments",
@@ -136,7 +146,7 @@ export function registerDeploymentTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.registerTool(
@@ -159,7 +169,8 @@ export function registerDeploymentTools(
         if (d.projectName) text += `Project: ${d.projectName}\n`;
         else if (d.projectId) text += `Project ID: ${d.projectId}\n`;
         if (d.catalogItemId) text += `Catalog Item ID: ${d.catalogItemId}\n`;
-        if (d.catalogItemVersion) text += `Catalog Item Version: ${d.catalogItemVersion}\n`;
+        if (d.catalogItemVersion)
+          text += `Catalog Item Version: ${d.catalogItemVersion}\n`;
         if (d.ownedBy) text += `Owned By: ${d.ownedBy}\n`;
         if (d.createdBy) text += `Created By: ${d.createdBy}\n`;
         if (d.createdAt) text += `Created At: ${d.createdAt}\n`;
@@ -177,30 +188,42 @@ export function registerDeploymentTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.registerTool(
     "delete-deployment",
     {
       title: "Delete Deployment",
-      description: "Delete a deployment by its ID. Set confirm to true to proceed.",
+      description:
+        "Delete a deployment by its ID. Set confirm to true to proceed.",
       inputSchema: z.object({
         id: z.string().describe("The deployment ID to delete"),
-        confirm: z.boolean().describe("Must be set to true to confirm deletion. If false, the deletion will not proceed."),
+        confirm: z
+          .boolean()
+          .describe(
+            "Must be set to true to confirm deletion. If false, the deletion will not proceed.",
+          ),
       }),
       annotations: { readOnlyHint: false, destructiveHint: true },
     },
     async ({ id, confirm }): Promise<CallToolResult> => {
       if (!confirm) {
         return {
-          content: [{ type: "text", text: `Confirm deletion of deployment ${id} by setting confirm to true. This action is irreversible.` }],
+          content: [
+            {
+              type: "text",
+              text: `Confirm deletion of deployment ${id} by setting confirm to true. This action is irreversible.`,
+            },
+          ],
         };
       }
       try {
         await client.deleteDeployment(id);
         return {
-          content: [{ type: "text", text: `Deployment ${id} deleted successfully.` }],
+          content: [
+            { type: "text", text: `Deployment ${id} deleted successfully.` },
+          ],
         };
       } catch (error) {
         return {
@@ -213,7 +236,7 @@ export function registerDeploymentTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.registerTool(
@@ -223,12 +246,8 @@ export function registerDeploymentTools(
       description:
         "Create a new deployment from a catalog item. Use list-catalog-items to find the catalog item ID, and list-deployments to verify afterwards.",
       inputSchema: z.object({
-        catalogItemId: z
-          .string()
-          .describe("The catalog item ID to deploy"),
-        deploymentName: z
-          .string()
-          .describe("Name for the new deployment"),
+        catalogItemId: z.string().describe("The catalog item ID to deploy"),
+        deploymentName: z.string().describe("Name for the new deployment"),
         projectId: z
           .string()
           .describe("The project ID in which to create the deployment"),
@@ -247,7 +266,14 @@ export function registerDeploymentTools(
       }),
       annotations: { readOnlyHint: false },
     },
-    async ({ catalogItemId, deploymentName, projectId, version, reason, inputs }): Promise<CallToolResult> => {
+    async ({
+      catalogItemId,
+      deploymentName,
+      projectId,
+      version,
+      reason,
+      inputs,
+    }): Promise<CallToolResult> => {
       try {
         const deployment = await client.createDeploymentFromCatalogItem({
           catalogItemId,
@@ -273,7 +299,7 @@ export function registerDeploymentTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.registerTool(
@@ -310,7 +336,7 @@ export function registerDeploymentTools(
           isError: true,
         };
       }
-    }
+    },
   );
 
   server.registerTool(
@@ -332,11 +358,19 @@ export function registerDeploymentTools(
           .describe("Day-2 action inputs as a key/value object"),
         confirm: z
           .boolean()
-          .describe("Must be set to true to confirm the day-2 action request. If false, the request will not be submitted."),
+          .describe(
+            "Must be set to true to confirm the day-2 action request. If false, the request will not be submitted.",
+          ),
       }),
       annotations: { readOnlyHint: false, destructiveHint: true },
     },
-    async ({ deploymentId, actionId, reason, inputs, confirm }): Promise<CallToolResult> => {
+    async ({
+      deploymentId,
+      actionId,
+      reason,
+      inputs,
+      confirm,
+    }): Promise<CallToolResult> => {
       if (!confirm) {
         return {
           content: [
@@ -369,6 +403,6 @@ export function registerDeploymentTools(
           isError: true,
         };
       }
-    }
+    },
   );
 }

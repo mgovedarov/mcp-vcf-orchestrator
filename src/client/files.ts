@@ -5,10 +5,12 @@ export async function resolveFileInDirectory(
   rootDir: string,
   fileName: string,
   label: string,
-  envName: string
+  envName: string,
 ): Promise<string> {
   if (isAbsolute(fileName)) {
-    throw new Error(`${label} file name must be relative to ${envName}, not absolute`);
+    throw new Error(
+      `${label} file name must be relative to ${envName}, not absolute`,
+    );
   }
   if (fileName !== basename(fileName)) {
     throw new Error(`${label} file name must not contain path separators`);
@@ -25,7 +27,7 @@ export async function resolveFileInDirectory(
 
 export async function rejectSymlink(
   path: string,
-  message: string
+  message: string,
 ): Promise<void> {
   const file = await lstat(path);
   if (file.isSymbolicLink()) {
@@ -33,7 +35,9 @@ export async function rejectSymlink(
   }
 }
 
-export async function getExistingFile(path: string): Promise<Awaited<ReturnType<typeof lstat>> | null> {
+export async function getExistingFile(
+  path: string,
+): Promise<Awaited<ReturnType<typeof lstat>> | null> {
   return lstat(path).catch((error: NodeJS.ErrnoException) => {
     if (error.code !== "ENOENT") throw error;
     return null;
@@ -43,7 +47,7 @@ export async function getExistingFile(path: string): Promise<Awaited<ReturnType<
 export async function assertRealPathInside(
   rootDir: string,
   filePath: string,
-  message: string
+  message: string,
 ): Promise<void> {
   const root = await realpath(rootDir);
   const realFilePath = await realpath(filePath);

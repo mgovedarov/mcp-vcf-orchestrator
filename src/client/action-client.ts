@@ -22,14 +22,17 @@ export class ActionClient {
     if (params.length > 0) {
       path += `?${params.join("&")}`;
     }
-    const raw = await this.http.get<{ link?: AttributeLink[]; total?: number }>(path);
+    const raw = await this.http.get<{ link?: AttributeLink[]; total?: number }>(
+      path,
+    );
     const link: Action[] = (raw.link ?? []).map((item) => {
       const a = getLinkAttrs(item);
       return {
         id: a["id"] ?? a["@id"],
         name: a["name"] ?? a["@name"],
         description: a["description"],
-        module: a["module"] ?? a["fqn"]?.split(".").slice(0, -1).join(".") ?? "",
+        module:
+          a["module"] ?? a["fqn"]?.split(".").slice(0, -1).join(".") ?? "",
         version: a["version"],
         fqn: a["fqn"],
       };
@@ -37,7 +40,9 @@ export class ActionClient {
     return { total: raw.total ?? link.length, link };
   }
 
-  private parseActionReference(value: string): { moduleName: string; actionName: string } | null {
+  private parseActionReference(
+    value: string,
+  ): { moduleName: string; actionName: string } | null {
     const slashIndex = value.lastIndexOf("/");
     if (slashIndex > 0 && slashIndex < value.length - 1) {
       return {
@@ -65,7 +70,9 @@ export class ActionClient {
     if (parsed) return parsed;
 
     const actions = await this.listActions();
-    const action = actions.link.find((item) => item.id === id || item.fqn === id);
+    const action = actions.link.find(
+      (item) => item.id === id || item.fqn === id,
+    );
     if (!action) {
       throw new Error(`Action ${id} was not found`);
     }
@@ -85,7 +92,7 @@ export class ActionClient {
   async getAction(id: string): Promise<Action> {
     const { moduleName, actionName } = await this.resolveActionReference(id);
     return this.http.get<Action>(
-      `/actions/${encodeURIComponent(moduleName)}/${encodeURIComponent(actionName)}`
+      `/actions/${encodeURIComponent(moduleName)}/${encodeURIComponent(actionName)}`,
     );
   }
 
@@ -102,14 +109,14 @@ export class ActionClient {
       this.http.actionDir,
       fileName,
       "Action",
-      "VCFA_ACTION_DIR"
+      "VCFA_ACTION_DIR",
     );
   }
 
   async exportActionFile(
     id: string,
     fileName: string,
-    overwrite = false
+    overwrite = false,
   ): Promise<string> {
     const destPath = await this.resolveActionPath(fileName);
     const existingFile = await getExistingFile(destPath);
@@ -118,7 +125,7 @@ export class ActionClient {
     }
     if (existingFile && !overwrite) {
       throw new Error(
-        `Action file already exists: ${fileName}. Set overwrite to true to replace it.`
+        `Action file already exists: ${fileName}. Set overwrite to true to replace it.`,
       );
     }
 
@@ -144,20 +151,28 @@ export class ActionClient {
     }
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      throw new Error(`vRO API error: ${res.status} ${res.statusText} — export action\n${text}`);
+      throw new Error(
+        `vRO API error: ${res.status} ${res.statusText} — export action\n${text}`,
+      );
     }
     const buffer = Buffer.from(await res.arrayBuffer());
     await writeFile(destPath, buffer, { flag: overwrite ? "w" : "wx" });
     return destPath;
   }
 
-  async importActionFile(categoryName: string, fileName: string): Promise<void> {
+  async importActionFile(
+    categoryName: string,
+    fileName: string,
+  ): Promise<void> {
     const srcPath = await this.resolveActionPath(fileName);
-    await rejectSymlink(srcPath, "Action import source must not be a symbolic link");
+    await rejectSymlink(
+      srcPath,
+      "Action import source must not be a symbolic link",
+    );
     await assertRealPathInside(
       this.http.actionDir,
       srcPath,
-      "Action file path resolves outside VCFA_ACTION_DIR"
+      "Action file path resolves outside VCFA_ACTION_DIR",
     );
     const token = await this.http.ensureAuthenticated();
     const buffer = await readFile(srcPath);
@@ -187,7 +202,9 @@ export class ActionClient {
     }
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      throw new Error(`vRO API error: ${res.status} ${res.statusText} — import action\n${text}`);
+      throw new Error(
+        `vRO API error: ${res.status} ${res.statusText} — import action\n${text}`,
+      );
     }
   }
 
