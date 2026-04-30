@@ -9,6 +9,7 @@ import { registerConfigTools } from "./tools/config-tools.js";
 import { registerDeploymentTools } from "./tools/deployment-tools.js";
 import { registerPackageTools } from "./tools/package-tools.js";
 import { registerPluginTools } from "./tools/plugin-tools.js";
+import { registerResourceTools } from "./tools/resource-tools.js";
 import { registerSubscriptionTools } from "./tools/subscription-tools.js";
 import { registerTemplateTools } from "./tools/template-tools.js";
 import { registerWorkflowTools } from "./tools/workflow-tools.js";
@@ -31,6 +32,7 @@ async function main(): Promise<void> {
   const password = getRequiredEnv("VCFA_PASSWORD");
   const ignoreTls = process.env["VCFA_IGNORE_TLS"] === "true";
   const packageDir = process.env["VCFA_PACKAGE_DIR"];
+  const resourceDir = process.env["VCFA_RESOURCE_DIR"];
 
   if (ignoreTls) {
     process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0";
@@ -40,7 +42,7 @@ async function main(): Promise<void> {
   }
 
   // Create vRO API client
-  const client = new VroClient({ host, username, organization, password, ignoreTls, packageDir });
+  const client = new VroClient({ host, username, organization, password, ignoreTls, packageDir, resourceDir });
 
   // Create MCP server
   const server = new McpServer(
@@ -57,6 +59,7 @@ async function main(): Promise<void> {
         "Use list-deployments to see existing deployments; use create-deployment to deploy a catalog item, providing the catalogItemId, deploymentName, and projectId.",
         "Use list-templates to browse blueprint templates; use get-template to inspect a specific template by ID; use create-template to create a new template; use delete-template to remove one.",
         "Use list-packages to browse vRO packages; use export-package to save a package file under VCFA_PACKAGE_DIR; use import-package to upload a package file from VCFA_PACKAGE_DIR; use delete-package to remove a package.",
+        "Use list-resource-elements to browse vRO resource elements; use list-categories with type ResourceElementCategory before importing a resource element; exported and imported resource files are stored under VCFA_RESOURCE_DIR.",
         "Use list-plugins to see all installed vRO plugins.",
       ].join(" "),
     }
@@ -72,6 +75,7 @@ async function main(): Promise<void> {
   registerDeploymentTools(server, client);
   registerTemplateTools(server, client);
   registerPackageTools(server, client);
+  registerResourceTools(server, client);
   registerPluginTools(server, client);
 
   // Connect via stdio transport

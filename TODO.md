@@ -10,4 +10,4 @@
 8. [x] Add list-workflow-executions tool to list past/running executions for a workflow
 9. [ ] Add deployment day-2 actions support (list-deployment-actions, run-deployment-action)
 10. [ ] Refactor vro-client.ts into separate modules
-11. [ ] Add support for resource elements
+11. [x] Add support for resource elements

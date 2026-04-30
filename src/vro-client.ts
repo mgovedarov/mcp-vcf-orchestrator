@@ -13,6 +13,8 @@ import type {
   Deployment,
   DeploymentList,
   EventTopicList,
+  ResourceElement,
+  ResourceElementList,
   SimpleParameter,
   Subscription,
   SubscriptionList,
@@ -46,6 +48,7 @@ export class VroClient {
   private sessionUrl: string;
   private loginHeader: string;
   private packageDir: string;
+  private resourceDir: string;
   private token: string | null = null;
 
   constructor(private config: VroClientConfig) {
@@ -57,6 +60,9 @@ export class VroClient {
     this.sessionUrl = `https://${config.host}/cloudapi/1.0.0/sessions`;
     this.packageDir = resolve(
       config.packageDir ?? join(tmpdir(), "mcp-vcf-orchestrator", "packages")
+    );
+    this.resourceDir = resolve(
+      config.resourceDir ?? join(tmpdir(), "mcp-vcf-orchestrator", "resources")
     );
     // Basic Auth credential: username@organization:password
     this.loginHeader =
@@ -713,6 +719,169 @@ export class VroClient {
       throw new Error("Package file path escapes VCFA_PACKAGE_DIR");
     }
     return target;
+  }
+
+  // --- Resource Elements ---
+
+  async listResources(filter?: string): Promise<ResourceElementList> {
+    let path = "/resources";
+    if (filter) {
+      path += `?conditions=name~${encodeURIComponent(filter)}`;
+    }
+    const raw = await this.get<{
+      link?: { href?: string; attribute?: { name: string; value: string }[]; attributes?: { name: string; value: string }[] }[];
+      total?: number;
+      start?: number;
+    }>(path);
+    const link: ResourceElement[] = (raw.link ?? []).map((item) => {
+      const a = this.parseAttrs(item.attribute ?? item.attributes);
+      const id = a["id"] ?? a["@id"] ?? item.href?.split("/").pop() ?? "";
+      return {
+        id,
+        name: a["name"] ?? a["@name"] ?? id,
+        description: a["description"],
+        version: a["version"],
+        categoryId: a["categoryId"],
+        categoryName: a["categoryName"],
+        mimeType: a["mimeType"] ?? a["mime-type"] ?? a["mimetype"],
+        href: item.href,
+      };
+    });
+    return { total: raw.total ?? link.length, start: raw.start, link };
+  }
+
+  getResourceDirectory(): string {
+    return this.resourceDir;
+  }
+
+  private async resolveResourcePath(fileName: string): Promise<string> {
+    if (isAbsolute(fileName)) {
+      throw new Error("Resource file name must be relative to VCFA_RESOURCE_DIR, not absolute");
+    }
+    if (fileName !== basename(fileName)) {
+      throw new Error("Resource file name must not contain path separators");
+    }
+
+    await mkdir(this.resourceDir, { recursive: true });
+    const root = await realpath(this.resourceDir);
+    const target = resolve(root, fileName);
+    if (target !== root && !target.startsWith(`${root}${sep}`)) {
+      throw new Error("Resource file path escapes VCFA_RESOURCE_DIR");
+    }
+    return target;
+  }
+
+  async exportResource(id: string, fileName: string, overwrite = false): Promise<string> {
+    const destPath = await this.resolveResourcePath(fileName);
+    const existingFile = await lstat(destPath).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== "ENOENT") throw error;
+      return null;
+    });
+    if (existingFile?.isSymbolicLink()) {
+      throw new Error("Resource export target must not be a symbolic link");
+    }
+    if (existingFile && !overwrite) {
+      throw new Error(
+        `Resource file already exists: ${fileName}. Set overwrite to true to replace it.`
+      );
+    }
+    if (!this.token) {
+      await this.authenticate();
+    }
+    const path = `/resources/${encodeURIComponent(id)}`;
+    const url = `${this.baseUrl}${path}`;
+    console.error(`[vro-client] GET ${path}`);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60_000);
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${this.token}`,
+          Accept: "*/*",
+        },
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`vRO API error: ${res.status} ${res.statusText} — export resource\n${text}`);
+    }
+    const buffer = Buffer.from(await res.arrayBuffer());
+    await writeFile(destPath, buffer, { flag: overwrite ? "w" : "wx" });
+    return destPath;
+  }
+
+  private async readResourceFile(fileName: string): Promise<{ buffer: Buffer; path: string }> {
+    const srcPath = await this.resolveResourcePath(fileName);
+    const sourceFile = await lstat(srcPath);
+    if (sourceFile.isSymbolicLink()) {
+      throw new Error("Resource import source must not be a symbolic link");
+    }
+    const root = await realpath(this.resourceDir);
+    const realSrcPath = await realpath(srcPath);
+    if (realSrcPath !== root && !realSrcPath.startsWith(`${root}${sep}`)) {
+      throw new Error("Resource file path resolves outside VCFA_RESOURCE_DIR");
+    }
+    return { buffer: await readFile(srcPath), path: srcPath };
+  }
+
+  private async postResourceForm(path: string, form: FormData, changesetSha?: string): Promise<void> {
+    if (!this.token) {
+      await this.authenticate();
+    }
+    const url = `${this.baseUrl}${path}`;
+    console.error(`[vro-client] POST ${path}`);
+
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${this.token}`,
+      Accept: "application/json",
+    };
+    if (changesetSha) {
+      headers["X-VRO-Changeset-Sha"] = changesetSha;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60_000);
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: "POST",
+        headers,
+        body: form,
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`vRO API error: ${res.status} ${res.statusText} — POST ${path}\n${text}`);
+    }
+  }
+
+  async importResource(categoryId: string, fileName: string): Promise<void> {
+    const { buffer } = await this.readResourceFile(fileName);
+    const form = new FormData();
+    form.append("file", new Blob([new Uint8Array(buffer)]), fileName);
+    form.append("categoryId", categoryId);
+    await this.postResourceForm("/resources", form);
+  }
+
+  async updateResourceContent(id: string, fileName: string, changesetSha?: string): Promise<void> {
+    const { buffer } = await this.readResourceFile(fileName);
+    const form = new FormData();
+    form.append("file", new Blob([new Uint8Array(buffer)]), fileName);
+    await this.postResourceForm(`/resources/${encodeURIComponent(id)}`, form, changesetSha);
+  }
+
+  async deleteResource(id: string, force = false): Promise<void> {
+    const path = `/resources/${encodeURIComponent(id)}${force ? "?force=true" : ""}`;
+    await this.del<unknown>(path);
   }
 
   async exportPackage(name: string, fileName: string, overwrite = false): Promise<string> {
