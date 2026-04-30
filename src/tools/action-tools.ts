@@ -182,6 +182,107 @@ export function registerActionTools(
   );
 
   server.registerTool(
+    "export-action-file",
+    {
+      title: "Export Action File",
+      description:
+        "Export a vRO action as a .action file under VCFA_ACTION_DIR. The fileName must be a plain .action file name, not a path.",
+      inputSchema: z.object({
+        id: z.string().describe("The action ID to export"),
+        fileName: z
+          .string()
+          .describe("Action file name to save under VCFA_ACTION_DIR"),
+        overwrite: z
+          .boolean()
+          .optional()
+          .describe("Overwrite the file if it already exists (default: false)"),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ id, fileName, overwrite }): Promise<CallToolResult> => {
+      try {
+        const savedPath = await client.exportActionFile(
+          id,
+          fileName,
+          overwrite ?? false
+        );
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Action ${id} exported successfully to: ${savedPath}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to export action file: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  server.registerTool(
+    "import-action-file",
+    {
+      title: "Import Action File",
+      description:
+        "Import a .action file from VCFA_ACTION_DIR into an action category. Use list-categories with type ActionCategory to find the category name first. Set confirm to true to proceed.",
+      inputSchema: z.object({
+        categoryName: z
+          .string()
+          .describe("The action category/module name to import into"),
+        fileName: z
+          .string()
+          .describe("Action file name under VCFA_ACTION_DIR to import"),
+        confirm: z
+          .boolean()
+          .describe("Must be set to true to confirm import. If false, the import will not proceed."),
+      }),
+      annotations: { readOnlyHint: false },
+    },
+    async ({ categoryName, fileName, confirm }): Promise<CallToolResult> => {
+      if (!confirm) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Confirm import of action file ${fileName} from ${client.getActionDirectory()} into ${categoryName} by setting confirm to true.`,
+            },
+          ],
+        };
+      }
+      try {
+        await client.importActionFile(categoryName, fileName);
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Action imported successfully from: ${fileName}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to import action file: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  server.registerTool(
     "delete-action",
     {
       title: "Delete Action",

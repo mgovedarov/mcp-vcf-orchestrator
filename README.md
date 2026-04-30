@@ -51,6 +51,8 @@ Set the following environment variables (see `.env.example`):
 | `VCFA_PACKAGE_DIR` | No | Directory used for package import/export files (defaults to a temp directory) |
 | `VCFA_RESOURCE_DIR` | No | Directory used for resource element import/export files (defaults to a temp directory) |
 | `VCFA_WORKFLOW_DIR` | No | Directory used for workflow artifact import/export files (defaults to a temp directory) |
+| `VCFA_ACTION_DIR` | No | Directory used for action artifact import/export files (defaults to a temp directory) |
+| `VCFA_CONFIGURATION_DIR` | No | Directory used for configuration artifact import/export files (defaults to a temp directory) |
 
 The server authenticates by POSTing to `https://{VCFA_HOST}/cloudapi/1.0.0/sessions` with Basic Auth as `{VCFA_USERNAME}@{VCFA_ORGANIZATION}:{VCFA_PASSWORD}` and uses the returned bearer token for all VCFA API calls.
 
@@ -131,6 +133,8 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `list-actions` | List actions (scriptable tasks), optionally filtered by name |
 | `get-action` | Get action details including script content and parameters |
 | `create-action` | Create a new action with script content |
+| `export-action-file` | Export an action artifact to a `.action` file under `VCFA_ACTION_DIR` |
+| `import-action-file` | Import a `.action` artifact from `VCFA_ACTION_DIR` into an action category |
 | `delete-action` | Delete an action (irreversible) |
 
 ### Configuration Elements
@@ -141,6 +145,8 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `get-configuration` | Get configuration element details and attributes |
 | `create-configuration` | Create a new configuration element with attributes |
 | `update-configuration` | Update a configuration element's name, description, or attributes |
+| `export-configuration-file` | Export a configuration artifact to a `.vsoconf` file under `VCFA_CONFIGURATION_DIR` |
+| `import-configuration-file` | Import a `.vsoconf` artifact from `VCFA_CONFIGURATION_DIR` into a configuration category |
 | `delete-configuration` | Delete a configuration element (irreversible) |
 
 ### Resource Elements
