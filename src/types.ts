@@ -277,6 +277,25 @@ export interface VroPackageList {
   link: VroPackage[];
 }
 
+// --- Resource Elements ---
+
+export interface ResourceElement {
+  id: string;
+  name: string;
+  description?: string;
+  version?: string;
+  categoryId?: string;
+  categoryName?: string;
+  mimeType?: string;
+  href?: string;
+}
+
+export interface ResourceElementList {
+  total?: number;
+  start?: number;
+  link: ResourceElement[];
+}
+
 // --- vRO Plugins ---
 
 export interface VroPlugin {
@@ -301,4 +320,5 @@ export interface VroClientConfig {
   password: string;
   ignoreTls?: boolean;
   packageDir?: string;
+  resourceDir?: string;
 }

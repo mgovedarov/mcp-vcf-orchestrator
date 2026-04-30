@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@mgovedarov/mcp-vcf-orchestrator)](https://www.npmjs.com/package/@mgovedarov/mcp-vcf-orchestrator)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-An [MCP](https://modelcontextprotocol.io/) server that exposes VCF Automation Orchestrator (vRO), Service Broker, and Cloud Assembly REST API operations as tools. Enables AI assistants to list, create, delete, and run workflows, actions, configuration elements, extensibility subscriptions, catalog items, deployments, blueprint templates, and plugins via natural language.
+An [MCP](https://modelcontextprotocol.io/) server that exposes VCF Automation Orchestrator (vRO), Service Broker, and Cloud Assembly REST API operations as tools. Enables AI assistants to list, create, delete, and run workflows, actions, configuration elements, resource elements, extensibility subscriptions, catalog items, deployments, blueprint templates, and plugins via natural language.
 
 Supports **VCF 9 Automation** and **Aria Automation 8.x**.
 
@@ -49,6 +49,7 @@ Set the following environment variables (see `.env.example`):
 | `VCFA_PASSWORD` | Yes | Password |
 | `VCFA_IGNORE_TLS` | No | Set to `true` to skip TLS certificate verification (lab environments) |
 | `VCFA_PACKAGE_DIR` | No | Directory used for package import/export files (defaults to a temp directory) |
+| `VCFA_RESOURCE_DIR` | No | Directory used for resource element import/export files (defaults to a temp directory) |
 
 The server authenticates by POSTing to `https://{VCFA_HOST}/cloudapi/1.0.0/sessions` with Basic Auth as `{VCFA_USERNAME}@{VCFA_ORGANIZATION}:{VCFA_PASSWORD}` and uses the returned bearer token for all VCFA API calls.
 
@@ -139,11 +140,21 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `update-configuration` | Update a configuration element's name, description, or attributes |
 | `delete-configuration` | Delete a configuration element (irreversible) |
 
+### Resource Elements
+
+| Tool | Description |
+|------|-------------|
+| `list-resource-elements` | List resource elements, optionally filtered by name |
+| `export-resource-element` | Export a resource element by ID to a file under `VCFA_RESOURCE_DIR` |
+| `import-resource-element` | Import a resource element file from `VCFA_RESOURCE_DIR` into a resource category |
+| `update-resource-element` | Replace an existing resource element's binary content from a file under `VCFA_RESOURCE_DIR` |
+| `delete-resource-element` | Delete a resource element, optionally forcing deletion when it is referenced |
+
 ### Categories
 
 | Tool | Description |
 |------|-------------|
-| `list-categories` | List categories by type (`WorkflowCategory`, `ActionCategory`, `ConfigurationElementCategory`) |
+| `list-categories` | List categories by type (`WorkflowCategory`, `ActionCategory`, `ConfigurationElementCategory`, `ResourceElementCategory`) |
 
 ### Catalog Items
 

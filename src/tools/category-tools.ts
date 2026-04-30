@@ -12,13 +12,14 @@ export function registerCategoryTools(
     {
       title: "List Categories",
       description:
-        "List categories in VCF Automation Orchestrator. Categories are needed to create workflows, actions, and configuration elements. Use the type parameter to filter by category type.",
+        "List categories in VCF Automation Orchestrator. Categories are needed to create workflows, actions, configuration elements, and resource elements. Use the type parameter to filter by category type.",
       inputSchema: z.object({
         type: z
           .enum([
             "WorkflowCategory",
             "ActionCategory",
             "ConfigurationElementCategory",
+            "ResourceElementCategory",
           ])
           .describe("The category type to list"),
         filter: z
