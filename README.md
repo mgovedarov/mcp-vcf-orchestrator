@@ -200,7 +200,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `get-package` | Get details of a specific package by its fully-qualified name |
 | `export-package` | Export a package as a ZIP file under `VCFA_PACKAGE_DIR` |
 | `import-package` | Import a package file from `VCFA_PACKAGE_DIR` into the Orchestrator instance |
-| `delete-package` | Delete a package, optionally deleting all its contained elements |
+| `delete-package` | Delete a package after confirmation, optionally deleting all its contained elements |
 
 ### vRO Plugins
 

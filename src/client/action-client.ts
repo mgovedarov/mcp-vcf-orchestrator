@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { extname } from "node:path";
 import type { Action, ActionList } from "../types.js";
-import { parseAttrs } from "./attrs.js";
+import { getLinkAttrs, type AttributeLink } from "./attrs.js";
 import type { VroHttpClient } from "./core.js";
 import {
   assertRealPathInside,
@@ -22,9 +22,9 @@ export class ActionClient {
     if (params.length > 0) {
       path += `?${params.join("&")}`;
     }
-    const raw = await this.http.get<{ link?: { attributes?: { name: string; value: string }[] }[]; total?: number }>(path);
+    const raw = await this.http.get<{ link?: AttributeLink[]; total?: number }>(path);
     const link: Action[] = (raw.link ?? []).map((item) => {
-      const a = parseAttrs(item.attributes);
+      const a = getLinkAttrs(item);
       return {
         id: a["id"] ?? a["@id"],
         name: a["name"] ?? a["@name"],
@@ -37,8 +37,56 @@ export class ActionClient {
     return { total: raw.total ?? link.length, link };
   }
 
-  getAction(id: string): Promise<Action> {
-    return this.http.get<Action>(`/actions/${encodeURIComponent(id)}`);
+  private parseActionReference(value: string): { moduleName: string; actionName: string } | null {
+    const slashIndex = value.lastIndexOf("/");
+    if (slashIndex > 0 && slashIndex < value.length - 1) {
+      return {
+        moduleName: value.slice(0, slashIndex),
+        actionName: value.slice(slashIndex + 1),
+      };
+    }
+
+    const dotIndex = value.lastIndexOf(".");
+    if (dotIndex > 0 && dotIndex < value.length - 1) {
+      return {
+        moduleName: value.slice(0, dotIndex),
+        actionName: value.slice(dotIndex + 1),
+      };
+    }
+
+    return null;
+  }
+
+  private async resolveActionReference(id: string): Promise<{
+    moduleName: string;
+    actionName: string;
+  }> {
+    const parsed = this.parseActionReference(id);
+    if (parsed) return parsed;
+
+    const actions = await this.listActions();
+    const action = actions.link.find((item) => item.id === id || item.fqn === id);
+    if (!action) {
+      throw new Error(`Action ${id} was not found`);
+    }
+
+    if (action.fqn) {
+      const parsedFqn = this.parseActionReference(action.fqn);
+      if (parsedFqn) return parsedFqn;
+    }
+
+    if (action.module && action.name) {
+      return { moduleName: action.module, actionName: action.name };
+    }
+
+    throw new Error(`Action ${id} does not include module and name metadata`);
+  }
+
+  async getAction(id: string): Promise<Action> {
+    const { moduleName, actionName } = await this.resolveActionReference(id);
+    return this.http.get<Action>(
+      `/actions/${encodeURIComponent(moduleName)}/${encodeURIComponent(actionName)}`
+    );
   }
 
   getActionDirectory(): string {

@@ -108,6 +108,8 @@ export class PackageClient {
     );
     const token = await this.http.ensureAuthenticated();
     const buffer = await readFile(srcPath);
+    const form = new FormData();
+    form.append("file", new Blob([new Uint8Array(buffer)]), fileName);
     const url = `${this.http.baseUrl}/packages?overwrite=${overwrite}`;
     console.error(`[vro-client] POST /packages?overwrite=${overwrite}`);
 
@@ -119,10 +121,9 @@ export class PackageClient {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
-          "Content-Type": "application/zip",
           Accept: "application/json",
         },
-        body: buffer,
+        body: form,
         signal: controller.signal,
       });
     } finally {
@@ -135,8 +136,9 @@ export class PackageClient {
   }
 
   async deletePackage(name: string, deleteContents = false): Promise<void> {
+    const option = deleteContents ? "deletePackageWithContent" : "deletePackage";
     await this.http.del<unknown>(
-      `/packages/${encodeURIComponent(name)}?deleteContent=${deleteContents}`
+      `/packages/${encodeURIComponent(name)}?option=${option}`
     );
   }
 }

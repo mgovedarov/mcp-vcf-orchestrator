@@ -209,10 +209,23 @@ export function registerPackageTools(
           .boolean()
           .optional()
           .describe("Also delete all elements (workflows, actions, configs) inside the package (default: false)"),
+        confirm: z
+          .boolean()
+          .describe("Must be set to true to confirm deletion. If false, the deletion will not proceed."),
       }),
       annotations: { readOnlyHint: false, destructiveHint: true },
     },
-    async ({ name, deleteContents }): Promise<CallToolResult> => {
+    async ({ name, deleteContents, confirm }): Promise<CallToolResult> => {
+      if (!confirm) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Confirm deletion of package '${name}' by setting confirm to true. This action is irreversible${deleteContents ? " and will delete package contents" : ""}.`,
+            },
+          ],
+        };
+      }
       try {
         await client.deletePackage(name, deleteContents ?? false);
         return {

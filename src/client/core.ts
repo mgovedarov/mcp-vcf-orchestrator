@@ -23,6 +23,9 @@ export class VroHttpClient {
   private token: string | null = null;
 
   constructor(config: VroClientConfig) {
+    if (config.ignoreTls) {
+      process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0";
+    }
     this.baseUrl = `https://${config.host}/vco/api`;
     this.eventBrokerBaseUrl = `https://${config.host}/event-broker/api`;
     this.catalogBaseUrl = `https://${config.host}/catalog/api`;

@@ -126,6 +126,67 @@ test("package import rejects symbolic links", async () => {
   }
 });
 
+test("package import sends multipart file and overwrite query", async () => {
+  const packageDir = await mkdtemp(join(tmpdir(), "vcfa-packages-"));
+  await writeFile(join(packageDir, "payload.package"), "package");
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return new Response("", { status: 202 });
+  };
+
+  try {
+    const client = new VroClient(config({ packageDir }));
+    await client.importPackage("payload.package", false);
+
+    assert.equal(
+      calls[1].url,
+      "https://vcfa.example.test/vco/api/packages?overwrite=false"
+    );
+    assert.equal(calls[1].init.method, "POST");
+    assert.equal(calls[1].init.headers["Content-Type"], undefined);
+    const body = calls[1].init.body;
+    assert.equal(body.get("file").name, "payload.package");
+  } finally {
+    await rm(packageDir, { recursive: true, force: true });
+  }
+});
+
+test("deletePackage sends documented option query", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return new Response(null, { status: 204 });
+  };
+
+  const client = new VroClient(config());
+  await client.deletePackage("com.example", true);
+
+  assert.equal(
+    calls[1].url,
+    "https://vcfa.example.test/vco/api/packages/com.example?option=deletePackageWithContent"
+  );
+  assert.equal(calls[1].init.method, "DELETE");
+});
+
+test("ignoreTls config disables TLS verification for library callers", () => {
+  const previous = process.env["NODE_TLS_REJECT_UNAUTHORIZED"];
+
+  try {
+    delete process.env["NODE_TLS_REJECT_UNAUTHORIZED"];
+    new VroClient(config({ ignoreTls: true }));
+    assert.equal(process.env["NODE_TLS_REJECT_UNAUTHORIZED"], "0");
+  } finally {
+    if (previous === undefined) {
+      delete process.env["NODE_TLS_REJECT_UNAUTHORIZED"];
+    } else {
+      process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = previous;
+    }
+  }
+});
+
 test("workflow import rejects path traversal before network calls", async () => {
   const workflowDir = await mkdtemp(join(tmpdir(), "vcfa-workflows-"));
   const calls = [];
@@ -321,6 +382,64 @@ test("action import sends multipart file and category name", async () => {
   } finally {
     await rm(actionDir, { recursive: true, force: true });
   }
+});
+
+test("getAction resolves listed action ids to definition endpoint", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    if (calls.length === 2) {
+      return Response.json({
+        link: [
+          {
+            attribute: [
+              { name: "id", value: "action-1" },
+              { name: "name", value: "getVmIp" },
+              { name: "module", value: "com.example.actions" },
+            ],
+          },
+        ],
+      });
+    }
+    return Response.json({
+      id: "action-1",
+      name: "getVmIp",
+      module: "com.example.actions",
+      script: "return vm.ipAddress;",
+    });
+  };
+
+  const client = new VroClient(config());
+  const action = await client.getAction("action-1");
+
+  assert.equal(
+    calls[2].url,
+    "https://vcfa.example.test/vco/api/actions/com.example.actions/getVmIp"
+  );
+  assert.equal(calls[2].init.method, "GET");
+  assert.equal(action.script, "return vm.ipAddress;");
+});
+
+test("getAction accepts fully-qualified action names", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return Response.json({
+      id: "action-1",
+      name: "getVmIp",
+      module: "com.example.actions",
+    });
+  };
+
+  const client = new VroClient(config());
+  await client.getAction("com.example.actions.getVmIp");
+
+  assert.equal(
+    calls[1].url,
+    "https://vcfa.example.test/vco/api/actions/com.example.actions/getVmIp"
+  );
 });
 
 test("action export writes only under action directory", async () => {
