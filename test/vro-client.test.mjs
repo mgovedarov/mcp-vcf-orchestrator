@@ -624,3 +624,81 @@ test("listWorkflowExecutions ignores non-execution relation links", async () => 
     },
   ]);
 });
+
+test("listDeploymentActions calls deployment actions endpoint", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return Response.json({
+      content: [{ id: "Deployment.PowerOff", name: "Power Off" }],
+      totalElements: 1,
+    });
+  };
+
+  const client = new VroClient(config());
+  const actions = await client.listDeploymentActions("dep 1/2");
+
+  assert.equal(
+    calls[1].url,
+    "https://vcfa.example.test/deployment/api/deployments/dep%201%2F2/actions"
+  );
+  assert.equal(calls[1].init.method, "GET");
+  assert.deepEqual(actions.content, [
+    { id: "Deployment.PowerOff", name: "Power Off" },
+  ]);
+});
+
+test("runDeploymentAction posts action request with optional fields", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return Response.json({
+      id: "request-1",
+      deploymentId: "dep 1/2",
+      actionId: "Deployment.PowerOff",
+      status: "INPROGRESS",
+    });
+  };
+
+  const client = new VroClient(config());
+  const request = await client.runDeploymentAction({
+    deploymentId: "dep 1/2",
+    actionId: "Deployment.PowerOff",
+    reason: "Maintenance",
+    inputs: { force: true },
+  });
+
+  assert.equal(
+    calls[1].url,
+    "https://vcfa.example.test/deployment/api/deployments/dep%201%2F2/requests"
+  );
+  assert.equal(calls[1].init.method, "POST");
+  assert.deepEqual(JSON.parse(calls[1].init.body), {
+    actionId: "Deployment.PowerOff",
+    reason: "Maintenance",
+    inputs: { force: true },
+  });
+  assert.equal(request.id, "request-1");
+  assert.equal(request.status, "INPROGRESS");
+});
+
+test("runDeploymentAction omits absent optional fields", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return Response.json({ id: "request-1" });
+  };
+
+  const client = new VroClient(config());
+  await client.runDeploymentAction({
+    deploymentId: "deployment-1",
+    actionId: "Deployment.Reboot",
+  });
+
+  assert.deepEqual(JSON.parse(calls[1].init.body), {
+    actionId: "Deployment.Reboot",
+  });
+});

@@ -180,6 +180,8 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `get-deployment` | Get deployment details including status, project, and catalog item info |
 | `create-deployment` | Deploy a catalog item by providing its ID, a deployment name, and a project ID |
 | `delete-deployment` | Delete a deployment (irreversible) |
+| `list-deployment-actions` | List deployment-level day-2 actions available for a deployment |
+| `run-deployment-action` | Submit a deployment-level day-2 action request with optional inputs and reason |
 
 ### Blueprint Templates
 
@@ -333,6 +335,18 @@ User: Check all deployments in the dev-team project.
 
 Assistant calls: list-deployments(projectId: "<dev-team-project-id>")
   → Lists deployments with status
+
+User: Restart my app deployment.
+
+Assistant calls: list-deployment-actions(deploymentId: "<deployment-id>")
+  → Lists available day-2 actions and any visible input hints
+Assistant calls: run-deployment-action(
+  deploymentId: "<deployment-id>",
+  actionId: "<restart-action-id>",
+  reason: "Restart requested by owner",
+  confirm: true
+)
+  → Deployment action request submitted. ID: ... Status: INPROGRESS
 ```
 
 ### Manage existing subscriptions
