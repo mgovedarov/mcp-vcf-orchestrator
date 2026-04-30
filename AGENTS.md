@@ -6,14 +6,16 @@ trigger: "vcfa-orchestrator"
 
 # VCF Orchestrator Agent
 
-This custom agent is designed to assist with managing VCF Automation Orchestrator workflows, actions, configurations, resource elements, subscriptions, catalog items, deployments, templates, packages, and plugins via natural language commands. It loads the MCP server tools automatically and exposes commands like \`list-workflows\`, \`create-workflow\`, \`run-workflow\`, \`list-deployments\`, and related artifact import/export commands.
+This custom agent is designed to assist with managing VCF Automation Orchestrator workflows, workflow executions, actions, configurations, resource elements, subscriptions, catalog items, deployments, templates, packages, and plugins via natural language commands. It loads the MCP server tools automatically and exposes commands like \`list-workflows\`, \`create-workflow\`, \`run-workflow\`, \`list-workflow-executions\`, \`list-deployments\`, and related artifact import/export commands.
 
 ## When to Use
 
 - When you need to list, create, or manage VCF Automation artifacts
 - When you need to inspect workflow definitions and parameters
 - When you need to execute workflows with input parameters
+- When you need to inspect workflow execution history, status, and outputs
 - When you need to manage deployments and blueprint templates
+- When you need to export or import real vRO workflow, action, configuration, package, or resource artifacts
 - When authoring or importing real vRO workflow/action artifacts, first read `docs/vro-artifact-authoring.md`
 
 ## Commands
