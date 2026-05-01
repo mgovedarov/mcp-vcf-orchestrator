@@ -223,6 +223,26 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `update-subscription` | Update a subscription (enable/disable, re-target, change priority)               |
 | `delete-subscription` | Delete a subscription                                                            |
 
+## MCP Resources
+
+| Resource URI                     | Description                                     |
+| -------------------------------- | ----------------------------------------------- |
+| `vcfa://docs/readme`             | README content for tool usage and configuration |
+| `vcfa://docs/artifact-authoring` | vRO artifact authoring and import/export guide  |
+| `vcfa://workflows/{id}`          | Workflow metadata as JSON                       |
+| `vcfa://actions/{id}`            | Action metadata and script details as JSON      |
+| `vcfa://deployments/{id}`        | Deployment details as JSON                      |
+| `vcfa://packages/{name}`         | vRO package metadata as JSON                    |
+
+## MCP Prompts
+
+| Prompt                         | Description                                                   |
+| ------------------------------ | ------------------------------------------------------------- |
+| `vcfa-author-workflow`         | Guide workflow authoring, scaffolding, preflight, and import  |
+| `vcfa-review-artifact-import`  | Review local artifacts before import                          |
+| `vcfa-troubleshoot-deployment` | Inspect a deployment and guide safe remediation               |
+| `vcfa-discover-capabilities`   | Discover reusable plugins, categories, actions, and workflows |
+
 ## Examples
 
 These examples show developer-oriented prompts you can use with an AI assistant connected to this MCP server. The interesting bit is not just one tool call; it is the assistant chaining discovery, validation, execution, diagnostics, local artifact work, and guarded changes.

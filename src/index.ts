@@ -9,6 +9,8 @@ import { registerConfigTools } from "./tools/config-tools.js";
 import { registerDeploymentTools } from "./tools/deployment-tools.js";
 import { registerPackageTools } from "./tools/package-tools.js";
 import { registerPluginTools } from "./tools/plugin-tools.js";
+import { registerVcfaPrompts } from "./prompts/index.js";
+import { registerVcfaResources } from "./resources/index.js";
 import { registerResourceTools } from "./tools/resource-tools.js";
 import { registerSubscriptionTools } from "./tools/subscription-tools.js";
 import { registerTemplateTools } from "./tools/template-tools.js";
@@ -99,6 +101,8 @@ async function main(): Promise<void> {
   registerPackageTools(server, client);
   registerResourceTools(server, client);
   registerPluginTools(server, client);
+  registerVcfaResources(server, client);
+  registerVcfaPrompts(server);
 
   // Connect via stdio transport
   const transport = new StdioServerTransport();
