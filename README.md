@@ -237,6 +237,12 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | -------------------------------- | ----------------------------------------------- |
 | `vcfa://docs/readme`             | README content for tool usage and configuration |
 | `vcfa://docs/artifact-authoring` | vRO artifact authoring and import/export guide  |
+| `vcfa://schemas/workflow-scaffold` | Structured contract and validation notes for `scaffold-workflow-file` |
+| `vcfa://patterns/workflows/basic-scriptable-task` | Discovery, scaffold, binding, and validation guidance for a linear scriptable-task workflow |
+| `vcfa://patterns/workflows/action-wrapper` | Guidance for wrapping a verified vRO action in a workflow |
+| `vcfa://patterns/templates/conventions` | Blueprint template metadata/content conventions and discovery-first authoring rules |
+| `vcfa://patterns/templates/small-vm` | Guidance for drafting a minimal small VM blueprint template from discovered conventions |
+| `vcfa://patterns/templates/catalog-ready` | Guidance for catalog-facing templates and deployment workflow alignment |
 | `vcfa://workflows/{id}`          | Workflow metadata as JSON                       |
 | `vcfa://actions/{id}`            | Action metadata and script details as JSON      |
 | `vcfa://deployments/{id}`        | Deployment details as JSON                      |
@@ -250,6 +256,14 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `vcfa-review-artifact-import`  | Review local artifacts before import                          |
 | `vcfa-troubleshoot-deployment` | Inspect a deployment and guide safe remediation               |
 | `vcfa-discover-capabilities`   | Discover reusable plugins, categories, actions, and workflows |
+| `vcfa-build-workflow-from-action` | Discover an existing action and scaffold a verified workflow wrapper |
+| `vcfa-refactor-workflow`       | Inspect, export, preflight, and safely plan workflow refactors |
+| `vcfa-create-template`         | Discover existing templates and create new blueprint templates safely |
+| `vcfa-review-template`         | Review blueprint template metadata, content, and catalog readiness |
+| `vcfa-integrate-workflow-template-subscription` | Plan workflow, template, catalog, deployment, and subscription integration |
+| `vcfa-discovery-first-implementation-plan` | Produce a phased implementation plan that starts with verified read-only discovery |
+
+Workflow and template implementation prompts include a discovery guardrail: when required environment details are missing, the assistant should stop and report the gap instead of inventing IDs, parameter names, return types, or blueprint schema details.
 
 ## Examples
 
