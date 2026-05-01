@@ -350,3 +350,36 @@ test("preflight-workflow-file formats reports and is read-only", async () => {
   assert.match(result.content[0].text, /preflight failed/);
   assert.match(result.content[0].text, /Missing required workflow-content/);
 });
+
+test("diff-workflow-file is read-only and delegates to client", async () => {
+  const handlers = new Map();
+  const configs = new Map();
+  let diffParams;
+  const server = {
+    registerTool(name, config, handler) {
+      configs.set(name, config);
+      handlers.set(name, handler);
+    },
+  };
+  registerWorkflowTools(server, {
+    diffWorkflowFile: async (params) => {
+      diffParams = params;
+      return "No meaningful workflow changes found";
+    },
+  });
+
+  assert.equal(
+    configs.get("diff-workflow-file").annotations.readOnlyHint,
+    true,
+  );
+
+  const input = {
+    base: { source: "live", workflowId: "workflow-1" },
+    compare: { source: "file", fileName: "local.workflow" },
+  };
+  const result = await handlers.get("diff-workflow-file")(input);
+
+  assert.deepEqual(diffParams, input);
+  assert.equal(result.isError, undefined);
+  assert.match(result.content[0].text, /No meaningful workflow changes/);
+});

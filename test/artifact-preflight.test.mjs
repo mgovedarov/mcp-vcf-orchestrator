@@ -11,6 +11,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import {
+  diffActionArtifacts,
+  diffWorkflowArtifacts,
+  inspectActionArtifactBuffer,
+  inspectWorkflowArtifactBuffer,
+  preflightActionFile,
   preflightPackageFile,
   preflightWorkflowFile,
 } from "../dist/client/artifact-preflight.js";
@@ -240,6 +245,205 @@ test("preflightPackageFile summarizes nested recognizable artifacts", async () =
   }
 });
 
+test("diffWorkflowArtifacts reports identical local workflow artifacts", () => {
+  const model = inspectWorkflowArtifactBuffer(
+    buildWorkflowArtifact(workflow),
+    "generated.workflow",
+  );
+
+  assert.equal(
+    diffWorkflowArtifacts(model, model),
+    "No meaningful workflow changes found",
+  );
+});
+
+test("diffWorkflowArtifacts reports parameter and attribute changes", () => {
+  const base = inspectWorkflowArtifactBuffer(buildWorkflowArtifact({
+    ...workflow,
+    attributes: [{ name: "enabled", type: "boolean" }],
+  }));
+  const compare = inspectWorkflowArtifactBuffer(buildWorkflowArtifact({
+    ...workflow,
+    inputs: [{ name: "message", type: "string" }, { name: "count", type: "number" }],
+    attributes: [{ name: "enabled", type: "string" }],
+  }));
+
+  const diff = diffWorkflowArtifacts(base, compare);
+  assert.match(diff, /Inputs changes/);
+  assert.match(diff, /Added parameter count/);
+  assert.match(diff, /Attributes changes/);
+  assert.match(diff, /Changed parameter enabled/);
+});
+
+test("diffWorkflowArtifacts reports script and action-reference changes", () => {
+  const base = inspectWorkflowArtifactBuffer(buildWorkflowArtifact(workflow));
+  const compare = inspectWorkflowArtifactBuffer(buildWorkflowArtifact({
+    ...workflow,
+    tasks: [{
+      ...workflow.tasks[0],
+      script: 'result = System.getModule("com.example.actions").upper(message);',
+    }],
+  }));
+
+  const diff = diffWorkflowArtifacts(base, compare);
+  assert.match(diff, /script changed/);
+  assert.match(diff, /Added action reference com.example.actions\/upper/);
+  assert.match(diff, /Removed action reference com.example.actions\/echo/);
+});
+
+test("diffWorkflowArtifacts reports binding and flow changes", () => {
+  const base = inspectWorkflowArtifactBuffer(buildWorkflowArtifact({
+    ...workflow,
+    attributes: [{ name: "scratch", type: "string" }],
+    tasks: [{
+      ...workflow.tasks[0],
+      outBindings: [{ name: "result", type: "string", target: "result" }],
+    }],
+  }));
+  const compare = inspectWorkflowArtifactBuffer(buildWorkflowArtifact({
+    ...workflow,
+    attributes: [{ name: "scratch", type: "string" }],
+    tasks: [{
+      ...workflow.tasks[0],
+      outBindings: [{ name: "scratch", type: "string", target: "scratch" }],
+    }],
+  }));
+
+  const diff = diffWorkflowArtifacts(base, compare);
+  assert.match(diff, /output binding result/);
+  assert.match(diff, /Removed output binding result/);
+  assert.match(diff, /Added output binding scratch/);
+
+  const flowBase = inspectWorkflowArtifactBuffer(workflowArchiveWithFlow("item2"));
+  const flowCompare = inspectWorkflowArtifactBuffer(workflowArchiveWithFlow("item3"));
+  assert.match(diffWorkflowArtifacts(flowBase, flowCompare), /outName: "item2" -> "item3"/);
+});
+
+test("diffWorkflowArtifacts reports task add and remove", () => {
+  const base = inspectWorkflowArtifactBuffer(buildWorkflowArtifact(workflow));
+  const compare = inspectWorkflowArtifactBuffer(buildWorkflowArtifact({
+    ...workflow,
+    tasks: [
+      workflow.tasks[0],
+      { name: "item2", script: "System.log('next');" },
+    ],
+  }));
+
+  const diff = diffWorkflowArtifacts(base, compare);
+  assert.match(diff, /Added task item2/);
+});
+
+test("diffActionArtifacts reports identical action artifacts", () => {
+  const model = inspectActionArtifactBuffer(actionArchive());
+
+  assert.equal(
+    diffActionArtifacts(model, model),
+    "No meaningful action changes found",
+  );
+});
+
+test("diffActionArtifacts reports metadata changes", () => {
+  const base = inspectActionArtifactBuffer(actionArchive());
+  const compare = inspectActionArtifactBuffer(actionArchive({
+    name: "upper",
+    module: "com.example.changed",
+    returnType: "number",
+  }));
+
+  const diff = diffActionArtifacts(base, compare);
+  assert.match(diff, /Metadata changes/);
+  assert.match(diff, /name: "echo" -> "upper"/);
+  assert.match(diff, /module: "com.example.actions" -> "com.example.changed"/);
+  assert.match(diff, /returnType: "string" -> "number"/);
+});
+
+test("diffActionArtifacts reports input parameter changes", () => {
+  const base = inspectActionArtifactBuffer(actionArchive({
+    inputParameters: [
+      { name: "message", type: "string", description: "Message" },
+      { name: "removeMe", type: "number", description: "Old" },
+    ],
+  }));
+  const compare = inspectActionArtifactBuffer(actionArchive({
+    inputParameters: [
+      { name: "message", type: "number", description: "Count" },
+      { name: "enabled", type: "boolean", description: "Enabled" },
+    ],
+  }));
+
+  const diff = diffActionArtifacts(base, compare);
+  assert.match(diff, /Input parameter changes/);
+  assert.match(diff, /Added parameter enabled/);
+  assert.match(diff, /Removed parameter removeMe/);
+  assert.match(diff, /Changed parameter message/);
+  assert.match(diff, /"type":"string"/);
+  assert.match(diff, /"description":"Count"/);
+});
+
+test("diffActionArtifacts reports script and action-reference changes", () => {
+  const base = inspectActionArtifactBuffer(actionArchive({
+    script: 'return System.getModule("com.example.actions").echo(message);',
+  }));
+  const compare = inspectActionArtifactBuffer(actionArchive({
+    script: 'return System.getModule("com.example.actions").upper(message);',
+  }));
+
+  const diff = diffActionArtifacts(base, compare);
+  assert.match(diff, /Script changes/);
+  assert.match(diff, /script changed/);
+  assert.match(diff, /sha256:/);
+  assert.match(diff, /Added action reference com.example.actions\/upper/);
+  assert.match(diff, /Removed action reference com.example.actions\/echo/);
+});
+
+test("diffActionFile compares local action artifacts and rejects unsafe sources", async () => {
+  const actionDir = await mkdtemp(join(tmpdir(), "vcfa-actions-"));
+  const outsideFile = join(tmpdir(), `outside-${Date.now()}.action`);
+  await writeFile(join(actionDir, "base.action"), actionArchive());
+  await writeFile(join(actionDir, "compare.action"), actionArchive({ name: "upper" }));
+  await writeFile(outsideFile, actionArchive());
+  await symlink(outsideFile, join(actionDir, "linked.action"));
+  await writeFile(join(actionDir, "bad.action"), "not a zip");
+
+  try {
+    const client = new VroClient(config({ actionDir }));
+    const diff = await client.diffActionFile({
+      base: { source: "file", fileName: "base.action" },
+      compare: { source: "file", fileName: "compare.action" },
+    });
+    assert.match(diff, /name: "echo" -> "upper"/);
+
+    await assert.rejects(
+      () => client.diffActionFile({
+        base: { source: "file", fileName: "../base.action" },
+        compare: { source: "file", fileName: "compare.action" },
+      }),
+      /path separators/,
+    );
+    await assert.rejects(
+      () => client.diffActionFile({
+        base: { source: "file", fileName: "linked.action" },
+        compare: { source: "file", fileName: "compare.action" },
+      }),
+      /symbolic link/,
+    );
+    await assert.rejects(
+      () => client.diffActionFile({
+        base: { source: "file", fileName: "bad.action" },
+        compare: { source: "file", fileName: "compare.action" },
+      }),
+      /valid ZIP archive/,
+    );
+
+    const report = await preflightActionFile(actionDir, "linked.action");
+    assert.equal(report.valid, false);
+    assert.match(report.errors.join("\n"), /symbolic link/);
+  } finally {
+    await rm(actionDir, { recursive: true, force: true });
+    await rm(outsideFile, { force: true });
+  }
+});
+
 test("malformed imports fail preflight before authentication or upload", async () => {
   const workflowDir = await mkdtemp(join(tmpdir(), "vcfa-preflight-import-"));
   await writeFile(join(workflowDir, "bad.workflow"), "not a zip");
@@ -263,4 +467,72 @@ test("malformed imports fail preflight before authentication or upload", async (
 
 function utf16LeWithBom(value) {
   return new Uint8Array([0xff, 0xfe, ...Buffer.from(value, "utf16le")]);
+}
+
+function workflowArchiveWithFlow(outName) {
+  const xml = [
+    '<?xml version="1.0" encoding="UTF-16"?>',
+    '<workflow id="workflow-1" root-name="item1">',
+    "  <input />",
+    "  <output />",
+    "  <attrib />",
+    `  <workflow-item name="item1" type="task" out-name="${outName}">`,
+    "    <in-binding />",
+    "    <out-binding />",
+    "    <script>System.log('one');</script>",
+    "  </workflow-item>",
+    `  <workflow-item name="${outName}" type="task" end-mode="1">`,
+    "    <in-binding />",
+    "    <out-binding />",
+    "    <script>System.log('two');</script>",
+    "  </workflow-item>",
+    "</workflow>",
+  ].join("\n");
+  return zipSync({
+    "workflow-info": new TextEncoder().encode(
+      '<workflow-info id="workflow-1" name="Flow" />',
+    ),
+    "workflow-content": utf16LeWithBom(xml),
+  });
+}
+
+function actionArchive(overrides = {}) {
+  const action = {
+    id: "action-1",
+    name: "echo",
+    module: "com.example.actions",
+    fqn: "com.example.actions.echo",
+    version: "1.0.0",
+    returnType: "string",
+    description: "Echo a message",
+    inputParameters: [
+      { name: "message", type: "string", description: "Message" },
+    ],
+    script: 'return System.getModule("com.example.actions").echo(message);',
+    ...overrides,
+  };
+  const params = action.inputParameters
+    .map(
+      (param) =>
+        `<param name="${escapeXml(param.name)}" type="${escapeXml(param.type)}"><description>${escapeXml(param.description ?? "")}</description></param>`,
+    )
+    .join("");
+  const xml = [
+    `<action id="${escapeXml(action.id)}" name="${escapeXml(action.name)}" module="${escapeXml(action.module)}" fqn="${escapeXml(action.fqn)}" version="${escapeXml(action.version)}" output-type="${escapeXml(action.returnType)}">`,
+    `<description>${escapeXml(action.description)}</description>`,
+    `<input-parameters>${params}</input-parameters>`,
+    `<script><![CDATA[${action.script}]]></script>`,
+    "</action>",
+  ].join("");
+  return zipSync({
+    "action.xml": new TextEncoder().encode(xml),
+  });
+}
+
+function escapeXml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
 }

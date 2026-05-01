@@ -24,6 +24,19 @@ const workflowExecutionStatusMap = {
   "waiting-signal": "STATE_WAITING_ON_SIGNAL",
 } as const;
 
+const workflowDiffSourceSchema = z.discriminatedUnion("source", [
+  z.object({
+    source: z.literal("file"),
+    fileName: z
+      .string()
+      .describe("Plain .workflow file name under the configured workflow artifact directory"),
+  }),
+  z.object({
+    source: z.literal("live"),
+    workflowId: z.string().describe("Live workflow ID to export and compare"),
+  }),
+]);
+
 export function getWorkflowInputParameters(workflow: Workflow): VroParameter[] {
   return workflow.inputParameters ?? workflow["input-parameters"] ?? [];
 }
@@ -887,6 +900,38 @@ export function registerWorkflowTools(
             {
               type: "text",
               text: `Failed to preflight workflow file: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  server.registerTool(
+    "diff-workflow-file",
+    {
+      title: "Diff Workflow File",
+      description:
+        "Compare two local .workflow artifacts, or compare a live workflow export against a local .workflow artifact. The base is current/old and compare is proposed/new.",
+      inputSchema: z.object({
+        base: workflowDiffSourceSchema.describe("Current/old workflow source"),
+        compare: workflowDiffSourceSchema.describe("Proposed/new workflow source"),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ base, compare }): Promise<CallToolResult> => {
+      try {
+        const diff = await client.diffWorkflowFile({ base, compare });
+        return {
+          content: [{ type: "text", text: diff }],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to diff workflow file: ${errorMessage(error)}`,
             },
           ],
           isError: true,

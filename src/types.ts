@@ -91,6 +91,15 @@ export interface ScaffoldWorkflowFileParams {
   workflow: WorkflowArtifactSpec;
 }
 
+export type WorkflowDiffSource =
+  | { source: "file"; fileName: string }
+  | { source: "live"; workflowId: string };
+
+export interface DiffWorkflowFileParams {
+  base: WorkflowDiffSource;
+  compare: WorkflowDiffSource;
+}
+
 export interface WorkflowExecutionState {
   value: string; // "running" | "completed" | "failed" | "canceled" | "waiting"
 }
@@ -166,6 +175,15 @@ export interface ActionList {
   total?: number;
   start?: number;
   link: Action[];
+}
+
+export type ActionDiffSource =
+  | { source: "file"; fileName: string }
+  | { source: "live"; actionId: string };
+
+export interface DiffActionFileParams {
+  base: ActionDiffSource;
+  compare: ActionDiffSource;
 }
 
 // --- Configuration Elements ---

@@ -191,6 +191,39 @@ test("action and configuration preflight tools format reports and are read-only"
   assert.match(configResult.content[0].text, /valid ZIP archive/);
 });
 
+test("diff-action-file is read-only, delegates exact params, and reports errors", async () => {
+  let diffParams;
+  const action = registeredToolsWithConfigs(registerActionTools, {
+    diffActionFile: async (params) => {
+      diffParams = params;
+      return "No meaningful action changes found";
+    },
+  });
+
+  assert.equal(
+    action.configs.get("diff-action-file").annotations.readOnlyHint,
+    true,
+  );
+
+  const input = {
+    base: { source: "live", actionId: "action-1" },
+    compare: { source: "file", fileName: "local.action" },
+  };
+  const result = await action.handlers.get("diff-action-file")(input);
+  assert.deepEqual(diffParams, input);
+  assert.equal(result.isError, undefined);
+  assert.match(result.content[0].text, /No meaningful action changes/);
+
+  const failing = registeredToolsWithConfigs(registerActionTools, {
+    diffActionFile: async () => {
+      throw new Error("boom");
+    },
+  });
+  const errorResult = await failing.handlers.get("diff-action-file")(input);
+  assert.equal(errorResult.isError, true);
+  assert.match(errorResult.content[0].text, /Failed to diff action file: boom/);
+});
+
 test("resource tools format lists and guard updates and deletes", async () => {
   let updated;
   let deleted;

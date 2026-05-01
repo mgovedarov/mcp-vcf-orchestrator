@@ -1,9 +1,11 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { extname } from "node:path";
-import type { Action, ActionList } from "../types.js";
+import type { Action, ActionList, DiffActionFileParams } from "../types.js";
 import { getLinkAttrs, type AttributeLink } from "./attrs.js";
 import {
+  diffActionArtifacts,
   ensurePreflightPassed,
+  inspectActionArtifactBuffer,
   preflightActionFile,
   type ArtifactPreflightReport,
 } from "./artifact-preflight.js";
@@ -138,8 +140,14 @@ export class ActionClient {
       );
     }
 
+    const buffer = await this.exportActionBuffer(id);
+    await writeFile(destPath, buffer, { flag: overwrite ? "w" : "wx" });
+    return destPath;
+  }
+
+  async exportActionBuffer(actionId: string): Promise<Buffer> {
     const token = await this.http.ensureAuthenticated();
-    const path = `/actions/${encodeURIComponent(id)}`;
+    const path = `/actions/${encodeURIComponent(actionId)}`;
     const url = `${this.http.baseUrl}${path}`;
     console.error(`[vro-client] GET ${path}`);
 
@@ -164,9 +172,37 @@ export class ActionClient {
         `vRO API error: ${res.status} ${res.statusText} — export action\n${text}`,
       );
     }
-    const buffer = Buffer.from(await res.arrayBuffer());
-    await writeFile(destPath, buffer, { flag: overwrite ? "w" : "wx" });
-    return destPath;
+    return Buffer.from(await res.arrayBuffer());
+  }
+
+  async diffActionFile(params: DiffActionFileParams): Promise<string> {
+    const base = await this.inspectActionDiffSource(params.base);
+    const compare = await this.inspectActionDiffSource(params.compare);
+    return diffActionArtifacts(base, compare);
+  }
+
+  private async inspectActionDiffSource(source: DiffActionFileParams["base"]) {
+    if (source.source === "live") {
+      return inspectActionArtifactBuffer(
+        await this.exportActionBuffer(source.actionId),
+        `live action ${source.actionId}`,
+      );
+    }
+
+    const filePath = await this.resolveActionPath(source.fileName);
+    await rejectSymlink(
+      filePath,
+      "Action diff source must not be a symbolic link",
+    );
+    await assertRealPathInside(
+      this.http.actionDir,
+      filePath,
+      "Action file path resolves outside the configured action artifact directory",
+    );
+    return inspectActionArtifactBuffer(
+      new Uint8Array(await readFile(filePath)),
+      source.fileName,
+    );
   }
 
   async importActionFile(

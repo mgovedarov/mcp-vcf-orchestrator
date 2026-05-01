@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { extname } from "node:path";
 import type {
+  DiffWorkflowFileParams,
   ScaffoldWorkflowFileParams,
   SimpleParameter,
   Workflow,
@@ -12,7 +13,9 @@ import type {
 import { parseAttrs } from "./attrs.js";
 import type { VroHttpClient } from "./core.js";
 import {
+  diffWorkflowArtifacts,
   ensurePreflightPassed,
+  inspectWorkflowArtifactBuffer,
   preflightWorkflowFile,
   type ArtifactPreflightReport,
 } from "./artifact-preflight.js";
@@ -196,6 +199,12 @@ export class WorkflowClient {
       );
     }
 
+    const buffer = await this.exportWorkflowBuffer(id);
+    await writeFile(destPath, buffer, { flag: overwrite ? "w" : "wx" });
+    return destPath;
+  }
+
+  async exportWorkflowBuffer(id: string): Promise<Buffer> {
     const token = await this.http.ensureAuthenticated();
     const path = `/content/workflows/${encodeURIComponent(id)}`;
     const url = `${this.http.baseUrl}${path}`;
@@ -222,9 +231,37 @@ export class WorkflowClient {
         `vRO API error: ${res.status} ${res.statusText} — export workflow\n${text}`,
       );
     }
-    const buffer = Buffer.from(await res.arrayBuffer());
-    await writeFile(destPath, buffer, { flag: overwrite ? "w" : "wx" });
-    return destPath;
+    return Buffer.from(await res.arrayBuffer());
+  }
+
+  async diffWorkflowFile(params: DiffWorkflowFileParams): Promise<string> {
+    const base = await this.inspectWorkflowDiffSource(params.base);
+    const compare = await this.inspectWorkflowDiffSource(params.compare);
+    return diffWorkflowArtifacts(base, compare);
+  }
+
+  private async inspectWorkflowDiffSource(source: DiffWorkflowFileParams["base"]) {
+    if (source.source === "live") {
+      return inspectWorkflowArtifactBuffer(
+        await this.exportWorkflowBuffer(source.workflowId),
+        `live workflow ${source.workflowId}`,
+      );
+    }
+
+    const filePath = await this.resolveWorkflowPath(source.fileName);
+    await rejectSymlink(
+      filePath,
+      "Workflow diff source must not be a symbolic link",
+    );
+    await assertRealPathInside(
+      this.http.workflowDir,
+      filePath,
+      "Workflow file path resolves outside the configured workflow artifact directory",
+    );
+    return inspectWorkflowArtifactBuffer(
+      new Uint8Array(await readFile(filePath)),
+      source.fileName,
+    );
   }
 
   async scaffoldWorkflowFile(

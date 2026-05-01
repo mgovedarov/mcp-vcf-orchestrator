@@ -125,6 +125,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `export-workflow-file`     | Export a workflow artifact to a `.workflow` file under the configured workflow artifact directory |
 | `scaffold-workflow-file`   | Generate a local `.workflow` artifact from structured metadata and linear scriptable tasks  |
 | `preflight-workflow-file`  | Validate a local `.workflow` artifact before import                                        |
+| `diff-workflow-file`       | Compare two local `.workflow` artifacts, or a live workflow export against a local artifact |
 | `import-workflow-file`     | Import a `.workflow` artifact from the configured workflow artifact directory into a workflow category |
 
 ### Actions
@@ -136,6 +137,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `create-action`      | Create a new action with script content                                    |
 | `export-action-file` | Export an action artifact to a `.action` file under the configured action artifact directory |
 | `preflight-action-file` | Validate a local `.action` artifact before import                       |
+| `diff-action-file`  | Compare two local `.action` artifacts, or a live action export against a local artifact |
 | `import-action-file` | Import a `.action` artifact from the configured action artifact directory into an action category |
 | `delete-action`      | Delete an action (irreversible)                                            |
 

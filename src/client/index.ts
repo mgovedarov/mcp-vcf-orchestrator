@@ -11,6 +11,8 @@ import type {
   DeploymentActionRequestParams,
   DeploymentList,
   DeploymentRequest,
+  DiffActionFileParams,
+  DiffWorkflowFileParams,
   EventTopicList,
   ResourceElementList,
   ScaffoldWorkflowFileParams,
@@ -147,6 +149,14 @@ export class VroClient {
     return this.workflows.exportWorkflowFile(id, fileName, overwrite);
   }
 
+  exportWorkflowBuffer(id: string): Promise<Buffer> {
+    return this.workflows.exportWorkflowBuffer(id);
+  }
+
+  diffWorkflowFile(params: DiffWorkflowFileParams): Promise<string> {
+    return this.workflows.diffWorkflowFile(params);
+  }
+
   importWorkflowFile(
     categoryId: string,
     fileName: string,
@@ -181,6 +191,14 @@ export class VroClient {
     overwrite = false,
   ): Promise<string> {
     return this.actions.exportActionFile(id, fileName, overwrite);
+  }
+
+  exportActionBuffer(actionId: string): Promise<Buffer> {
+    return this.actions.exportActionBuffer(actionId);
+  }
+
+  diffActionFile(params: DiffActionFileParams): Promise<string> {
+    return this.actions.diffActionFile(params);
   }
 
   importActionFile(categoryName: string, fileName: string): Promise<void> {

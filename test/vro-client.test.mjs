@@ -95,6 +95,42 @@ function minimalWorkflowArtifact() {
   });
 }
 
+function actionArchive(overrides = {}) {
+  const action = {
+    id: "action-1",
+    name: "echo",
+    module: "com.example.actions",
+    fqn: "com.example.actions.echo",
+    version: "1.0.0",
+    returnType: "string",
+    description: "Echo",
+    inputParameters: [
+      { name: "message", type: "string", description: "Message" },
+    ],
+    script: "return message;",
+    ...overrides,
+  };
+  const params = action.inputParameters
+    .map(
+      (param) =>
+        `<param name="${escapeXml(param.name)}" type="${escapeXml(param.type)}"><description>${escapeXml(param.description ?? "")}</description></param>`,
+    )
+    .join("");
+  return zipSync({
+    "action.xml": new TextEncoder().encode(
+      `<action id="${escapeXml(action.id)}" name="${escapeXml(action.name)}" module="${escapeXml(action.module)}" fqn="${escapeXml(action.fqn)}" version="${escapeXml(action.version)}" output-type="${escapeXml(action.returnType)}"><description>${escapeXml(action.description)}</description><input-parameters>${params}</input-parameters><script><![CDATA[${action.script}]]></script></action>`,
+    ),
+  });
+}
+
+function escapeXml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
 test("bodyless 202 responses with Location return an execution id", async () => {
   const calls = [];
   globalThis.fetch = async (url, init) => {
@@ -161,6 +197,35 @@ test("getWorkflowExecutionLogs calls workflow execution logs endpoint", async ()
     "https://vcfa.example.test/vco/api/workflows/workflow-1/executions/execution-1/logs?maxResult=3",
   );
   assert.equal(calls[1].init.method, "GET");
+});
+
+test("diffActionFile compares live export to local action artifact as zip", async () => {
+  const actionDir = await mkdtemp(join(tmpdir(), "vcfa-actions-live-"));
+  await writeFile(join(actionDir, "local.action"), actionArchive({ name: "local" }));
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return new Response(actionArchive({ name: "live" }));
+  };
+
+  try {
+    const client = new VroClient(config({ actionDir }));
+    const diff = await client.diffActionFile({
+      base: { source: "live", actionId: "action-1" },
+      compare: { source: "file", fileName: "local.action" },
+    });
+
+    assert.match(diff, /name: "live" -> "local"/);
+    assert.equal(
+      calls[1].url,
+      "https://vcfa.example.test/vco/api/actions/action-1",
+    );
+    assert.equal(calls[1].init.method, "GET");
+    assert.equal(calls[1].init.headers.Accept, "application/zip");
+  } finally {
+    await rm(actionDir, { recursive: true, force: true });
+  }
 });
 
 test("createConfiguration sends singular attribute payload", async () => {
@@ -692,6 +757,104 @@ test("workflow export writes only under workflow directory", async () => {
       "https://vcfa.example.test/vco/api/content/workflows/workflow-1",
     );
     assert.equal(calls[1].init.method, "GET");
+  } finally {
+    await rm(workflowDir, { recursive: true, force: true });
+  }
+});
+
+test("workflow diff compares local files and rejects unsafe paths", async () => {
+  const workflowDir = await mkdtemp(join(tmpdir(), "vcfa-workflows-"));
+  await writeFile(join(workflowDir, "base.workflow"), buildWorkflowArtifact({
+    id: "workflow-1",
+    name: "Workflow",
+    inputs: [{ name: "message", type: "string" }],
+    tasks: [{ script: "System.log(message);" }],
+  }));
+  await writeFile(join(workflowDir, "compare.workflow"), buildWorkflowArtifact({
+    id: "workflow-1",
+    name: "Workflow",
+    inputs: [{ name: "message", type: "string" }, { name: "count", type: "number" }],
+    tasks: [{ script: "System.log(message);" }],
+  }));
+  await writeFile(join(workflowDir, "bad.workflow"), "not a zip");
+  const outsideFile = join(tmpdir(), `outside-${Date.now()}.workflow`);
+  await writeFile(outsideFile, buildWorkflowArtifact({
+    id: "workflow-1",
+    name: "Outside",
+    tasks: [{ script: "System.log('outside');" }],
+  }));
+  await symlink(outsideFile, join(workflowDir, "linked.workflow"));
+
+  try {
+    const client = new VroClient(config({ workflowDir }));
+    const diff = await client.diffWorkflowFile({
+      base: { source: "file", fileName: "base.workflow" },
+      compare: { source: "file", fileName: "compare.workflow" },
+    });
+    assert.match(diff, /Added parameter count/);
+
+    await assert.rejects(
+      () => client.diffWorkflowFile({
+        base: { source: "file", fileName: "../base.workflow" },
+        compare: { source: "file", fileName: "compare.workflow" },
+      }),
+      /path separators/,
+    );
+    await assert.rejects(
+      () => client.diffWorkflowFile({
+        base: { source: "file", fileName: "bad.workflow" },
+        compare: { source: "file", fileName: "compare.workflow" },
+      }),
+      /valid ZIP archive/,
+    );
+    await assert.rejects(
+      () => client.diffWorkflowFile({
+        base: { source: "file", fileName: "linked.workflow" },
+        compare: { source: "file", fileName: "compare.workflow" },
+      }),
+      /symbolic link/,
+    );
+  } finally {
+    await rm(workflowDir, { recursive: true, force: true });
+    await rm(outsideFile, { force: true });
+  }
+});
+
+test("workflow diff can compare live export buffer against local file", async () => {
+  const workflowDir = await mkdtemp(join(tmpdir(), "vcfa-workflows-"));
+  const local = buildWorkflowArtifact({
+    id: "workflow-1",
+    name: "Workflow",
+    inputs: [{ name: "message", type: "string" }],
+    tasks: [{ script: "System.log(message);" }],
+  });
+  const live = buildWorkflowArtifact({
+    id: "workflow-1",
+    name: "Workflow",
+    inputs: [{ name: "message", type: "string" }],
+    tasks: [{ script: "System.warn(message);" }],
+  });
+  await writeFile(join(workflowDir, "local.workflow"), local);
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return new Response(live, { status: 200 });
+  };
+
+  try {
+    const client = new VroClient(config({ workflowDir }));
+    const diff = await client.diffWorkflowFile({
+      base: { source: "live", workflowId: "workflow-1" },
+      compare: { source: "file", fileName: "local.workflow" },
+    });
+
+    assert.match(diff, /script changed/);
+    assert.equal(
+      calls[1].url,
+      "https://vcfa.example.test/vco/api/content/workflows/workflow-1",
+    );
+    assert.equal(calls[1].init.headers.Accept, "application/zip");
   } finally {
     await rm(workflowDir, { recursive: true, force: true });
   }

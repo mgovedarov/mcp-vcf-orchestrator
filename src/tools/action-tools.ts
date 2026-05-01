@@ -4,6 +4,19 @@ import { z } from "zod";
 import { formatPreflightReport } from "../client/artifact-preflight.js";
 import type { VroClient } from "../vro-client.js";
 
+const actionDiffSourceSchema = z.discriminatedUnion("source", [
+  z.object({
+    source: z.literal("file"),
+    fileName: z
+      .string()
+      .describe("Plain .action file name under the configured action artifact directory"),
+  }),
+  z.object({
+    source: z.literal("live"),
+    actionId: z.string().describe("Live action ID to export and compare"),
+  }),
+]);
+
 export function registerActionTools(
   server: McpServer,
   client: VroClient,
@@ -255,6 +268,38 @@ export function registerActionTools(
             {
               type: "text",
               text: `Failed to preflight action file: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  server.registerTool(
+    "diff-action-file",
+    {
+      title: "Diff Action File",
+      description:
+        "Compare two local .action artifacts, or compare a live action export against a local .action artifact. The base is current/old and compare is proposed/new.",
+      inputSchema: z.object({
+        base: actionDiffSourceSchema.describe("Current/old action source"),
+        compare: actionDiffSourceSchema.describe("Proposed/new action source"),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ base, compare }): Promise<CallToolResult> => {
+      try {
+        const diff = await client.diffActionFile({ base, compare });
+        return {
+          content: [{ type: "text", text: diff }],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to diff action file: ${error instanceof Error ? error.message : String(error)}`,
             },
           ],
           isError: true,

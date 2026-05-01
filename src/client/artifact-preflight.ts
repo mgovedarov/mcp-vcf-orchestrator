@@ -1,5 +1,6 @@
 import { unzipSync } from "fflate";
 import { XMLParser, XMLValidator } from "fast-xml-parser";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { extname, posix } from "node:path";
 import {
@@ -64,6 +65,70 @@ type XmlObject = Record<string, unknown>;
 
 interface WorkflowModel {
   root: XmlObject;
+}
+
+export interface WorkflowArtifactInspectionParameter {
+  name: string;
+  type: string;
+  description: string;
+  scope: "input" | "output" | "attribute";
+}
+
+export interface WorkflowArtifactInspectionBinding {
+  name: string;
+  type: string;
+  exportName: string;
+}
+
+export interface WorkflowArtifactInspectionFlow {
+  outName: string;
+  altOutName: string;
+  catchName: string;
+  endMode: string;
+}
+
+export interface WorkflowArtifactInspectionItem {
+  name: string;
+  type: string;
+  displayName: string;
+  description: string;
+  script: string;
+  scriptHash: string;
+  scriptLines: number;
+  inBindings: WorkflowArtifactInspectionBinding[];
+  outBindings: WorkflowArtifactInspectionBinding[];
+  flow: WorkflowArtifactInspectionFlow;
+  actionReferences: ArtifactActionReference[];
+}
+
+export interface WorkflowArtifactInspection {
+  metadata: Record<string, string>;
+  inputs: WorkflowArtifactInspectionParameter[];
+  outputs: WorkflowArtifactInspectionParameter[];
+  attributes: WorkflowArtifactInspectionParameter[];
+  items: WorkflowArtifactInspectionItem[];
+  actionReferences: ArtifactActionReference[];
+}
+
+export interface ActionArtifactInspectionParameter {
+  name: string;
+  type: string;
+  description: string;
+}
+
+export interface ActionArtifactInspection {
+  id: string;
+  name: string;
+  module: string;
+  fqn: string;
+  version: string;
+  returnType: string;
+  description: string;
+  inputParameters: ActionArtifactInspectionParameter[];
+  script: string;
+  scriptHash: string;
+  scriptLines: number;
+  actionReferences: ArtifactActionReference[];
 }
 
 export async function preflightWorkflowFile(
@@ -182,6 +247,122 @@ export function formatPreflightReport(report: ArtifactPreflightReport): string {
   return lines.join("\n");
 }
 
+export function inspectWorkflowArtifactBuffer(
+  buffer: Uint8Array,
+  label = "workflow artifact",
+): WorkflowArtifactInspection {
+  const report = newReport("workflow", label);
+  if (buffer.byteLength === 0) {
+    throw new Error("Artifact file is empty");
+  }
+
+  let files: Record<string, Uint8Array>;
+  try {
+    files = unzipSync(buffer);
+  } catch (error) {
+    throw new Error(`Artifact is not a valid ZIP archive: ${errorMessage(error)}`);
+  }
+
+  for (const [name, content] of Object.entries(files)) {
+    report.entries.push({ name, size: content.byteLength });
+    validateZipEntryName(name, report);
+  }
+  if (report.entries.length === 0) {
+    report.errors.push("Archive does not contain any entries");
+  }
+
+  const model = inspectWorkflowArchiveFiles(files, report);
+  if (report.errors.length > 0 || !model) {
+    throw new Error(
+      `Workflow artifact inspection failed for ${label}:\n${report.errors.join("\n")}`,
+    );
+  }
+  return model;
+}
+
+export function diffWorkflowArtifacts(
+  base: WorkflowArtifactInspection,
+  compare: WorkflowArtifactInspection,
+): string {
+  if (stableStringify(base) === stableStringify(compare)) {
+    return "No meaningful workflow changes found";
+  }
+
+  const sections: string[] = [];
+  addMetadataDiff(sections, base.metadata, compare.metadata);
+  addParameterDiff(sections, "Inputs", base.inputs, compare.inputs);
+  addParameterDiff(sections, "Outputs", base.outputs, compare.outputs);
+  addParameterDiff(sections, "Attributes", base.attributes, compare.attributes);
+  addItemDiff(sections, base.items, compare.items);
+  addActionReferenceDiff(
+    sections,
+    base.actionReferences,
+    compare.actionReferences,
+  );
+
+  return sections.join("\n\n") || "No meaningful workflow changes found";
+}
+
+export function inspectActionArtifactBuffer(
+  buffer: Uint8Array,
+  label = "action artifact",
+): ActionArtifactInspection {
+  const report = newReport("action", label);
+  if (buffer.byteLength === 0) {
+    throw new Error("Artifact file is empty");
+  }
+
+  let files: Record<string, Uint8Array>;
+  try {
+    files = unzipSync(buffer);
+  } catch (error) {
+    throw new Error(`Artifact is not a valid ZIP archive: ${errorMessage(error)}`);
+  }
+
+  for (const [name, content] of Object.entries(files)) {
+    report.entries.push({ name, size: content.byteLength });
+    validateZipEntryName(name, report);
+  }
+  if (report.entries.length === 0) {
+    report.errors.push("Archive does not contain any entries");
+  }
+
+  const model = inspectActionArchiveFiles(files, report);
+  if (report.errors.length > 0 || !model) {
+    throw new Error(
+      `Action artifact inspection failed for ${label}:\n${report.errors.join("\n")}`,
+    );
+  }
+  return model;
+}
+
+export function diffActionArtifacts(
+  base: ActionArtifactInspection,
+  compare: ActionArtifactInspection,
+): string {
+  const baseMeaningful = actionMeaningfulModel(base);
+  const compareMeaningful = actionMeaningfulModel(compare);
+  if (stableStringify(baseMeaningful) === stableStringify(compareMeaningful)) {
+    return "No meaningful action changes found";
+  }
+
+  const sections: string[] = [];
+  addMetadataDiff(sections, actionMetadata(base), actionMetadata(compare));
+  addActionInputParameterDiff(
+    sections,
+    base.inputParameters,
+    compare.inputParameters,
+  );
+  addActionScriptDiff(sections, base, compare);
+  addActionReferenceDiff(
+    sections,
+    base.actionReferences,
+    compare.actionReferences,
+  );
+
+  return sections.join("\n\n") || "No meaningful action changes found";
+}
+
 async function preflightLocalArchive(
   rootDir: string,
   fileName: string,
@@ -270,11 +451,18 @@ function validateWorkflowArchive(
   files: Record<string, Uint8Array>,
   report: ArtifactPreflightReport,
 ): void {
+  inspectWorkflowArchiveFiles(files, report);
+}
+
+function inspectWorkflowArchiveFiles(
+  files: Record<string, Uint8Array>,
+  report: ArtifactPreflightReport,
+): WorkflowArtifactInspection | null {
   const info = files["workflow-info"];
   const content = files["workflow-content"];
   if (!info) report.errors.push("Missing required workflow-info entry");
   if (!content) report.errors.push("Missing required workflow-content entry");
-  if (!info || !content) return;
+  if (!info || !content) return null;
 
   const infoXml = decodeUtf8Xml(info, "workflow-info", report);
   if (infoXml) {
@@ -288,12 +476,13 @@ function validateWorkflowArchive(
   }
 
   const contentXml = decodeUtf16XmlWithBom(content, "workflow-content", report);
-  if (!contentXml) return;
+  if (!contentXml) return null;
 
   const model = parseWorkflowContent(contentXml, report);
-  if (!model) return;
+  if (!model) return null;
 
   validateWorkflowModel(model, report);
+  return buildWorkflowInspection(model.root, report.metadata);
 }
 
 function validateGenericXmlArchive(
@@ -319,6 +508,35 @@ function validateGenericXmlArchive(
       "No parseable XML entries were recognized; archive structure is not documented, so only ZIP/import safety was validated",
     );
   }
+}
+
+function inspectActionArchiveFiles(
+  files: Record<string, Uint8Array>,
+  report: ArtifactPreflightReport,
+): ActionArtifactInspection | null {
+  const candidates: { score: number; action: ActionArtifactInspection }[] = [];
+
+  for (const [name, content] of Object.entries(files)) {
+    const xml = decodeLikelyXml(content);
+    if (!xml) continue;
+
+    const parsed = parseXml(xml, name, report);
+    if (!parsed) continue;
+
+    walkXml(parsed, (node) => {
+      const action = buildActionInspection(node);
+      const score = actionCandidateScore(node, action);
+      if (score > 0) candidates.push({ score, action });
+    });
+  }
+
+  if (candidates.length === 0) {
+    report.errors.push("No recognizable action XML metadata was found");
+    return null;
+  }
+
+  candidates.sort((left, right) => right.score - left.score);
+  return candidates[0]?.action ?? null;
 }
 
 function validatePackageArchive(
@@ -551,6 +769,25 @@ function collectWorkflowParams(
     }));
 }
 
+function collectWorkflowInspectionParams(
+  root: XmlObject,
+  sectionName: "input" | "output" | "attrib",
+): WorkflowArtifactInspectionParameter[] {
+  const section = getObject(root, sectionName);
+  if (!section) return [];
+  const scope: WorkflowArtifactInspectionParameter["scope"] =
+    sectionName === "attrib" ? "attribute" : sectionName;
+  return asArray(section.param)
+    .filter(isObject)
+    .map((param) => ({
+      name: stringValue(param.name),
+      type: stringValue(param.type),
+      description: textValue(getObject(param, "description") ?? param.description).trim(),
+      scope,
+    }))
+    .sort(compareByName);
+}
+
 function collectGenericParameters(
   value: unknown,
   report: ArtifactPreflightReport,
@@ -606,6 +843,74 @@ function collectActionReferences(
       `Action reference ${module}/${action} was found; local preflight cannot prove it exists on the target vRO instance`,
     );
   }
+}
+
+function collectActionReferencesFromScript(
+  script: string,
+): ArtifactActionReference[] {
+  return [...script.matchAll(ACTION_REFERENCE_PATTERN)]
+    .map((match) => ({
+      module: match[1] ?? "",
+      action: match[2] ?? "",
+      expression: match[0] ?? "",
+    }))
+    .sort(compareActionReferences);
+}
+
+function buildActionInspection(node: XmlObject): ActionArtifactInspection {
+  const script = normalizeScript(textValue(node.script));
+  return {
+    id: stringValue(node.id),
+    name: stringValue(node.name),
+    module: stringValue(node.module),
+    fqn: stringValue(node.fqn),
+    version: stringValue(node.version),
+    returnType: stringValue(node["output-type"]),
+    description: textValue(node.description).trim(),
+    inputParameters: collectActionInputParameters(node),
+    script,
+    scriptHash: hashScript(script),
+    scriptLines: countLines(script),
+    actionReferences: collectActionReferencesFromScript(script),
+  };
+}
+
+function actionCandidateScore(
+  node: XmlObject,
+  action: ActionArtifactInspection,
+): number {
+  let score = 0;
+  if (action.name) score += 2;
+  if (action.module) score += 2;
+  if (action.fqn) score += 2;
+  if (action.version) score += 1;
+  if (action.returnType) score += 1;
+  if (action.description) score += 1;
+  if (action.script) score += 3;
+  if (getObject(node, "input-parameters")) score += 2;
+  if (action.inputParameters.length > 0) score += 2;
+  return score >= 4 ? score : 0;
+}
+
+function collectActionInputParameters(
+  node: XmlObject,
+): ActionArtifactInspectionParameter[] {
+  const section = getObject(node, "input-parameters");
+  if (!section) return [];
+
+  const rawParameters = [
+    ...asArray(section.param),
+    ...asArray(section.parameter),
+  ];
+  return rawParameters
+    .filter(isObject)
+    .map((param) => ({
+      name: stringValue(param.name),
+      type: stringValue(param.type),
+      description: textValue(param.description).trim(),
+    }))
+    .filter((param) => param.name || param.type || param.description)
+    .sort(compareByName);
 }
 
 function validateParameterList(
@@ -678,6 +983,19 @@ function getBindings(
   const section = getObject(item, sectionName);
   if (!section) return [];
   return asArray(section.bind).filter(isObject);
+}
+
+function getInspectionBindings(
+  item: XmlObject,
+  sectionName: "in-binding" | "out-binding",
+): WorkflowArtifactInspectionBinding[] {
+  return getBindings(item, sectionName)
+    .map((binding) => ({
+      name: stringValue(binding.name),
+      type: stringValue(binding.type),
+      exportName: stringValue(binding["export-name"]),
+    }))
+    .sort(compareByName);
 }
 
 function getScriptText(item: XmlObject): string {
@@ -793,6 +1111,337 @@ function copyMetadata(
     const value = stringValue(source[key]);
     if (value) report.metadata[key] = value;
   }
+}
+
+function buildWorkflowInspection(
+  root: XmlObject,
+  reportMetadata: Record<string, string | number | boolean>,
+): WorkflowArtifactInspection {
+  const metadata: Record<string, string> = {};
+  for (const [key, value] of Object.entries(reportMetadata)) {
+    metadata[key] = String(value);
+  }
+  metadata["display-name"] = textValue(root["display-name"]).trim();
+  metadata.description = textValue(root.description).trim();
+
+  const items = getWorkflowItems(root)
+    .map((item) => {
+      const script = normalizeScript(getScriptText(item));
+      return {
+        name: stringValue(item.name),
+        type: stringValue(item.type),
+        displayName: textValue(item["display-name"]).trim(),
+        description: textValue(item.description).trim(),
+        script,
+        scriptHash: hashScript(script),
+        scriptLines: countLines(script),
+        inBindings: getInspectionBindings(item, "in-binding"),
+        outBindings: getInspectionBindings(item, "out-binding"),
+        flow: {
+          outName: stringValue(item["out-name"]),
+          altOutName: stringValue(item["alt-out-name"]),
+          catchName: stringValue(item["catch-name"]),
+          endMode: stringValue(item["end-mode"]),
+        },
+        actionReferences: collectActionReferencesFromScript(script),
+      };
+    })
+    .sort(compareByName);
+
+  const actionReferenceKeys = new Set<string>();
+  const actionReferences: ArtifactActionReference[] = [];
+  for (const item of items) {
+    for (const reference of item.actionReferences) {
+      const key = actionReferenceKey(reference);
+      if (actionReferenceKeys.has(key)) continue;
+      actionReferenceKeys.add(key);
+      actionReferences.push(reference);
+    }
+  }
+  actionReferences.sort(compareActionReferences);
+
+  return {
+    metadata: sortRecord(metadata),
+    inputs: collectWorkflowInspectionParams(root, "input"),
+    outputs: collectWorkflowInspectionParams(root, "output"),
+    attributes: collectWorkflowInspectionParams(root, "attrib"),
+    items,
+    actionReferences,
+  };
+}
+
+function addMetadataDiff(
+  sections: string[],
+  base: Record<string, string>,
+  compare: Record<string, string>,
+): void {
+  const lines = diffRecord(base, compare).map(
+    ({ key, oldValue, newValue }) =>
+      `• ${key}: ${formatValue(oldValue)} -> ${formatValue(newValue)}`,
+  );
+  if (lines.length > 0) sections.push(["Metadata changes:", ...lines].join("\n"));
+}
+
+function addParameterDiff(
+  sections: string[],
+  title: string,
+  base: WorkflowArtifactInspectionParameter[],
+  compare: WorkflowArtifactInspectionParameter[],
+): void {
+  const lines = diffNamedValues(base, compare, formatParameterChange);
+  if (lines.length > 0) sections.push([`${title} changes:`, ...lines].join("\n"));
+}
+
+function addItemDiff(
+  sections: string[],
+  base: WorkflowArtifactInspectionItem[],
+  compare: WorkflowArtifactInspectionItem[],
+): void {
+  const baseByName = new Map(base.map((item) => [item.name, item]));
+  const compareByName = new Map(compare.map((item) => [item.name, item]));
+  const lines: string[] = [];
+
+  for (const name of sortedKeys(baseByName, compareByName)) {
+    const oldItem = baseByName.get(name);
+    const newItem = compareByName.get(name);
+    if (!oldItem && newItem) {
+      lines.push(`• Added task ${name} (${newItem.type})`);
+      continue;
+    }
+    if (oldItem && !newItem) {
+      lines.push(`• Removed task ${name} (${oldItem.type})`);
+      continue;
+    }
+    if (!oldItem || !newItem) continue;
+
+    const itemChanges = diffRecord(
+      itemSummary(oldItem),
+      itemSummary(newItem),
+    ).map(
+      ({ key, oldValue, newValue }) =>
+        `${key}: ${formatValue(oldValue)} -> ${formatValue(newValue)}`,
+    );
+    if (oldItem.script !== newItem.script) {
+      itemChanges.push(
+        `script changed (${scriptSummary(oldItem)} -> ${scriptSummary(newItem)})`,
+      );
+    }
+    itemChanges.push(
+      ...diffNamedValues(
+        oldItem.inBindings,
+        newItem.inBindings,
+        (oldBinding, newBinding) =>
+          `input binding ${oldBinding.name}: ${formatBinding(oldBinding)} -> ${formatBinding(newBinding)}`,
+        "input binding",
+      ),
+    );
+    itemChanges.push(
+      ...diffNamedValues(
+        oldItem.outBindings,
+        newItem.outBindings,
+        (oldBinding, newBinding) =>
+          `output binding ${oldBinding.name}: ${formatBinding(oldBinding)} -> ${formatBinding(newBinding)}`,
+        "output binding",
+      ),
+    );
+
+    if (itemChanges.length > 0) {
+      lines.push(`• Changed task ${name}: ${itemChanges.join("; ")}`);
+    }
+  }
+
+  if (lines.length > 0) sections.push(["Workflow item changes:", ...lines].join("\n"));
+}
+
+function addActionReferenceDiff(
+  sections: string[],
+  base: ArtifactActionReference[],
+  compare: ArtifactActionReference[],
+): void {
+  const baseKeys = new Set(base.map(actionReferenceKey));
+  const compareKeys = new Set(compare.map(actionReferenceKey));
+  const lines: string[] = [];
+  for (const key of [...compareKeys].sort()) {
+    if (!baseKeys.has(key)) lines.push(`• Added action reference ${key}`);
+  }
+  for (const key of [...baseKeys].sort()) {
+    if (!compareKeys.has(key)) lines.push(`• Removed action reference ${key}`);
+  }
+  if (lines.length > 0) sections.push(["Action reference changes:", ...lines].join("\n"));
+}
+
+function addActionInputParameterDiff(
+  sections: string[],
+  base: ActionArtifactInspectionParameter[],
+  compare: ActionArtifactInspectionParameter[],
+): void {
+  const lines = diffNamedValues(
+    base,
+    compare,
+    (oldParameter, newParameter) =>
+      `Changed parameter ${oldParameter.name}: ${formatObject(oldParameter)} -> ${formatObject(newParameter)}`,
+  );
+  if (lines.length > 0) {
+    sections.push(["Input parameter changes:", ...lines].join("\n"));
+  }
+}
+
+function addActionScriptDiff(
+  sections: string[],
+  base: ActionArtifactInspection,
+  compare: ActionArtifactInspection,
+): void {
+  if (base.script === compare.script) return;
+  sections.push(
+    [
+      "Script changes:",
+      `• script changed (${scriptSummary(base)} -> ${scriptSummary(compare)})`,
+    ].join("\n"),
+  );
+}
+
+function diffNamedValues<T extends { name: string }>(
+  base: T[],
+  compare: T[],
+  changedLine: (oldValue: T, newValue: T) => string,
+  label = "parameter",
+): string[] {
+  const baseByName = new Map(base.map((value) => [value.name, value]));
+  const compareByName = new Map(compare.map((value) => [value.name, value]));
+  const lines: string[] = [];
+  for (const name of sortedKeys(baseByName, compareByName)) {
+    const oldValue = baseByName.get(name);
+    const newValue = compareByName.get(name);
+    if (!oldValue && newValue) {
+      lines.push(`• Added ${label} ${name}: ${formatObject(newValue)}`);
+    } else if (oldValue && !newValue) {
+      lines.push(`• Removed ${label} ${name}: ${formatObject(oldValue)}`);
+    } else if (
+      oldValue &&
+      newValue &&
+      stableStringify(oldValue) !== stableStringify(newValue)
+    ) {
+      lines.push(`• ${changedLine(oldValue, newValue)}`);
+    }
+  }
+  return lines;
+}
+
+function formatParameterChange(
+  oldValue: WorkflowArtifactInspectionParameter,
+  newValue: WorkflowArtifactInspectionParameter,
+): string {
+  return `Changed parameter ${oldValue.name}: ${formatObject(oldValue)} -> ${formatObject(newValue)}`;
+}
+
+function itemSummary(item: WorkflowArtifactInspectionItem): Record<string, string> {
+  return {
+    type: item.type,
+    displayName: item.displayName,
+    description: item.description,
+    outName: item.flow.outName,
+    altOutName: item.flow.altOutName,
+    catchName: item.flow.catchName,
+    endMode: item.flow.endMode,
+  };
+}
+
+function formatBinding(binding: WorkflowArtifactInspectionBinding): string {
+  return `${binding.name} (${binding.type}) export-name=${formatValue(binding.exportName)}`;
+}
+
+function scriptSummary(item: { scriptLines: number; scriptHash: string }): string {
+  return `${item.scriptLines} line(s), sha256:${item.scriptHash.slice(0, 12)}`;
+}
+
+function actionMetadata(
+  action: ActionArtifactInspection,
+): Record<string, string> {
+  return sortRecord({
+    name: action.name,
+    module: action.module,
+    fqn: action.fqn,
+    version: action.version,
+    returnType: action.returnType,
+    description: action.description,
+  });
+}
+
+function actionMeaningfulModel(
+  action: ActionArtifactInspection,
+): Record<string, unknown> {
+  return {
+    metadata: actionMetadata(action),
+    inputParameters: action.inputParameters,
+    script: action.script,
+    scriptHash: action.scriptHash,
+    scriptLines: action.scriptLines,
+    actionReferences: action.actionReferences,
+  };
+}
+
+function diffRecord(
+  base: Record<string, string>,
+  compare: Record<string, string>,
+): { key: string; oldValue: string | undefined; newValue: string | undefined }[] {
+  return [...new Set([...Object.keys(base), ...Object.keys(compare)])]
+    .sort()
+    .filter((key) => base[key] !== compare[key])
+    .map((key) => ({ key, oldValue: base[key], newValue: compare[key] }));
+}
+
+function sortedKeys<T>(
+  base: Map<string, T>,
+  compare: Map<string, T>,
+): string[] {
+  return [...new Set([...base.keys(), ...compare.keys()])].sort();
+}
+
+function sortRecord(record: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(record)
+      .filter(([, value]) => value !== "")
+      .sort(([left], [right]) => left.localeCompare(right)),
+  );
+}
+
+function formatObject(value: unknown): string {
+  return stableStringify(value);
+}
+
+function formatValue(value: string | undefined): string {
+  return value === undefined || value === "" ? "(none)" : JSON.stringify(value);
+}
+
+function normalizeScript(script: string): string {
+  return script.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+}
+
+function hashScript(script: string): string {
+  return createHash("sha256").update(script).digest("hex");
+}
+
+function countLines(script: string): number {
+  return script ? script.split("\n").length : 0;
+}
+
+function stableStringify(value: unknown): string {
+  return JSON.stringify(value);
+}
+
+function actionReferenceKey(reference: ArtifactActionReference): string {
+  return `${reference.module}/${reference.action}`;
+}
+
+function compareActionReferences(
+  left: ArtifactActionReference,
+  right: ArtifactActionReference,
+): number {
+  return actionReferenceKey(left).localeCompare(actionReferenceKey(right));
+}
+
+function compareByName<T extends { name: string }>(left: T, right: T): number {
+  return left.name.localeCompare(right.name);
 }
 
 function walkXml(value: unknown, visitor: (node: XmlObject) => void): void {
