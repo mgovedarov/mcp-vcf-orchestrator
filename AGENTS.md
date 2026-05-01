@@ -37,4 +37,8 @@ Prompt-backed trigger phrases currently checked into the repo:
 - \`list-workflows\` – see `.github/prompts/vcfa-list-workflows.prompt.md`
 - \`list-deployments\` – see `.github/prompts/vcfa-list-deployments.prompt.md`
 
+GitHub issue code convention:
+- Use `VCFO-###` for repo issue codes, starting at `VCFO-001` and incrementing sequentially.
+- Prefix issue titles with the code, for example `[VCFO-001] Expand MCP resources and prompts for workflow/template implementation`.
+
 This agent can be invoked by describing the desired operation in natural language; the agent will map it to the appropriate MCP tool calls.
