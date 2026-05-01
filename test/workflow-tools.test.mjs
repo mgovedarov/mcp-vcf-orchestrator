@@ -314,3 +314,39 @@ test("scaffold-workflow-file surfaces validation errors", async () => {
   assert.equal(result.isError, true);
   assert.match(result.content[0].text, /missing binding/);
 });
+
+test("preflight-workflow-file formats reports and is read-only", async () => {
+  const handlers = new Map();
+  const configs = new Map();
+  const server = {
+    registerTool(name, config, handler) {
+      configs.set(name, config);
+      handlers.set(name, handler);
+    },
+  };
+  registerWorkflowTools(server, {
+    preflightWorkflowFile: async (fileName) => ({
+      kind: "workflow",
+      fileName,
+      valid: false,
+      errors: ["Missing required workflow-content entry"],
+      warnings: [],
+      metadata: { id: "workflow-1" },
+      entries: [{ name: "workflow-info", size: 42 }],
+      parameters: [],
+      actionReferences: [],
+    }),
+  });
+
+  assert.equal(
+    configs.get("preflight-workflow-file").annotations.readOnlyHint,
+    true,
+  );
+
+  const result = await handlers.get("preflight-workflow-file")({
+    fileName: "bad.workflow",
+  });
+  assert.equal(result.isError, true);
+  assert.match(result.content[0].text, /preflight failed/);
+  assert.match(result.content[0].text, /Missing required workflow-content/);
+});

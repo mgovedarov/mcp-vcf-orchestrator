@@ -9,6 +9,7 @@ import type {
   WorkflowExecutionLog,
   WorkflowExecutionStackItem,
 } from "../types.js";
+import { formatPreflightReport } from "../client/artifact-preflight.js";
 import type { VroClient } from "../vro-client.js";
 
 const DEFAULT_WORKFLOW_WAIT_TIMEOUT_SECONDS = 300;
@@ -852,6 +853,40 @@ export function registerWorkflowTools(
             {
               type: "text",
               text: `Failed to export workflow file: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  server.registerTool(
+    "preflight-workflow-file",
+    {
+      title: "Preflight Workflow File",
+      description:
+        "Validate a local .workflow artifact under VCFA_WORKFLOW_DIR before importing it.",
+      inputSchema: z.object({
+        fileName: z
+          .string()
+          .describe("Workflow file name under VCFA_WORKFLOW_DIR to validate"),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ fileName }): Promise<CallToolResult> => {
+      try {
+        const report = await client.preflightWorkflowFile(fileName);
+        return {
+          content: [{ type: "text", text: formatPreflightReport(report) }],
+          isError: !report.valid,
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to preflight workflow file: ${error instanceof Error ? error.message : String(error)}`,
             },
           ],
           isError: true,

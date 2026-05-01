@@ -126,6 +126,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `get-workflow-execution`   | Check execution status and retrieve outputs                                                 |
 | `export-workflow-file`     | Export a workflow artifact to a `.workflow` file under `VCFA_WORKFLOW_DIR`                  |
 | `scaffold-workflow-file`   | Generate a local `.workflow` artifact from structured metadata and linear scriptable tasks  |
+| `preflight-workflow-file`  | Validate a local `.workflow` artifact before import                                        |
 | `import-workflow-file`     | Import a `.workflow` artifact from `VCFA_WORKFLOW_DIR` into a workflow category             |
 
 ### Actions
@@ -136,6 +137,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `get-action`         | Get action details including script content and parameters                 |
 | `create-action`      | Create a new action with script content                                    |
 | `export-action-file` | Export an action artifact to a `.action` file under `VCFA_ACTION_DIR`      |
+| `preflight-action-file` | Validate a local `.action` artifact before import                       |
 | `import-action-file` | Import a `.action` artifact from `VCFA_ACTION_DIR` into an action category |
 | `delete-action`      | Delete an action (irreversible)                                            |
 
@@ -148,6 +150,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `create-configuration`      | Create a new configuration element with attributes                                       |
 | `update-configuration`      | Update a configuration element's name, description, or attributes                        |
 | `export-configuration-file` | Export a configuration artifact to a `.vsoconf` file under `VCFA_CONFIGURATION_DIR`      |
+| `preflight-configuration-file` | Validate a local `.vsoconf` artifact before import                                  |
 | `import-configuration-file` | Import a `.vsoconf` artifact from `VCFA_CONFIGURATION_DIR` into a configuration category |
 | `delete-configuration`      | Delete a configuration element (irreversible)                                            |
 
@@ -201,6 +204,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `list-packages`  | List vRO packages on the Orchestrator instance, optionally filtered by name         |
 | `get-package`    | Get details of a specific package by its fully-qualified name                       |
 | `export-package` | Export a package as a ZIP file under `VCFA_PACKAGE_DIR`                             |
+| `preflight-package` | Validate a local `.package` or `.zip` artifact before import                    |
 | `import-package` | Import a package file from `VCFA_PACKAGE_DIR` into the Orchestrator instance        |
 | `delete-package` | Delete a package after confirmation, optionally deleting all its contained elements |
 
@@ -319,6 +323,18 @@ Assistant calls: import-workflow-file(
   confirm: true
 )
   → Uploads only after confirmation and only from VCFA_WORKFLOW_DIR
+```
+
+### Preflight local artifacts before upload
+
+```
+User: Validate the updated IPAM workflow artifact before importing it.
+
+Assistant calls: preflight-workflow-file(
+  fileName: "ipam-updated.workflow"
+)
+  → Checks the archive structure, UTF-16 workflow XML, parameters, bindings,
+    task flow, vRO type syntax, and local import safety before any upload.
 ```
 
 ### Deploy from the catalog and run day-2 actions

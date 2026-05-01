@@ -15,6 +15,19 @@ function registeredTools(register, client) {
   return handlers;
 }
 
+function registeredToolsWithConfigs(register, client) {
+  const handlers = new Map();
+  const configs = new Map();
+  const server = {
+    registerTool(name, config, handler) {
+      configs.set(name, config);
+      handlers.set(name, handler);
+    },
+  };
+  register(server, client);
+  return { handlers, configs };
+}
+
 test("action tools format detail responses and pass create payloads", async () => {
   let createParams;
   const handlers = registeredTools(registerActionTools, {
@@ -124,6 +137,58 @@ test("configuration tools format attributes and guard imports and deletes", asyn
     confirm: true,
   });
   assert.equal(deletedId, "config-1");
+});
+
+test("action and configuration preflight tools format reports and are read-only", async () => {
+  const action = registeredToolsWithConfigs(registerActionTools, {
+    preflightActionFile: async (fileName) => ({
+      kind: "action",
+      fileName,
+      valid: true,
+      errors: [],
+      warnings: ["No parseable XML entries were recognized"],
+      metadata: { name: "getVmIp" },
+      entries: [{ name: "action.xml", size: 100 }],
+      parameters: [],
+      actionReferences: [],
+    }),
+  });
+  assert.equal(
+    action.configs.get("preflight-action-file").annotations.readOnlyHint,
+    true,
+  );
+  const actionResult = await action.handlers.get("preflight-action-file")({
+    fileName: "getVmIp.action",
+  });
+  assert.equal(actionResult.isError, false);
+  assert.match(actionResult.content[0].text, /preflight passed/);
+  assert.match(actionResult.content[0].text, /getVmIp/);
+
+  const config = registeredToolsWithConfigs(registerConfigTools, {
+    preflightConfigurationFile: async (fileName) => ({
+      kind: "configuration",
+      fileName,
+      valid: false,
+      errors: ["Artifact is not a valid ZIP archive"],
+      warnings: [],
+      metadata: {},
+      entries: [],
+      parameters: [],
+      actionReferences: [],
+    }),
+  });
+  assert.equal(
+    config.configs.get("preflight-configuration-file").annotations
+      .readOnlyHint,
+    true,
+  );
+  const configResult = await config.handlers.get(
+    "preflight-configuration-file",
+  )({
+    fileName: "settings.vsoconf",
+  });
+  assert.equal(configResult.isError, true);
+  assert.match(configResult.content[0].text, /valid ZIP archive/);
 });
 
 test("resource tools format lists and guard updates and deletes", async () => {

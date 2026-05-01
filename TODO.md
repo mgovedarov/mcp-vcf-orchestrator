@@ -13,5 +13,5 @@
 11. [x] Add support for resource elements
 12. [x] Implement import/export for actions, config elements and resource elements
 13. [x] Add workflow artifact authoring/scaffolding tools that generate valid `.workflow` files from structured metadata, inputs/outputs, scriptable task definitions, scripts, and bindings so automation developers do not have to hand-build UTF-16 workflow XML archives
-14. [ ] Add local artifact validation/preflight tools for `.workflow`, `.action`, `.vsoconf`, and package files that verify archive structure, encoding, parameter bindings, action references, supported vRO types, and import safety before uploading to VCFA
+14. [x] Add local artifact validation/preflight tools for `.workflow`, `.action`, `.vsoconf`, and package files that verify archive structure, encoding, parameter bindings, action references, supported vRO types, and import safety before uploading to VCFA
 15. [x] Improve workflow execution tooling with a `run-workflow-and-wait` development loop that validates inputs against `get-workflow`, polls until completion or timeout, and returns outputs plus useful failure details/log excerpts for rapid iteration

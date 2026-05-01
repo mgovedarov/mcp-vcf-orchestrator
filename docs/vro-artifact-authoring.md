@@ -47,10 +47,14 @@ The MCP tools implemented for this are:
 
 - `export-workflow-file`
 - `import-workflow-file`
+- `preflight-workflow-file`
 - `export-action-file`
 - `import-action-file`
+- `preflight-action-file`
 - `export-configuration-file`
 - `import-configuration-file`
+- `preflight-configuration-file`
+- `preflight-package`
 
 They read/write files only under their configured artifact directories:
 
@@ -162,13 +166,23 @@ Fast local checks:
 npm test
 ```
 
+Before uploading local artifacts, run the matching preflight tool:
+
+- `preflight-workflow-file` checks `.workflow` ZIP structure, `workflow-info`, UTF-16 `workflow-content`, parameters, bindings, task flow, vRO type syntax, action references, and local import path safety.
+- `preflight-action-file` checks `.action` ZIP/path safety and parses recognizable XML metadata conservatively.
+- `preflight-configuration-file` checks `.vsoconf` ZIP/path safety and parses recognizable XML metadata conservatively.
+- `preflight-package` checks `.package`/`.zip` import safety and inspects nested `.workflow`, `.action`, and `.vsoconf` artifacts when they are present.
+
+The import tools run the same preflight checks and fail locally before authentication or multipart upload when blocking errors are found.
+
 Useful live MCP sequence:
 
-1. `import-workflow-file` with `categoryId`, `fileName`, `overwrite: true`, `confirm: true`.
-2. `list-workflows` filtered by workflow name.
-3. `get-workflow` to verify inputs/outputs.
-4. `run-workflow` with inputs.
-5. `get-workflow-execution` to poll status and inspect outputs/errors.
+1. `preflight-workflow-file` with `fileName`.
+2. `import-workflow-file` with `categoryId`, `fileName`, `overwrite: true`, `confirm: true`.
+3. `list-workflows` filtered by workflow name.
+4. `get-workflow` to verify inputs/outputs.
+5. `run-workflow` with inputs.
+6. `get-workflow-execution` to poll status and inspect outputs/errors.
 
 For this repository, set `VCFA_WORKFLOW_DIR` to the directory containing generated `.workflow` files before importing.
 

@@ -70,6 +70,7 @@ async function main(): Promise<void> {
         "After starting a workflow execution with run-workflow, use get-workflow-execution to poll for completion and retrieve outputs.",
         "Use export-workflow-file to save a workflow artifact under VCFA_WORKFLOW_DIR; use import-workflow-file to upload a .workflow artifact from VCFA_WORKFLOW_DIR into a workflow category.",
         "Use scaffold-workflow-file to generate a local .workflow artifact from structured workflow metadata and linear scriptable tasks before importing it.",
+        "Use preflight-workflow-file, preflight-action-file, preflight-configuration-file, and preflight-package to validate local artifacts before importing them.",
         "Use export-action-file to save an action artifact under VCFA_ACTION_DIR; use import-action-file to upload a .action artifact from VCFA_ACTION_DIR into an action category by category name.",
         "Use export-configuration-file to save a configuration artifact under VCFA_CONFIGURATION_DIR; use import-configuration-file to upload a .vsoconf artifact from VCFA_CONFIGURATION_DIR into a configuration category.",
         "Use list-event-topics to discover available event topics before creating extensibility subscriptions.",

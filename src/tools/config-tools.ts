@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
+import { formatPreflightReport } from "../client/artifact-preflight.js";
 import type { VroClient } from "../vro-client.js";
 
 export function registerConfigTools(
@@ -262,6 +263,42 @@ export function registerConfigTools(
             {
               type: "text",
               text: `Failed to export configuration file: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  server.registerTool(
+    "preflight-configuration-file",
+    {
+      title: "Preflight Configuration File",
+      description:
+        "Validate a local .vsoconf artifact under VCFA_CONFIGURATION_DIR before importing it.",
+      inputSchema: z.object({
+        fileName: z
+          .string()
+          .describe(
+            "Configuration file name under VCFA_CONFIGURATION_DIR to validate",
+          ),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ fileName }): Promise<CallToolResult> => {
+      try {
+        const report = await client.preflightConfigurationFile(fileName);
+        return {
+          content: [{ type: "text", text: formatPreflightReport(report) }],
+          isError: !report.valid,
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to preflight configuration file: ${error instanceof Error ? error.message : String(error)}`,
             },
           ],
           isError: true,
