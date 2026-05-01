@@ -260,7 +260,7 @@ export function registerDeploymentTools(
           .optional()
           .describe("Reason or comment for the deployment request"),
         inputs: z
-          .record(z.unknown())
+          .record(z.string(), z.unknown())
           .optional()
           .describe("Catalog item input parameters as a key/value object"),
       }),
@@ -353,7 +353,7 @@ export function registerDeploymentTools(
           .optional()
           .describe("Reason for requesting the day-2 action"),
         inputs: z
-          .record(z.unknown())
+          .record(z.string(), z.unknown())
           .optional()
           .describe("Day-2 action inputs as a key/value object"),
         confirm: z
