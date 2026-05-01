@@ -1,5 +1,9 @@
 # TODO
 
+> **Status:** This file is deprecated and retained for historical context only.
+> Ongoing planning and task tracking have moved to GitHub Issues using the
+> `VCFO-###` issue code convention.
+
 1. [x] List catalog items, get catalog item
 2. [x] Add support for deployments - list, delete, create from catalog item
 3. [x] Add support for templates - list, create, delete

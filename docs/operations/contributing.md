@@ -35,3 +35,11 @@ Docs live under `docs/` and are built with VitePress.
 - Keep examples aligned with current tool names and schemas.
 - Distinguish read-only discovery from live write or destructive operations.
 - Run `npm run docs:build` before opening a docs PR.
+
+## GitHub Actions
+
+The repository uses GitHub Actions for CI, dependency review, CodeQL analysis, package dry-runs, documentation deployment, and npm publishing. Keep workflow changes narrow and prefer official GitHub/npm actions where possible.
+
+- CI runs tests across supported Node versions and builds the docs site.
+- Package Check runs `npm pack --dry-run` for changes that affect published package contents.
+- Publish to npm runs only for published GitHub releases and expects npm trusted publishing to be configured.
