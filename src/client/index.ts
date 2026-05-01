@@ -13,6 +13,7 @@ import type {
   DeploymentRequest,
   DiffActionFileParams,
   DiffWorkflowFileParams,
+  PrepareArtifactPromotionParams,
   EventTopicList,
   ResourceElementList,
   ScaffoldWorkflowFileParams,
@@ -31,7 +32,10 @@ import type {
   WorkflowExecutionLogs,
   WorkflowList,
 } from "../types.js";
-import type { ArtifactPreflightReport } from "./artifact-preflight.js";
+import {
+  formatPreflightReport,
+  type ArtifactPreflightReport,
+} from "./artifact-preflight.js";
 import { ActionClient } from "./action-client.js";
 import { CatalogClient } from "./catalog-client.js";
 import { CategoryClient } from "./category-client.js";
@@ -171,6 +175,158 @@ export class VroClient {
 
   preflightWorkflowFile(fileName: string): Promise<ArtifactPreflightReport> {
     return this.workflows.preflightWorkflowFile(fileName);
+  }
+
+  async prepareArtifactPromotion(
+    params: PrepareArtifactPromotionParams,
+  ): Promise<string> {
+    const report = await this.preflightPromotionArtifact(
+      params.kind,
+      params.fileName,
+    );
+    const lines = [
+      `Artifact promotion preparation for ${params.kind} ${params.fileName}`,
+      "",
+      formatPreflightReport(report),
+    ];
+
+    if (!report.valid) {
+      lines.push("");
+      lines.push("Blocking errors:");
+      lines.push(...report.errors.map((error) => `  • ${error}`));
+      lines.push("");
+      lines.push("Backup skipped because preflight failed.");
+      lines.push("Ready import call: unavailable until preflight passes.");
+      return lines.join("\n");
+    }
+
+    const diff = await this.promotionDiff(params);
+    if (diff) {
+      lines.push("");
+      lines.push("Live comparison:");
+      lines.push(diff);
+    }
+
+    if (params.backup?.enabled) {
+      lines.push("");
+      lines.push(await this.preparePromotionBackup(params));
+    }
+
+    lines.push("");
+    lines.push(this.promotionImportRecommendation(params));
+    return lines.join("\n");
+  }
+
+  private preflightPromotionArtifact(
+    kind: PrepareArtifactPromotionParams["kind"],
+    fileName: string,
+  ): Promise<ArtifactPreflightReport> {
+    switch (kind) {
+      case "workflow":
+        return this.preflightWorkflowFile(fileName);
+      case "action":
+        return this.preflightActionFile(fileName);
+      case "configuration":
+        return this.preflightConfigurationFile(fileName);
+      case "package":
+        return this.preflightPackageFile(fileName);
+    }
+  }
+
+  private async promotionDiff(
+    params: PrepareArtifactPromotionParams,
+  ): Promise<string | null> {
+    if (params.kind === "workflow" && params.target?.workflowId) {
+      return this.diffWorkflowFile({
+        base: { source: "live", workflowId: params.target.workflowId },
+        compare: { source: "file", fileName: params.fileName },
+      });
+    }
+    if (params.kind === "action" && params.target?.actionId) {
+      return this.diffActionFile({
+        base: { source: "live", actionId: params.target.actionId },
+        compare: { source: "file", fileName: params.fileName },
+      });
+    }
+    return null;
+  }
+
+  private async preparePromotionBackup(
+    params: PrepareArtifactPromotionParams,
+  ): Promise<string> {
+    const backupFileName =
+      params.backup?.fileName ?? generatedBackupFileName(params.fileName);
+    const overwrite = params.backup?.overwrite ?? false;
+    const target = params.target;
+
+    if (params.kind === "workflow") {
+      if (!target?.workflowId) {
+        return "Backup skipped: workflowId is required when backup is enabled for workflow artifacts.";
+      }
+      const savedPath = await this.exportWorkflowFile(
+        target.workflowId,
+        backupFileName,
+        overwrite,
+      );
+      return `Backup exported: ${savedPath}`;
+    }
+    if (params.kind === "action") {
+      if (!target?.actionId) {
+        return "Backup skipped: actionId is required when backup is enabled for action artifacts.";
+      }
+      const savedPath = await this.exportActionFile(
+        target.actionId,
+        backupFileName,
+        overwrite,
+      );
+      return `Backup exported: ${savedPath}`;
+    }
+    if (params.kind === "configuration") {
+      if (!target?.configurationId) {
+        return "Backup skipped: configurationId is required when backup is enabled for configuration artifacts.";
+      }
+      const savedPath = await this.exportConfigurationFile(
+        target.configurationId,
+        backupFileName,
+        overwrite,
+      );
+      return `Backup exported: ${savedPath}`;
+    }
+    if (!target?.packageName) {
+      return "Backup skipped: packageName is required when backup is enabled for package artifacts.";
+    }
+    const savedPath = await this.exportPackage(
+      target.packageName,
+      backupFileName,
+      overwrite,
+    );
+    return `Backup exported: ${savedPath}`;
+  }
+
+  private promotionImportRecommendation(
+    params: PrepareArtifactPromotionParams,
+  ): string {
+    const overwrite = params.overwrite ?? true;
+    const target = params.target;
+    if (params.kind === "workflow") {
+      if (!target?.categoryId) {
+        return "Ready import call: unavailable because target.categoryId is required for workflow import.";
+      }
+      return `Ready import call:\nimport-workflow-file({ categoryId: ${quote(target.categoryId)}, fileName: ${quote(params.fileName)}, overwrite: ${overwrite}, confirm: true })`;
+    }
+    if (params.kind === "action") {
+      if (!target?.categoryName) {
+        return "Ready import call: unavailable because target.categoryName is required for action import.";
+      }
+      return `Ready import call:\nimport-action-file({ categoryName: ${quote(target.categoryName)}, fileName: ${quote(params.fileName)}, confirm: true })`;
+    }
+    if (params.kind === "configuration") {
+      if (!target?.categoryId) {
+        return "Ready import call: unavailable because target.categoryId is required for configuration import.";
+      }
+      return `Ready import call:\nimport-configuration-file({ categoryId: ${quote(target.categoryId)}, fileName: ${quote(params.fileName)}, confirm: true })`;
+    }
+    return `Ready import call:\nimport-package({ fileName: ${quote(params.fileName)}, overwrite: ${overwrite}, confirm: true })`;
   }
 
   listActions(filter?: string): Promise<ActionList> {
@@ -468,4 +624,15 @@ export class VroClient {
   listPlugins(filter?: string): Promise<VroPluginList> {
     return this.plugins.listPlugins(filter);
   }
+}
+
+function generatedBackupFileName(fileName: string): string {
+  const dotIndex = fileName.lastIndexOf(".");
+  const stamp = new Date().toISOString().replace(/[^0-9A-Za-z]/g, "");
+  if (dotIndex <= 0) return `${fileName}.backup-${stamp}`;
+  return `${fileName.slice(0, dotIndex)}.backup-${stamp}${fileName.slice(dotIndex)}`;
+}
+
+function quote(value: string): string {
+  return JSON.stringify(value);
 }

@@ -31,6 +31,7 @@ This custom agent is designed to assist with managing VCF Automation Orchestrato
 - Templates: \`list-templates\`, \`get-template\`, \`create-template\`, \`delete-template\`
 - Packages: \`list-packages\`, \`get-package\`, \`export-package\`, \`import-package\`, \`delete-package\`
 - Plugins: \`list-plugins\`
+- Promotion: \`prepare-artifact-promotion\`
 
 Prompt-backed trigger phrases currently checked into the repo:
 - \`list-workflows\` – see `.github/prompts/vcfa-list-workflows.prompt.md`

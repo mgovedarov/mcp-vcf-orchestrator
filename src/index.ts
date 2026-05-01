@@ -9,6 +9,7 @@ import { registerConfigTools } from "./tools/config-tools.js";
 import { registerDeploymentTools } from "./tools/deployment-tools.js";
 import { registerPackageTools } from "./tools/package-tools.js";
 import { registerPluginTools } from "./tools/plugin-tools.js";
+import { registerPromotionTools } from "./tools/promotion-tools.js";
 import { registerVcfaPrompts } from "./prompts/index.js";
 import { registerVcfaResources } from "./resources/index.js";
 import { registerResourceTools } from "./tools/resource-tools.js";
@@ -75,6 +76,7 @@ async function main(): Promise<void> {
         "Use export-workflow-file to save a workflow artifact under the configured workflow artifact directory; use import-workflow-file to upload a .workflow artifact from that directory into a workflow category.",
         "Use scaffold-workflow-file to generate a local .workflow artifact from structured workflow metadata and linear scriptable tasks before importing it.",
         "Use preflight-workflow-file, preflight-action-file, preflight-configuration-file, and preflight-package to validate local artifacts before importing them.",
+        "Use prepare-artifact-promotion before artifact imports when you need preflight, optional live backup export, workflow/action diff summaries, and the exact confirmed import call; it never imports.",
         "Use export-action-file to save an action artifact under the configured action artifact directory; use import-action-file to upload a .action artifact from that directory into an action category by category name.",
         "Use export-configuration-file to save a configuration artifact under the configured configuration artifact directory; use import-configuration-file to upload a .vsoconf artifact from that directory into a configuration category.",
         "Use list-event-topics to discover available event topics before creating extensibility subscriptions.",
@@ -99,6 +101,7 @@ async function main(): Promise<void> {
   registerDeploymentTools(server, client);
   registerTemplateTools(server, client);
   registerPackageTools(server, client);
+  registerPromotionTools(server, client);
   registerResourceTools(server, client);
   registerPluginTools(server, client);
   registerVcfaResources(server, client);

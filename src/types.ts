@@ -186,6 +186,37 @@ export interface DiffActionFileParams {
   compare: ActionDiffSource;
 }
 
+// --- Artifact promotion ---
+
+export type ArtifactPromotionKind =
+  | "workflow"
+  | "action"
+  | "configuration"
+  | "package";
+
+export interface ArtifactPromotionTarget {
+  categoryId?: string;
+  categoryName?: string;
+  workflowId?: string;
+  actionId?: string;
+  configurationId?: string;
+  packageName?: string;
+}
+
+export interface ArtifactPromotionBackup {
+  enabled: boolean;
+  fileName?: string;
+  overwrite?: boolean;
+}
+
+export interface PrepareArtifactPromotionParams {
+  kind: ArtifactPromotionKind;
+  fileName: string;
+  target?: ArtifactPromotionTarget;
+  overwrite?: boolean;
+  backup?: ArtifactPromotionBackup;
+}
+
 // --- Configuration Elements ---
 
 export interface ConfigAttribute {

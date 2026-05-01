@@ -110,6 +110,12 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 ## Tools Reference
 
+### Artifact Promotion
+
+| Tool                         | Description                                                                                                            |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `prepare-artifact-promotion` | Run preflight, optionally export a live backup, summarize risks/changes, and recommend the exact confirmed import call |
+
 ### Workflows
 
 | Tool                       | Description                                                                                 |
