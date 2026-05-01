@@ -187,12 +187,12 @@ export function registerActionTools(
     {
       title: "Export Action File",
       description:
-        "Export a vRO action as a .action file under VCFA_ACTION_DIR. The fileName must be a plain .action file name, not a path.",
+        "Export a vRO action as a .action file under the configured action artifact directory. The fileName must be a plain .action file name, not a path.",
       inputSchema: z.object({
         id: z.string().describe("The action ID to export"),
         fileName: z
           .string()
-          .describe("Action file name to save under VCFA_ACTION_DIR"),
+          .describe("Action file name to save under the configured action artifact directory"),
         overwrite: z
           .boolean()
           .optional()
@@ -234,11 +234,11 @@ export function registerActionTools(
     {
       title: "Preflight Action File",
       description:
-        "Validate a local .action artifact under VCFA_ACTION_DIR before importing it.",
+        "Validate a local .action artifact under the configured action artifact directory before importing it.",
       inputSchema: z.object({
         fileName: z
           .string()
-          .describe("Action file name under VCFA_ACTION_DIR to validate"),
+          .describe("Action file name under the configured action artifact directory to validate"),
       }),
       annotations: { readOnlyHint: true },
     },
@@ -268,14 +268,14 @@ export function registerActionTools(
     {
       title: "Import Action File",
       description:
-        "Import a .action file from VCFA_ACTION_DIR into an action category. Use list-categories with type ActionCategory to find the category name first. Set confirm to true to proceed.",
+        "Import a .action file from the configured action artifact directory into an action category. Use list-categories with type ActionCategory to find the category name first. Set confirm to true to proceed.",
       inputSchema: z.object({
         categoryName: z
           .string()
           .describe("The action category/module name to import into"),
         fileName: z
           .string()
-          .describe("Action file name under VCFA_ACTION_DIR to import"),
+          .describe("Action file name under the configured action artifact directory to import"),
         confirm: z
           .boolean()
           .describe(

@@ -48,7 +48,7 @@ export class ResourceClient {
       this.http.resourceDir,
       fileName,
       "Resource",
-      "VCFA_RESOURCE_DIR",
+      "the configured resource artifact directory",
     );
   }
 
@@ -107,7 +107,7 @@ export class ResourceClient {
     await assertRealPathInside(
       this.http.resourceDir,
       srcPath,
-      "Resource file path resolves outside VCFA_RESOURCE_DIR",
+      "Resource file path resolves outside the configured resource artifact directory",
     );
     return readFile(srcPath);
   }

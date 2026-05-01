@@ -227,13 +227,13 @@ export function registerConfigTools(
     {
       title: "Export Configuration File",
       description:
-        "Export a vRO configuration element as a .vsoconf file under VCFA_CONFIGURATION_DIR. The fileName must be a plain .vsoconf file name, not a path.",
+        "Export a vRO configuration element as a .vsoconf file under the configured configuration artifact directory. The fileName must be a plain .vsoconf file name, not a path.",
       inputSchema: z.object({
         id: z.string().describe("The configuration element ID to export"),
         fileName: z
           .string()
           .describe(
-            "Configuration file name to save under VCFA_CONFIGURATION_DIR",
+            "Configuration file name to save under the configured configuration artifact directory",
           ),
         overwrite: z
           .boolean()
@@ -276,12 +276,12 @@ export function registerConfigTools(
     {
       title: "Preflight Configuration File",
       description:
-        "Validate a local .vsoconf artifact under VCFA_CONFIGURATION_DIR before importing it.",
+        "Validate a local .vsoconf artifact under the configured configuration artifact directory before importing it.",
       inputSchema: z.object({
         fileName: z
           .string()
           .describe(
-            "Configuration file name under VCFA_CONFIGURATION_DIR to validate",
+            "Configuration file name under the configured configuration artifact directory to validate",
           ),
       }),
       annotations: { readOnlyHint: true },
@@ -312,7 +312,7 @@ export function registerConfigTools(
     {
       title: "Import Configuration File",
       description:
-        "Import a .vsoconf file from VCFA_CONFIGURATION_DIR into a configuration element category. Use list-categories with type ConfigurationElementCategory to find a category ID first. Set confirm to true to proceed.",
+        "Import a .vsoconf file from the configured configuration artifact directory into a configuration element category. Use list-categories with type ConfigurationElementCategory to find a category ID first. Set confirm to true to proceed.",
       inputSchema: z.object({
         categoryId: z
           .string()
@@ -320,7 +320,7 @@ export function registerConfigTools(
         fileName: z
           .string()
           .describe(
-            "Configuration file name under VCFA_CONFIGURATION_DIR to import",
+            "Configuration file name under the configured configuration artifact directory to import",
           ),
         confirm: z
           .boolean()

@@ -65,12 +65,12 @@ export function registerResourceTools(
     {
       title: "Export Resource Element",
       description:
-        "Export a vRO resource element by ID to a file under VCFA_RESOURCE_DIR. The fileName must be a plain file name, not a path.",
+        "Export a vRO resource element by ID to a file under the configured resource artifact directory. The fileName must be a plain file name, not a path.",
       inputSchema: z.object({
         id: z.string().describe("The resource element ID to export"),
         fileName: z
           .string()
-          .describe("File name to save under VCFA_RESOURCE_DIR"),
+          .describe("File name to save under the configured resource artifact directory"),
         overwrite: z
           .boolean()
           .optional()
@@ -112,14 +112,14 @@ export function registerResourceTools(
     {
       title: "Import Resource Element",
       description:
-        "Import a vRO resource element from VCFA_RESOURCE_DIR into a ResourceElementCategory. Use list-categories with type ResourceElementCategory to find a category ID first. Set confirm to true to proceed.",
+        "Import a vRO resource element from the configured resource artifact directory into a ResourceElementCategory. Use list-categories with type ResourceElementCategory to find a category ID first. Set confirm to true to proceed.",
       inputSchema: z.object({
         categoryId: z
           .string()
           .describe("The resource element category ID to import into"),
         fileName: z
           .string()
-          .describe("File name under VCFA_RESOURCE_DIR to import"),
+          .describe("File name under the configured resource artifact directory to import"),
         confirm: z
           .boolean()
           .describe(
@@ -168,13 +168,13 @@ export function registerResourceTools(
     {
       title: "Update Resource Element Content",
       description:
-        "Update an existing resource element's binary content from a file under VCFA_RESOURCE_DIR.",
+        "Update an existing resource element's binary content from a file under the configured resource artifact directory.",
       inputSchema: z.object({
         id: z.string().describe("The resource element ID to update"),
         fileName: z
           .string()
           .describe(
-            "File name under VCFA_RESOURCE_DIR containing the replacement content",
+            "File name under the configured resource artifact directory containing the replacement content",
           ),
         changesetSha: z
           .string()

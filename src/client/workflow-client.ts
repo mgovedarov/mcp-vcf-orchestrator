@@ -176,7 +176,7 @@ export class WorkflowClient {
       this.http.workflowDir,
       fileName,
       "Workflow",
-      "VCFA_WORKFLOW_DIR",
+      "the configured workflow artifact directory",
     );
   }
 
@@ -262,7 +262,7 @@ export class WorkflowClient {
     await assertRealPathInside(
       this.http.workflowDir,
       srcPath,
-      "Workflow file path resolves outside VCFA_WORKFLOW_DIR",
+      "Workflow file path resolves outside the configured workflow artifact directory",
     );
     const token = await this.http.ensureAuthenticated();
     const buffer = await readFile(srcPath);

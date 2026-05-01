@@ -819,12 +819,12 @@ export function registerWorkflowTools(
     {
       title: "Export Workflow File",
       description:
-        "Export a vRO workflow as a .workflow file under VCFA_WORKFLOW_DIR. The fileName must be a plain .workflow file name, not a path.",
+        "Export a vRO workflow as a .workflow file under the configured workflow artifact directory. The fileName must be a plain .workflow file name, not a path.",
       inputSchema: z.object({
         id: z.string().describe("The workflow ID to export"),
         fileName: z
           .string()
-          .describe("Workflow file name to save under VCFA_WORKFLOW_DIR"),
+          .describe("Workflow file name to save under the configured workflow artifact directory"),
         overwrite: z
           .boolean()
           .optional()
@@ -866,11 +866,11 @@ export function registerWorkflowTools(
     {
       title: "Preflight Workflow File",
       description:
-        "Validate a local .workflow artifact under VCFA_WORKFLOW_DIR before importing it.",
+        "Validate a local .workflow artifact under the configured workflow artifact directory before importing it.",
       inputSchema: z.object({
         fileName: z
           .string()
-          .describe("Workflow file name under VCFA_WORKFLOW_DIR to validate"),
+          .describe("Workflow file name under the configured workflow artifact directory to validate"),
       }),
       annotations: { readOnlyHint: true },
     },
@@ -900,14 +900,14 @@ export function registerWorkflowTools(
     {
       title: "Import Workflow File",
       description:
-        "Import a .workflow file from VCFA_WORKFLOW_DIR into a workflow category. Use list-categories with type WorkflowCategory to find a category ID first. Set confirm to true to proceed.",
+        "Import a .workflow file from the configured workflow artifact directory into a workflow category. Use list-categories with type WorkflowCategory to find a category ID first. Set confirm to true to proceed.",
       inputSchema: z.object({
         categoryId: z
           .string()
           .describe("The workflow category ID to import into"),
         fileName: z
           .string()
-          .describe("Workflow file name under VCFA_WORKFLOW_DIR to import"),
+          .describe("Workflow file name under the configured workflow artifact directory to import"),
         overwrite: z
           .boolean()
           .optional()
@@ -971,11 +971,11 @@ export function registerWorkflowTools(
     {
       title: "Scaffold Workflow File",
       description:
-        "Generate a local importable .workflow artifact under VCFA_WORKFLOW_DIR from structured metadata, linear scriptable tasks, scripts, and bindings. Use import-workflow-file to upload it afterwards.",
+        "Generate a local importable .workflow artifact under the configured workflow artifact directory from structured metadata, linear scriptable tasks, scripts, and bindings. Use import-workflow-file to upload it afterwards.",
       inputSchema: z.object({
         fileName: z
           .string()
-          .describe("Workflow file name to save under VCFA_WORKFLOW_DIR"),
+          .describe("Workflow file name to save under the configured workflow artifact directory"),
         overwrite: z
           .boolean()
           .optional()

@@ -32,21 +32,21 @@ export class VroHttpClient {
     this.deploymentBaseUrl = `https://${config.host}/deployment/api`;
     this.blueprintBaseUrl = `https://${config.host}/blueprint/api`;
     this.sessionUrl = `https://${config.host}/cloudapi/1.0.0/sessions`;
+    const artifactDir = resolve(
+      config.artifactDir ?? join(tmpdir(), "mcp-vcf-orchestrator"),
+    );
     this.packageDir = resolve(
-      config.packageDir ?? join(tmpdir(), "mcp-vcf-orchestrator", "packages"),
+      config.packageDir ?? join(artifactDir, "packages"),
     );
     this.resourceDir = resolve(
-      config.resourceDir ?? join(tmpdir(), "mcp-vcf-orchestrator", "resources"),
+      config.resourceDir ?? join(artifactDir, "resources"),
     );
     this.workflowDir = resolve(
-      config.workflowDir ?? join(tmpdir(), "mcp-vcf-orchestrator", "workflows"),
+      config.workflowDir ?? join(artifactDir, "workflows"),
     );
-    this.actionDir = resolve(
-      config.actionDir ?? join(tmpdir(), "mcp-vcf-orchestrator", "actions"),
-    );
+    this.actionDir = resolve(config.actionDir ?? join(artifactDir, "actions"));
     this.configurationDir = resolve(
-      config.configurationDir ??
-        join(tmpdir(), "mcp-vcf-orchestrator", "configurations"),
+      config.configurationDir ?? join(artifactDir, "configurations"),
     );
     this.loginHeader =
       "Basic " +

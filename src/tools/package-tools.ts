@@ -98,7 +98,7 @@ export function registerPackageTools(
     {
       title: "Export vRO Package",
       description:
-        "Export a vRO package as a ZIP file under VCFA_PACKAGE_DIR on the server. " +
+        "Export a vRO package as a ZIP file under the configured package artifact directory on the server. " +
         "The package name should be fully qualified (e.g. com.example.mypackage). " +
         "The fileName must be a plain .package or .zip file name, not a path.",
       inputSchema: z.object({
@@ -110,7 +110,7 @@ export function registerPackageTools(
         fileName: z
           .string()
           .describe(
-            "Package file name to save under VCFA_PACKAGE_DIR (e.g. com.example.mypackage.package)",
+            "Package file name to save under the configured package artifact directory (e.g. com.example.mypackage.package)",
           ),
         overwrite: z
           .boolean()
@@ -153,11 +153,11 @@ export function registerPackageTools(
     {
       title: "Preflight vRO Package",
       description:
-        "Validate a local .package or .zip artifact under VCFA_PACKAGE_DIR before importing it.",
+        "Validate a local .package or .zip artifact under the configured package artifact directory before importing it.",
       inputSchema: z.object({
         fileName: z
           .string()
-          .describe("Package file name under VCFA_PACKAGE_DIR to validate"),
+          .describe("Package file name under the configured package artifact directory to validate"),
       }),
       annotations: { readOnlyHint: true },
     },
@@ -187,14 +187,14 @@ export function registerPackageTools(
     {
       title: "Import vRO Package",
       description:
-        "Import a vRO package from VCFA_PACKAGE_DIR into the Orchestrator instance. " +
+        "Import a vRO package from the configured package artifact directory into the Orchestrator instance. " +
         "The fileName must be a plain .package or .zip file name. " +
         "Set confirm to true to proceed.",
       inputSchema: z.object({
         fileName: z
           .string()
           .describe(
-            "Package file name under VCFA_PACKAGE_DIR to import (e.g. com.example.mypackage.package)",
+            "Package file name under the configured package artifact directory to import (e.g. com.example.mypackage.package)",
           ),
         overwrite: z
           .boolean()

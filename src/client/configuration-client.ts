@@ -70,7 +70,7 @@ export class ConfigurationClient {
       this.http.configurationDir,
       fileName,
       "Configuration",
-      "VCFA_CONFIGURATION_DIR",
+      "the configured configuration artifact directory",
     );
   }
 
@@ -136,7 +136,7 @@ export class ConfigurationClient {
     await assertRealPathInside(
       this.http.configurationDir,
       srcPath,
-      "Configuration file path resolves outside VCFA_CONFIGURATION_DIR",
+      "Configuration file path resolves outside the configured configuration artifact directory",
     );
     const token = await this.http.ensureAuthenticated();
     const buffer = await readFile(srcPath);

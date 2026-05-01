@@ -48,11 +48,9 @@ Set the following environment variables (see `.env.example`):
 | `VCFA_ORGANIZATION`      | Yes      | Organization/tenant (e.g. `System` or `vsphere.local`)                                       |
 | `VCFA_PASSWORD`          | Yes      | Password                                                                                     |
 | `VCFA_IGNORE_TLS`        | No       | Set to `true` to skip TLS certificate verification (lab environments)                        |
-| `VCFA_PACKAGE_DIR`       | No       | Directory used for package import/export files (defaults to a temp directory)                |
-| `VCFA_RESOURCE_DIR`      | No       | Directory used for resource element import/export files (defaults to a temp directory)       |
-| `VCFA_WORKFLOW_DIR`      | No       | Directory used for workflow artifact import/export files (defaults to a temp directory)      |
-| `VCFA_ACTION_DIR`        | No       | Directory used for action artifact import/export files (defaults to a temp directory)        |
-| `VCFA_CONFIGURATION_DIR` | No       | Directory used for configuration artifact import/export files (defaults to a temp directory) |
+| `VCFA_ARTIFACT_DIR`      | No       | Root directory for local artifact import/export files (defaults to a temp directory)         |
+
+Artifact files are organized under `VCFA_ARTIFACT_DIR` as `packages`, `resources`, `workflows`, `actions`, and `configurations`. Advanced users can still override individual locations with `VCFA_PACKAGE_DIR`, `VCFA_RESOURCE_DIR`, `VCFA_WORKFLOW_DIR`, `VCFA_ACTION_DIR`, or `VCFA_CONFIGURATION_DIR`.
 
 The server authenticates by POSTing to `https://{VCFA_HOST}/cloudapi/1.0.0/sessions` with Basic Auth as `{VCFA_USERNAME}@{VCFA_ORGANIZATION}:{VCFA_PASSWORD}` and uses the returned bearer token for all VCFA API calls.
 
@@ -124,10 +122,10 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `run-workflow-and-wait`    | Validate inputs, execute a workflow, wait for completion, and return outputs or diagnostics |
 | `list-workflow-executions` | List past and current executions for a workflow, with optional status filter                |
 | `get-workflow-execution`   | Check execution status and retrieve outputs                                                 |
-| `export-workflow-file`     | Export a workflow artifact to a `.workflow` file under `VCFA_WORKFLOW_DIR`                  |
+| `export-workflow-file`     | Export a workflow artifact to a `.workflow` file under the configured workflow artifact directory |
 | `scaffold-workflow-file`   | Generate a local `.workflow` artifact from structured metadata and linear scriptable tasks  |
 | `preflight-workflow-file`  | Validate a local `.workflow` artifact before import                                        |
-| `import-workflow-file`     | Import a `.workflow` artifact from `VCFA_WORKFLOW_DIR` into a workflow category             |
+| `import-workflow-file`     | Import a `.workflow` artifact from the configured workflow artifact directory into a workflow category |
 
 ### Actions
 
@@ -136,9 +134,9 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `list-actions`       | List actions (scriptable tasks), optionally filtered by name               |
 | `get-action`         | Get action details including script content and parameters                 |
 | `create-action`      | Create a new action with script content                                    |
-| `export-action-file` | Export an action artifact to a `.action` file under `VCFA_ACTION_DIR`      |
+| `export-action-file` | Export an action artifact to a `.action` file under the configured action artifact directory |
 | `preflight-action-file` | Validate a local `.action` artifact before import                       |
-| `import-action-file` | Import a `.action` artifact from `VCFA_ACTION_DIR` into an action category |
+| `import-action-file` | Import a `.action` artifact from the configured action artifact directory into an action category |
 | `delete-action`      | Delete an action (irreversible)                                            |
 
 ### Configuration Elements
@@ -149,9 +147,9 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `get-configuration`         | Get configuration element details and attributes                                         |
 | `create-configuration`      | Create a new configuration element with attributes                                       |
 | `update-configuration`      | Update a configuration element's name, description, or attributes                        |
-| `export-configuration-file` | Export a configuration artifact to a `.vsoconf` file under `VCFA_CONFIGURATION_DIR`      |
+| `export-configuration-file` | Export a configuration artifact to a `.vsoconf` file under the configured configuration artifact directory |
 | `preflight-configuration-file` | Validate a local `.vsoconf` artifact before import                                  |
-| `import-configuration-file` | Import a `.vsoconf` artifact from `VCFA_CONFIGURATION_DIR` into a configuration category |
+| `import-configuration-file` | Import a `.vsoconf` artifact from the configured configuration artifact directory into a configuration category |
 | `delete-configuration`      | Delete a configuration element (irreversible)                                            |
 
 ### Resource Elements
@@ -159,9 +157,9 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | Tool                      | Description                                                                                 |
 | ------------------------- | ------------------------------------------------------------------------------------------- |
 | `list-resource-elements`  | List resource elements, optionally filtered by name                                         |
-| `export-resource-element` | Export a resource element by ID to a file under `VCFA_RESOURCE_DIR`                         |
-| `import-resource-element` | Import a resource element file from `VCFA_RESOURCE_DIR` into a resource category            |
-| `update-resource-element` | Replace an existing resource element's binary content from a file under `VCFA_RESOURCE_DIR` |
+| `export-resource-element` | Export a resource element by ID to a file under the configured resource artifact directory  |
+| `import-resource-element` | Import a resource element file from the configured resource artifact directory into a resource category |
+| `update-resource-element` | Replace an existing resource element's binary content from a file under the configured resource artifact directory |
 | `delete-resource-element` | Delete a resource element, optionally forcing deletion when it is referenced                |
 
 ### Categories
@@ -203,9 +201,9 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | ---------------- | ----------------------------------------------------------------------------------- |
 | `list-packages`  | List vRO packages on the Orchestrator instance, optionally filtered by name         |
 | `get-package`    | Get details of a specific package by its fully-qualified name                       |
-| `export-package` | Export a package as a ZIP file under `VCFA_PACKAGE_DIR`                             |
+| `export-package` | Export a package as a ZIP file under the configured package artifact directory       |
 | `preflight-package` | Validate a local `.package` or `.zip` artifact before import                    |
-| `import-package` | Import a package file from `VCFA_PACKAGE_DIR` into the Orchestrator instance        |
+| `import-package` | Import a package file from the configured package artifact directory into the Orchestrator instance |
 | `delete-package` | Delete a package after confirmation, optionally deleting all its contained elements |
 
 ### vRO Plugins
@@ -274,7 +272,7 @@ Assistant calls: scaffold-workflow-file(
     }]
   }
 )
-  → Writes echo-message.workflow under VCFA_WORKFLOW_DIR as an importable ZIP
+  → Writes echo-message.workflow under the configured workflow artifact directory as an importable ZIP
     with UTF-16 workflow-content
 
 Assistant calls: list-categories(type: "WorkflowCategory", filter: "Dev")
@@ -306,7 +304,7 @@ Assistant calls: export-package(
   fileName: "com.example.netbox.package",
   overwrite: true
 )
-  → Saves the package under VCFA_PACKAGE_DIR
+  → Saves the package under the configured package artifact directory
 
 Assistant calls: list-workflows(filter: "IPAM")
 Assistant calls: export-workflow-file(
@@ -314,7 +312,7 @@ Assistant calls: export-workflow-file(
   fileName: "ipam-before-change.workflow",
   overwrite: true
 )
-  → Saves the current workflow under VCFA_WORKFLOW_DIR
+  → Saves the current workflow under the configured workflow artifact directory
 
 Assistant calls: import-workflow-file(
   categoryId: "<workflow-category-id>",
@@ -322,7 +320,7 @@ Assistant calls: import-workflow-file(
   overwrite: true,
   confirm: true
 )
-  → Uploads only after confirmation and only from VCFA_WORKFLOW_DIR
+  → Uploads only after confirmation and only from the configured workflow artifact directory
 ```
 
 ### Preflight local artifacts before upload
@@ -462,7 +460,7 @@ Assistant calls: import-resource-element(
   fileName: "portal-logo.png",
   confirm: true
 )
-  → Imports a local file from VCFA_RESOURCE_DIR
+  → Imports a local file from the configured resource artifact directory
 
 User: Rotate the Netbox token and replace the logo without changing workflow code.
 

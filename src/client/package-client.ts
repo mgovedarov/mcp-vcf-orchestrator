@@ -67,7 +67,7 @@ export class PackageClient {
       this.http.packageDir,
       fileName,
       "Package",
-      "VCFA_PACKAGE_DIR",
+      "the configured package artifact directory",
     );
   }
 
@@ -126,7 +126,7 @@ export class PackageClient {
     await assertRealPathInside(
       this.http.packageDir,
       srcPath,
-      "Package file path resolves outside VCFA_PACKAGE_DIR",
+      "Package file path resolves outside the configured package artifact directory",
     );
     const token = await this.http.ensureAuthenticated();
     const buffer = await readFile(srcPath);

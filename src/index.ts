@@ -31,6 +31,7 @@ async function main(): Promise<void> {
   const organization = getRequiredEnv("VCFA_ORGANIZATION");
   const password = getRequiredEnv("VCFA_PASSWORD");
   const ignoreTls = process.env["VCFA_IGNORE_TLS"] === "true";
+  const artifactDir = process.env["VCFA_ARTIFACT_DIR"];
   const packageDir = process.env["VCFA_PACKAGE_DIR"];
   const resourceDir = process.env["VCFA_RESOURCE_DIR"];
   const workflowDir = process.env["VCFA_WORKFLOW_DIR"];
@@ -51,6 +52,7 @@ async function main(): Promise<void> {
     organization,
     password,
     ignoreTls,
+    artifactDir,
     packageDir,
     resourceDir,
     workflowDir,
@@ -68,18 +70,18 @@ async function main(): Promise<void> {
         "Use get-workflow to inspect a workflow's input parameters before running it with run-workflow.",
         "Use run-workflow-and-wait for rapid development loops that validate workflow inputs, wait for completion, and return outputs or diagnostics.",
         "After starting a workflow execution with run-workflow, use get-workflow-execution to poll for completion and retrieve outputs.",
-        "Use export-workflow-file to save a workflow artifact under VCFA_WORKFLOW_DIR; use import-workflow-file to upload a .workflow artifact from VCFA_WORKFLOW_DIR into a workflow category.",
+        "Use export-workflow-file to save a workflow artifact under the configured workflow artifact directory; use import-workflow-file to upload a .workflow artifact from that directory into a workflow category.",
         "Use scaffold-workflow-file to generate a local .workflow artifact from structured workflow metadata and linear scriptable tasks before importing it.",
         "Use preflight-workflow-file, preflight-action-file, preflight-configuration-file, and preflight-package to validate local artifacts before importing them.",
-        "Use export-action-file to save an action artifact under VCFA_ACTION_DIR; use import-action-file to upload a .action artifact from VCFA_ACTION_DIR into an action category by category name.",
-        "Use export-configuration-file to save a configuration artifact under VCFA_CONFIGURATION_DIR; use import-configuration-file to upload a .vsoconf artifact from VCFA_CONFIGURATION_DIR into a configuration category.",
+        "Use export-action-file to save an action artifact under the configured action artifact directory; use import-action-file to upload a .action artifact from that directory into an action category by category name.",
+        "Use export-configuration-file to save a configuration artifact under the configured configuration artifact directory; use import-configuration-file to upload a .vsoconf artifact from that directory into a configuration category.",
         "Use list-event-topics to discover available event topics before creating extensibility subscriptions.",
         "Use list-subscriptions to see existing event-driven triggers.",
         "Use list-catalog-items to browse the Service Broker catalog; use get-catalog-item to inspect a specific item by ID.",
         "Use list-deployments to see existing deployments; use create-deployment to deploy a catalog item, providing the catalogItemId, deploymentName, and projectId. Use list-deployment-actions to discover available deployment day-2 actions, then run-deployment-action with confirm set to true to submit one.",
         "Use list-templates to browse blueprint templates; use get-template to inspect a specific template by ID; use create-template to create a new template; use delete-template to remove one.",
-        "Use list-packages to browse vRO packages; use export-package to save a package file under VCFA_PACKAGE_DIR; use import-package to upload a package file from VCFA_PACKAGE_DIR; use delete-package with confirm set to true to remove a package.",
-        "Use list-resource-elements to browse vRO resource elements; use list-categories with type ResourceElementCategory before importing a resource element; exported and imported resource files are stored under VCFA_RESOURCE_DIR.",
+        "Use list-packages to browse vRO packages; use export-package to save a package file under the configured package artifact directory; use import-package to upload a package file from that directory; use delete-package with confirm set to true to remove a package.",
+        "Use list-resource-elements to browse vRO resource elements; use list-categories with type ResourceElementCategory before importing a resource element; exported and imported resource files are stored under the configured resource artifact directory.",
         "Use list-plugins to see all installed vRO plugins.",
       ].join(" "),
     },

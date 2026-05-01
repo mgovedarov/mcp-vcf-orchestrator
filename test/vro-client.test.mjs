@@ -22,6 +22,60 @@ function authResponse() {
   });
 }
 
+test("artifact directories default to temp subdirectories", () => {
+  const client = new VroClient(config());
+  const root = join(tmpdir(), "mcp-vcf-orchestrator");
+
+  assert.equal(client.getPackageDirectory(), join(root, "packages"));
+  assert.equal(client.getResourceDirectory(), join(root, "resources"));
+  assert.equal(client.getWorkflowDirectory(), join(root, "workflows"));
+  assert.equal(client.getActionDirectory(), join(root, "actions"));
+  assert.equal(
+    client.getConfigurationDirectory(),
+    join(root, "configurations"),
+  );
+});
+
+test("artifactDir config derives artifact type subdirectories", async () => {
+  const artifactDir = await mkdtemp(join(tmpdir(), "vcfa-artifacts-"));
+
+  try {
+    const client = new VroClient(config({ artifactDir }));
+
+    assert.equal(client.getPackageDirectory(), join(artifactDir, "packages"));
+    assert.equal(client.getResourceDirectory(), join(artifactDir, "resources"));
+    assert.equal(client.getWorkflowDirectory(), join(artifactDir, "workflows"));
+    assert.equal(client.getActionDirectory(), join(artifactDir, "actions"));
+    assert.equal(
+      client.getConfigurationDirectory(),
+      join(artifactDir, "configurations"),
+    );
+  } finally {
+    await rm(artifactDir, { recursive: true, force: true });
+  }
+});
+
+test("specific artifact directories override artifactDir", async () => {
+  const artifactDir = await mkdtemp(join(tmpdir(), "vcfa-artifacts-"));
+  const workflowDir = await mkdtemp(join(tmpdir(), "vcfa-workflows-"));
+
+  try {
+    const client = new VroClient(config({ artifactDir, workflowDir }));
+
+    assert.equal(client.getWorkflowDirectory(), workflowDir);
+    assert.equal(client.getPackageDirectory(), join(artifactDir, "packages"));
+    assert.equal(client.getResourceDirectory(), join(artifactDir, "resources"));
+    assert.equal(client.getActionDirectory(), join(artifactDir, "actions"));
+    assert.equal(
+      client.getConfigurationDirectory(),
+      join(artifactDir, "configurations"),
+    );
+  } finally {
+    await rm(artifactDir, { recursive: true, force: true });
+    await rm(workflowDir, { recursive: true, force: true });
+  }
+});
+
 function xmlArchive(rootName) {
   return zipSync({
     "artifact.xml": new TextEncoder().encode(`<${rootName} name="payload" />`),

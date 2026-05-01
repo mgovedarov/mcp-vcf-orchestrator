@@ -73,7 +73,7 @@ export async function preflightWorkflowFile(
   return preflightLocalArchive(rootDir, fileName, {
     kind: "workflow",
     label: "Workflow",
-    envName: "VCFA_WORKFLOW_DIR",
+    envName: "the configured workflow artifact directory",
     extensions: [".workflow"],
     validateArchive: validateWorkflowArchive,
   });
@@ -86,7 +86,7 @@ export async function preflightActionFile(
   return preflightLocalArchive(rootDir, fileName, {
     kind: "action",
     label: "Action",
-    envName: "VCFA_ACTION_DIR",
+    envName: "the configured action artifact directory",
     extensions: [".action"],
     validateArchive: validateGenericXmlArchive,
   });
@@ -99,7 +99,7 @@ export async function preflightConfigurationFile(
   return preflightLocalArchive(rootDir, fileName, {
     kind: "configuration",
     label: "Configuration",
-    envName: "VCFA_CONFIGURATION_DIR",
+    envName: "the configured configuration artifact directory",
     extensions: [".vsoconf"],
     validateArchive: validateGenericXmlArchive,
   });
@@ -112,7 +112,7 @@ export async function preflightPackageFile(
   return preflightLocalArchive(rootDir, fileName, {
     kind: "package",
     label: "Package",
-    envName: "VCFA_PACKAGE_DIR",
+    envName: "the configured package artifact directory",
     extensions: [".package", ".zip"],
     validateArchive: validatePackageArchive,
   });

@@ -118,7 +118,7 @@ export class ActionClient {
       this.http.actionDir,
       fileName,
       "Action",
-      "VCFA_ACTION_DIR",
+      "the configured action artifact directory",
     );
   }
 
@@ -182,7 +182,7 @@ export class ActionClient {
     await assertRealPathInside(
       this.http.actionDir,
       srcPath,
-      "Action file path resolves outside VCFA_ACTION_DIR",
+      "Action file path resolves outside the configured action artifact directory",
     );
     const token = await this.http.ensureAuthenticated();
     const buffer = await readFile(srcPath);

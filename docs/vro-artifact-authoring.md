@@ -58,9 +58,11 @@ The MCP tools implemented for this are:
 
 They read/write files only under their configured artifact directories:
 
-- `VCFA_WORKFLOW_DIR`
-- `VCFA_ACTION_DIR`
-- `VCFA_CONFIGURATION_DIR`
+- `VCFA_ARTIFACT_DIR/workflows`
+- `VCFA_ARTIFACT_DIR/actions`
+- `VCFA_ARTIFACT_DIR/configurations`
+
+Advanced users can override individual directories with `VCFA_WORKFLOW_DIR`, `VCFA_ACTION_DIR`, or `VCFA_CONFIGURATION_DIR`.
 
 ## File Safety Pattern
 
@@ -184,7 +186,7 @@ Useful live MCP sequence:
 5. `run-workflow` with inputs.
 6. `get-workflow-execution` to poll status and inspect outputs/errors.
 
-For this repository, set `VCFA_WORKFLOW_DIR` to the directory containing generated `.workflow` files before importing.
+For this repository, set `VCFA_ARTIFACT_DIR` to the root directory for generated artifacts before importing. Workflow files are read from its `workflows` subdirectory unless `VCFA_WORKFLOW_DIR` overrides it.
 
 ## Common Pitfalls
 

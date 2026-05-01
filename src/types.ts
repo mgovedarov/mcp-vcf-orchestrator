@@ -450,6 +450,7 @@ export interface VroClientConfig {
   organization: string;
   password: string;
   ignoreTls?: boolean;
+  artifactDir?: string;
   packageDir?: string;
   resourceDir?: string;
   workflowDir?: string;
