@@ -2,6 +2,11 @@ import { readFile, writeFile } from "node:fs/promises";
 import { extname } from "node:path";
 import type { VroPackage, VroPackageList } from "../types.js";
 import { parseAttrs } from "./attrs.js";
+import {
+  ensurePreflightPassed,
+  preflightPackageFile,
+  type ArtifactPreflightReport,
+} from "./artifact-preflight.js";
 import type { VroHttpClient } from "./core.js";
 import {
   assertRealPathInside,
@@ -47,6 +52,10 @@ export class PackageClient {
 
   getPackageDirectory(): string {
     return this.http.packageDir;
+  }
+
+  preflightPackageFile(fileName: string): Promise<ArtifactPreflightReport> {
+    return preflightPackageFile(this.http.packageDir, fileName);
   }
 
   private async resolvePackagePath(fileName: string): Promise<string> {
@@ -108,6 +117,7 @@ export class PackageClient {
   }
 
   async importPackage(fileName: string, overwrite = true): Promise<void> {
+    ensurePreflightPassed(await this.preflightPackageFile(fileName));
     const srcPath = await this.resolvePackagePath(fileName);
     await rejectSymlink(
       srcPath,

@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
+import { formatPreflightReport } from "../client/artifact-preflight.js";
 import type { VroClient } from "../vro-client.js";
 
 export function registerPackageTools(
@@ -139,6 +140,40 @@ export function registerPackageTools(
             {
               type: "text",
               text: `Failed to export package: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  server.registerTool(
+    "preflight-package",
+    {
+      title: "Preflight vRO Package",
+      description:
+        "Validate a local .package or .zip artifact under VCFA_PACKAGE_DIR before importing it.",
+      inputSchema: z.object({
+        fileName: z
+          .string()
+          .describe("Package file name under VCFA_PACKAGE_DIR to validate"),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ fileName }): Promise<CallToolResult> => {
+      try {
+        const report = await client.preflightPackageFile(fileName);
+        return {
+          content: [{ type: "text", text: formatPreflightReport(report) }],
+          isError: !report.valid,
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to preflight package: ${error instanceof Error ? error.message : String(error)}`,
             },
           ],
           isError: true,

@@ -48,3 +48,36 @@ test("delete-package deletes only after confirmation", async () => {
   assert.deepEqual(deleted, { name: "com.example", deleteContents: true });
   assert.match(result.content[0].text, /including contents/);
 });
+
+test("preflight-package formats reports and is read-only", async () => {
+  const handlers = new Map();
+  const configs = new Map();
+  const server = {
+    registerTool(name, config, handler) {
+      configs.set(name, config);
+      handlers.set(name, handler);
+    },
+  };
+  registerPackageTools(server, {
+    preflightPackageFile: async (fileName) => ({
+      kind: "package",
+      fileName,
+      valid: true,
+      errors: [],
+      warnings: ["No nested artifacts were recognized"],
+      metadata: { workflowArtifacts: 0 },
+      entries: [{ name: "manifest.xml", size: 12 }],
+      parameters: [],
+      actionReferences: [],
+    }),
+  });
+
+  assert.equal(configs.get("preflight-package").annotations.readOnlyHint, true);
+
+  const result = await handlers.get("preflight-package")({
+    fileName: "bundle.package",
+  });
+  assert.equal(result.isError, false);
+  assert.match(result.content[0].text, /preflight passed/);
+  assert.match(result.content[0].text, /workflowArtifacts: 0/);
+});

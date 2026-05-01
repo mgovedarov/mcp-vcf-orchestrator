@@ -29,6 +29,7 @@ import type {
   WorkflowExecutionLogs,
   WorkflowList,
 } from "../types.js";
+import type { ArtifactPreflightReport } from "./artifact-preflight.js";
 import { ActionClient } from "./action-client.js";
 import { CatalogClient } from "./catalog-client.js";
 import { CategoryClient } from "./category-client.js";
@@ -158,6 +159,10 @@ export class VroClient {
     return this.workflows.scaffoldWorkflowFile(params);
   }
 
+  preflightWorkflowFile(fileName: string): Promise<ArtifactPreflightReport> {
+    return this.workflows.preflightWorkflowFile(fileName);
+  }
+
   listActions(filter?: string): Promise<ActionList> {
     return this.actions.listActions(filter);
   }
@@ -180,6 +185,10 @@ export class VroClient {
 
   importActionFile(categoryName: string, fileName: string): Promise<void> {
     return this.actions.importActionFile(categoryName, fileName);
+  }
+
+  preflightActionFile(fileName: string): Promise<ArtifactPreflightReport> {
+    return this.actions.preflightActionFile(fileName);
   }
 
   createAction(params: {
@@ -218,6 +227,12 @@ export class VroClient {
 
   importConfigurationFile(categoryId: string, fileName: string): Promise<void> {
     return this.configurations.importConfigurationFile(categoryId, fileName);
+  }
+
+  preflightConfigurationFile(
+    fileName: string,
+  ): Promise<ArtifactPreflightReport> {
+    return this.configurations.preflightConfigurationFile(fileName);
   }
 
   createConfiguration(
@@ -390,6 +405,10 @@ export class VroClient {
 
   importPackage(fileName: string, overwrite = true): Promise<void> {
     return this.packages.importPackage(fileName, overwrite);
+  }
+
+  preflightPackageFile(fileName: string): Promise<ArtifactPreflightReport> {
+    return this.packages.preflightPackageFile(fileName);
   }
 
   deletePackage(name: string, deleteContents = false): Promise<void> {

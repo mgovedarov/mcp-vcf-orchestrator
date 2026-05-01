@@ -1,8 +1,10 @@
+import { zipSync } from "fflate";
 import assert from "node:assert/strict";
 import { mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { buildWorkflowArtifact } from "../dist/client/workflow-artifact.js";
 import { VroClient } from "../dist/vro-client.js";
 
 const config = (overrides = {}) => ({
@@ -17,6 +19,25 @@ function authResponse() {
   return new Response("", {
     status: 200,
     headers: { "x-vmware-vcloud-access-token": "token" },
+  });
+}
+
+function xmlArchive(rootName) {
+  return zipSync({
+    "artifact.xml": new TextEncoder().encode(`<${rootName} name="payload" />`),
+  });
+}
+
+function minimalWorkflowArtifact() {
+  return buildWorkflowArtifact({
+    name: "Payload",
+    outputs: [{ name: "result", type: "string" }],
+    tasks: [
+      {
+        script: 'result = "ok";',
+        outBindings: [{ name: "result", type: "string", target: "result" }],
+      },
+    ],
   });
 }
 
@@ -444,7 +465,7 @@ test("package import rejects symbolic links", async () => {
 
 test("package import sends multipart file and overwrite query", async () => {
   const packageDir = await mkdtemp(join(tmpdir(), "vcfa-packages-"));
-  await writeFile(join(packageDir, "payload.package"), "package");
+  await writeFile(join(packageDir, "payload.package"), xmlArchive("package"));
   const calls = [];
   globalThis.fetch = async (url, init) => {
     calls.push({ url: String(url), init });
@@ -564,7 +585,10 @@ test("workflow import rejects symbolic links", async () => {
 
 test("workflow import sends multipart file with category and overwrite query", async () => {
   const workflowDir = await mkdtemp(join(tmpdir(), "vcfa-workflows-"));
-  await writeFile(join(workflowDir, "payload.workflow"), "workflow");
+  await writeFile(
+    join(workflowDir, "payload.workflow"),
+    minimalWorkflowArtifact(),
+  );
   const calls = [];
   globalThis.fetch = async (url, init) => {
     calls.push({ url: String(url), init });
@@ -680,7 +704,7 @@ test("action import rejects symbolic links", async () => {
 
 test("action import sends multipart file and category name", async () => {
   const actionDir = await mkdtemp(join(tmpdir(), "vcfa-actions-"));
-  await writeFile(join(actionDir, "payload.action"), "action");
+  await writeFile(join(actionDir, "payload.action"), xmlArchive("action"));
   const calls = [];
   globalThis.fetch = async (url, init) => {
     calls.push({ url: String(url), init });
@@ -855,7 +879,10 @@ test("configuration import sends multipart file and category id", async () => {
   const configurationDir = await mkdtemp(
     join(tmpdir(), "vcfa-configurations-"),
   );
-  await writeFile(join(configurationDir, "payload.vsoconf"), "configuration");
+  await writeFile(
+    join(configurationDir, "payload.vsoconf"),
+    xmlArchive("configuration"),
+  );
   const calls = [];
   globalThis.fetch = async (url, init) => {
     calls.push({ url: String(url), init });

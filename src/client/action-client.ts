@@ -2,6 +2,11 @@ import { readFile, writeFile } from "node:fs/promises";
 import { extname } from "node:path";
 import type { Action, ActionList } from "../types.js";
 import { getLinkAttrs, type AttributeLink } from "./attrs.js";
+import {
+  ensurePreflightPassed,
+  preflightActionFile,
+  type ArtifactPreflightReport,
+} from "./artifact-preflight.js";
 import type { VroHttpClient } from "./core.js";
 import {
   assertRealPathInside,
@@ -100,6 +105,10 @@ export class ActionClient {
     return this.http.actionDir;
   }
 
+  preflightActionFile(fileName: string): Promise<ArtifactPreflightReport> {
+    return preflightActionFile(this.http.actionDir, fileName);
+  }
+
   private async resolveActionPath(fileName: string): Promise<string> {
     const ext = extname(fileName).toLowerCase();
     if (ext !== ".action") {
@@ -164,6 +173,7 @@ export class ActionClient {
     categoryName: string,
     fileName: string,
   ): Promise<void> {
+    ensurePreflightPassed(await this.preflightActionFile(fileName));
     const srcPath = await this.resolveActionPath(fileName);
     await rejectSymlink(
       srcPath,

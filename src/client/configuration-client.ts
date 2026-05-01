@@ -2,6 +2,11 @@ import { readFile, writeFile } from "node:fs/promises";
 import { extname } from "node:path";
 import type { ConfigElement, ConfigElementList } from "../types.js";
 import { parseAttrs } from "./attrs.js";
+import {
+  ensurePreflightPassed,
+  preflightConfigurationFile,
+  type ArtifactPreflightReport,
+} from "./artifact-preflight.js";
 import type { VroHttpClient } from "./core.js";
 import {
   assertRealPathInside,
@@ -48,6 +53,12 @@ export class ConfigurationClient {
 
   getConfigurationDirectory(): string {
     return this.http.configurationDir;
+  }
+
+  preflightConfigurationFile(
+    fileName: string,
+  ): Promise<ArtifactPreflightReport> {
+    return preflightConfigurationFile(this.http.configurationDir, fileName);
   }
 
   private async resolveConfigurationPath(fileName: string): Promise<string> {
@@ -116,6 +127,7 @@ export class ConfigurationClient {
     categoryId: string,
     fileName: string,
   ): Promise<void> {
+    ensurePreflightPassed(await this.preflightConfigurationFile(fileName));
     const srcPath = await this.resolveConfigurationPath(fileName);
     await rejectSymlink(
       srcPath,

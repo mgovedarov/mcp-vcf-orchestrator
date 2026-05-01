@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
+import { formatPreflightReport } from "../client/artifact-preflight.js";
 import type { VroClient } from "../vro-client.js";
 
 export function registerActionTools(
@@ -220,6 +221,40 @@ export function registerActionTools(
             {
               type: "text",
               text: `Failed to export action file: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  server.registerTool(
+    "preflight-action-file",
+    {
+      title: "Preflight Action File",
+      description:
+        "Validate a local .action artifact under VCFA_ACTION_DIR before importing it.",
+      inputSchema: z.object({
+        fileName: z
+          .string()
+          .describe("Action file name under VCFA_ACTION_DIR to validate"),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ fileName }): Promise<CallToolResult> => {
+      try {
+        const report = await client.preflightActionFile(fileName);
+        return {
+          content: [{ type: "text", text: formatPreflightReport(report) }],
+          isError: !report.valid,
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to preflight action file: ${error instanceof Error ? error.message : String(error)}`,
             },
           ],
           isError: true,

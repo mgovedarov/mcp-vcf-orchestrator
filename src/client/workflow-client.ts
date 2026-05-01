@@ -12,6 +12,11 @@ import type {
 import { parseAttrs } from "./attrs.js";
 import type { VroHttpClient } from "./core.js";
 import {
+  ensurePreflightPassed,
+  preflightWorkflowFile,
+  type ArtifactPreflightReport,
+} from "./artifact-preflight.js";
+import {
   assertRealPathInside,
   getExistingFile,
   rejectSymlink,
@@ -158,6 +163,10 @@ export class WorkflowClient {
     return this.http.workflowDir;
   }
 
+  preflightWorkflowFile(fileName: string): Promise<ArtifactPreflightReport> {
+    return preflightWorkflowFile(this.http.workflowDir, fileName);
+  }
+
   private async resolveWorkflowPath(fileName: string): Promise<string> {
     const ext = extname(fileName).toLowerCase();
     if (ext !== ".workflow") {
@@ -244,6 +253,7 @@ export class WorkflowClient {
     fileName: string,
     overwrite = true,
   ): Promise<void> {
+    ensurePreflightPassed(await this.preflightWorkflowFile(fileName));
     const srcPath = await this.resolveWorkflowPath(fileName);
     await rejectSymlink(
       srcPath,
