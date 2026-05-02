@@ -23,6 +23,18 @@ The safest workflow is discovery first:
 4. Require explicit confirmation for destructive or live write operations.
 5. Verify changes with list/get/run tools after the operation completes.
 
+## Starting A New VCFA Project
+
+When starting in a new VCFA or vRO environment, use the server to map current state before drafting new automation:
+
+1. Configure `VCFA_HOST`, `VCFA_USERNAME`, `VCFA_ORGANIZATION`, and `VCFA_PASSWORD`. Set `VCFA_ARTIFACT_DIR` when local exports and generated artifacts should live in a project directory.
+2. Verify access with read-only discovery: `list-plugins`, `list-categories`, `list-workflows`, `list-actions`, `list-templates`, `list-catalog-items`, `list-event-topics`, and `list-subscriptions`.
+3. Inspect reusable candidates with `get-workflow`, `get-action`, `get-template`, or `get-catalog-item` before designing a replacement.
+4. Read the relevant MCP resources, especially `vcfa://docs/artifact-authoring`, `vcfa://schemas/workflow-scaffold`, and the matching `vcfa://patterns/*` resource.
+5. Export existing assets before changing them. Then scaffold or edit local artifacts, run preflight and diff tools, and import only after explicit confirmation.
+
+Use the built-in MCP prompts when the assistant should follow a known workflow rather than free-form instructions. For example, use `vcfa-discover-capabilities` to inventory an unfamiliar environment conversationally, `vcfa-collect-context-snapshot` to persist reusable Markdown/JSON inventory with `collect-context-snapshot`, `vcfa-discovery-first-implementation-plan` to plan a change, `vcfa-build-workflow-from-action` to wrap a verified action, and `vcfa-review-artifact-import` before importing a local artifact. See [Resources And Prompts](../reference/resources-prompts.md) for prompt arguments and examples.
+
 ## Documentation Map
 
 - [Installation](./installation.md) covers npm and source setup.

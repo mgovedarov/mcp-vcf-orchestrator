@@ -40,6 +40,11 @@ import { ActionClient } from "./action-client.js";
 import { CatalogClient } from "./catalog-client.js";
 import { CategoryClient } from "./category-client.js";
 import { ConfigurationClient } from "./configuration-client.js";
+import {
+  collectContextSnapshot,
+  type CollectContextSnapshotParams,
+  type CollectContextSnapshotResult,
+} from "./context-snapshot.js";
 import { VroHttpClient } from "./core.js";
 import { DeploymentClient } from "./deployment-client.js";
 import { PackageClient } from "./package-client.js";
@@ -56,6 +61,7 @@ import { WorkflowClient } from "./workflow-client.js";
  * `VroClient` from `vro-client.js` and calling `client.method(...)`.
  */
 export class VroClient {
+  private http: VroHttpClient;
   private workflows: WorkflowClient;
   private actions: ActionClient;
   private configurations: ConfigurationClient;
@@ -70,6 +76,7 @@ export class VroClient {
 
   constructor(config: VroClientConfig) {
     const http = new VroHttpClient(config);
+    this.http = http;
     this.workflows = new WorkflowClient(http);
     this.actions = new ActionClient(http);
     this.configurations = new ConfigurationClient(http);
@@ -389,6 +396,16 @@ export class VroClient {
 
   getConfigurationDirectory(): string {
     return this.configurations.getConfigurationDirectory();
+  }
+
+  getContextDirectory(): string {
+    return this.http.contextDir;
+  }
+
+  collectContextSnapshot(
+    params: CollectContextSnapshotParams,
+  ): Promise<CollectContextSnapshotResult> {
+    return collectContextSnapshot(this, params);
   }
 
   exportConfigurationFile(

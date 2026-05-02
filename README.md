@@ -63,6 +63,7 @@ Useful optional variables:
 | `VCFA_WORKFLOW_DIR` | Override workflow artifact directory. |
 | `VCFA_ACTION_DIR` | Override action artifact directory. |
 | `VCFA_CONFIGURATION_DIR` | Override configuration artifact directory. |
+| `VCFA_CONTEXT_DIR` | Override persisted context snapshot directory. |
 
 ## Tool Coverage
 
@@ -78,6 +79,7 @@ The server includes tools for:
 - Cloud Assembly blueprint templates
 - Event topics and extensibility subscriptions
 - Artifact promotion planning
+- Persisted Markdown/JSON context snapshots for future agents
 - MCP resources and prompts for discovery-first implementation work
 
 See the [tool reference](docs/reference/tools.md) for the full list.

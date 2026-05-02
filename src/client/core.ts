@@ -17,6 +17,7 @@ export class VroHttpClient {
   readonly workflowDir: string;
   readonly actionDir: string;
   readonly configurationDir: string;
+  readonly contextDir: string;
 
   private sessionUrl: string;
   private loginHeader: string;
@@ -48,6 +49,7 @@ export class VroHttpClient {
     this.configurationDir = resolve(
       config.configurationDir ?? join(artifactDir, "configurations"),
     );
+    this.contextDir = resolve(config.contextDir ?? join(artifactDir, "context"));
     this.loginHeader =
       "Basic " +
       Buffer.from(

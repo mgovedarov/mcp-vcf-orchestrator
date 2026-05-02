@@ -17,6 +17,7 @@ function promptResult(description: string, text: string): GetPromptResult {
 function discoveryGuardrails(): string[] {
   return [
     "Discovery guardrail: if a required workflow, action, template, category, project, parameter, or return type is not found, stop and report the missing fact. Do not invent IDs, parameter names, types, schemas, or provider-specific YAML.",
+    "When action discovery is required, list-actions must produce an exact candidate and get-action must verify its contract. If list-actions returns no match or only partial/ambiguous action data, stop and ask for the missing action details instead of inventing parameter names or return types.",
     "Prefer reading vcfa://docs/artifact-authoring and the relevant vcfa://patterns/* or vcfa://schemas/* resource before drafting artifacts.",
   ];
 }
@@ -127,6 +128,42 @@ export function registerVcfaPrompts(server: McpServer): void {
           ...discoveryGuardrails(),
           "Summarize what already exists, what can be reused, and what gaps remain.",
           "Prefer concrete next tool calls and avoid creating or importing artifacts during discovery.",
+        ].join("\n"),
+      ),
+  );
+
+  server.registerPrompt(
+    "vcfa-collect-context-snapshot",
+    {
+      title: "Collect Context Snapshot",
+      description:
+        "Collect and persist reusable VCFA/vRO context for future agents.",
+      argsSchema: {
+        goal: z
+          .string()
+          .optional()
+          .describe("Optional project or implementation goal for the snapshot"),
+        includeOptionalDomains: z
+          .boolean()
+          .optional()
+          .describe(
+            "Whether to include templates, catalog items, event topics, subscriptions, packages, and plugins",
+          ),
+      },
+    },
+    ({ goal, includeOptionalDomains }) =>
+      promptResult(
+        "Collect reusable VCFA/vRO context.",
+        [
+          goal ? `Goal: ${goal}` : "Goal: create reusable VCFA/vRO context.",
+          `Include optional domains: ${includeOptionalDomains === true ? "yes" : "no"}`,
+          "",
+          "Use collect-context-snapshot before major workflow, action, template, or subscription work in an unfamiliar environment.",
+          "Use vcfa-discover-capabilities for exploratory conversational discovery; use collect-context-snapshot when the inventory should be persisted for future agents.",
+          "Persist both Markdown and JSON so humans and agents can reuse the same snapshot before rediscovering assets.",
+          ...discoveryGuardrails(),
+          "Do not ask the user to provide workflow, action, parameter, category, project, or template details that can be discovered by the snapshot tool.",
+          "After the snapshot is written, summarize the saved paths, collected counts, skipped counts, and any warnings.",
         ].join("\n"),
       ),
   );

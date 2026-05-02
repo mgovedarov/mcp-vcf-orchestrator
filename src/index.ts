@@ -6,6 +6,7 @@ import { registerActionTools } from "./tools/action-tools.js";
 import { registerCatalogTools } from "./tools/catalog-tools.js";
 import { registerCategoryTools } from "./tools/category-tools.js";
 import { registerConfigTools } from "./tools/config-tools.js";
+import { registerContextTools } from "./tools/context-tools.js";
 import { registerDeploymentTools } from "./tools/deployment-tools.js";
 import { registerPackageTools } from "./tools/package-tools.js";
 import { registerPluginTools } from "./tools/plugin-tools.js";
@@ -40,6 +41,7 @@ async function main(): Promise<void> {
   const workflowDir = process.env["VCFA_WORKFLOW_DIR"];
   const actionDir = process.env["VCFA_ACTION_DIR"];
   const configurationDir = process.env["VCFA_CONFIGURATION_DIR"];
+  const contextDir = process.env["VCFA_CONTEXT_DIR"];
 
   if (ignoreTls) {
     process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0";
@@ -61,6 +63,7 @@ async function main(): Promise<void> {
     workflowDir,
     actionDir,
     configurationDir,
+    contextDir,
   });
 
   // Create MCP server
@@ -77,6 +80,7 @@ async function main(): Promise<void> {
         "Use scaffold-workflow-file to generate a local .workflow artifact from structured workflow metadata and linear scriptable tasks before importing it.",
         "Use preflight-workflow-file, preflight-action-file, preflight-configuration-file, and preflight-package to validate local artifacts before importing them.",
         "Use prepare-artifact-promotion before artifact imports when you need preflight, optional live backup export, workflow/action diff summaries, and the exact confirmed import call; it never imports.",
+        "Use collect-context-snapshot to persist reusable Markdown and JSON summaries of workflows, actions, configurations, resources, categories, and optional VCFA domains for future agents.",
         "Use export-action-file to save an action artifact under the configured action artifact directory; use import-action-file to upload a .action artifact from that directory into an action category by category name.",
         "Use export-configuration-file to save a configuration artifact under the configured configuration artifact directory; use import-configuration-file to upload a .vsoconf artifact from that directory into a configuration category.",
         "Use list-event-topics to discover available event topics before creating extensibility subscriptions.",
@@ -102,6 +106,7 @@ async function main(): Promise<void> {
   registerTemplateTools(server, client);
   registerPackageTools(server, client);
   registerPromotionTools(server, client);
+  registerContextTools(server, client);
   registerResourceTools(server, client);
   registerPluginTools(server, client);
   registerVcfaResources(server, client);
