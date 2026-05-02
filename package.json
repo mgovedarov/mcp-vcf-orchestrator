@@ -43,7 +43,7 @@
     "@modelcontextprotocol/sdk": "^1.29.0",
     "fast-xml-parser": "^5.7.2",
     "fflate": "^0.8.2",
-    "zod": "^4.4.1"
+    "zod": "^4.4.2"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",
