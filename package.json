@@ -51,6 +51,10 @@
     "typescript": "^6.0.3",
     "vitepress": "^1.6.4"
   },
+  "overrides": {
+    "esbuild": "^0.25.12",
+    "vite": "6.4.2"
+  },
   "engines": {
     "node": ">=18.0.0"
   }
