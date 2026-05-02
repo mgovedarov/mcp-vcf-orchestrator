@@ -30,6 +30,7 @@ It uses the returned bearer token for later VCF Automation, Service Broker, Clou
 | `VCFA_WORKFLOW_DIR` | Override the workflow artifact directory. |
 | `VCFA_ACTION_DIR` | Override the action artifact directory. |
 | `VCFA_CONFIGURATION_DIR` | Override the configuration artifact directory. |
+| `VCFA_CONTEXT_DIR` | Override the persisted context snapshot directory. |
 
 ## Artifact Directories
 
@@ -39,6 +40,7 @@ When `VCFA_ARTIFACT_DIR` is set, artifacts are organized into typed subdirectori
 VCFA_ARTIFACT_DIR/
   actions/
   configurations/
+  context/
   packages/
   resources/
   workflows/

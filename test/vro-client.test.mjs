@@ -34,6 +34,7 @@ test("artifact directories default to temp subdirectories", () => {
     client.getConfigurationDirectory(),
     join(root, "configurations"),
   );
+  assert.equal(client.getContextDirectory(), join(root, "context"));
 });
 
 test("artifactDir config derives artifact type subdirectories", async () => {
@@ -50,6 +51,7 @@ test("artifactDir config derives artifact type subdirectories", async () => {
       client.getConfigurationDirectory(),
       join(artifactDir, "configurations"),
     );
+    assert.equal(client.getContextDirectory(), join(artifactDir, "context"));
   } finally {
     await rm(artifactDir, { recursive: true, force: true });
   }
@@ -58,11 +60,13 @@ test("artifactDir config derives artifact type subdirectories", async () => {
 test("specific artifact directories override artifactDir", async () => {
   const artifactDir = await mkdtemp(join(tmpdir(), "vcfa-artifacts-"));
   const workflowDir = await mkdtemp(join(tmpdir(), "vcfa-workflows-"));
+  const contextDir = await mkdtemp(join(tmpdir(), "vcfa-context-"));
 
   try {
-    const client = new VroClient(config({ artifactDir, workflowDir }));
+    const client = new VroClient(config({ artifactDir, workflowDir, contextDir }));
 
     assert.equal(client.getWorkflowDirectory(), workflowDir);
+    assert.equal(client.getContextDirectory(), contextDir);
     assert.equal(client.getPackageDirectory(), join(artifactDir, "packages"));
     assert.equal(client.getResourceDirectory(), join(artifactDir, "resources"));
     assert.equal(client.getActionDirectory(), join(artifactDir, "actions"));
@@ -73,6 +77,7 @@ test("specific artifact directories override artifactDir", async () => {
   } finally {
     await rm(artifactDir, { recursive: true, force: true });
     await rm(workflowDir, { recursive: true, force: true });
+    await rm(contextDir, { recursive: true, force: true });
   }
 });
 

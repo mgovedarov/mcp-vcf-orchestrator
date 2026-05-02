@@ -143,6 +143,17 @@ test("prompts return workflow instructions with provided arguments", async () =>
   assert.match(discover.messages[0].content.text, /NSX automation coverage/);
   assert.match(discover.messages[0].content.text, /installed plugins/);
   assert.match(discover.messages[0].content.text, /Do not invent IDs/);
+
+  const snapshot = await prompts
+    .get("vcfa-collect-context-snapshot")
+    .handler({
+      goal: "Prepare project context",
+      includeOptionalDomains: true,
+    });
+  assert.match(snapshot.messages[0].content.text, /Prepare project context/);
+  assert.match(snapshot.messages[0].content.text, /collect-context-snapshot/);
+  assert.match(snapshot.messages[0].content.text, /vcfa-discover-capabilities/);
+  assert.match(snapshot.messages[0].content.text, /Include optional domains: yes/);
 });
 
 test("implementation prompts include discovery-first guardrails", async () => {
@@ -158,6 +169,8 @@ test("implementation prompts include discovery-first guardrails", async () => {
   assert.match(fromAction.messages[0].content.text, /get-action/);
   assert.match(fromAction.messages[0].content.text, /action-wrapper/);
   assert.match(fromAction.messages[0].content.text, /Do not invent IDs/);
+  assert.match(fromAction.messages[0].content.text, /partial\/ambiguous action data/);
+  assert.match(fromAction.messages[0].content.text, /instead of inventing parameter names or return types/);
 
   const refactor = await prompts.get("vcfa-refactor-workflow").handler({
     workflowHint: "List VMs",
@@ -198,4 +211,5 @@ test("implementation prompts include discovery-first guardrails", async () => {
     });
   assert.match(plan.messages[0].content.text, /read-only discovery/);
   assert.match(plan.messages[0].content.text, /preflight\/diff/);
+  assert.match(plan.messages[0].content.text, /get-action must verify its contract/);
 });

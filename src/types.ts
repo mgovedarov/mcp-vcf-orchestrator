@@ -505,4 +505,5 @@ export interface VroClientConfig {
   workflowDir?: string;
   actionDir?: string;
   configurationDir?: string;
+  contextDir?: string;
 }

@@ -2,6 +2,12 @@
 
 Tools are grouped by operating domain. Read-only tools are safe for discovery; write and delete tools can modify live VCFA/vRO state or local artifact files.
 
+## Context Snapshots
+
+| Tool | Purpose |
+| --- | --- |
+| `collect-context-snapshot` | Collect reusable VCFA/vRO context and persist deterministic Markdown and JSON snapshots without dumping secrets, scripts, template YAML, or binary content. |
+
 ## Artifact Promotion
 
 | Tool | Purpose |
