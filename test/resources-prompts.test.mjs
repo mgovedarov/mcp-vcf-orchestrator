@@ -149,11 +149,14 @@ test("prompts return workflow instructions with provided arguments", async () =>
     .handler({
       goal: "Prepare project context",
       includeOptionalDomains: true,
+      profile: "vcfaBuiltIns",
     });
   assert.match(snapshot.messages[0].content.text, /Prepare project context/);
   assert.match(snapshot.messages[0].content.text, /collect-context-snapshot/);
   assert.match(snapshot.messages[0].content.text, /vcfa-discover-capabilities/);
   assert.match(snapshot.messages[0].content.text, /Include optional domains: yes/);
+  assert.match(snapshot.messages[0].content.text, /Profile: vcfaBuiltIns/);
+  assert.match(snapshot.messages[0].content.text, /workflows in subfolders below Library/);
 });
 
 test("implementation prompts include discovery-first guardrails", async () => {

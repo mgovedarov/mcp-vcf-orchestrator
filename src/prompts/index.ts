@@ -149,16 +149,24 @@ export function registerVcfaPrompts(server: McpServer): void {
           .describe(
             "Whether to include templates, catalog items, event topics, subscriptions, packages, and plugins",
           ),
+        profile: z
+          .enum(["default", "vcfaBuiltIns"])
+          .optional()
+          .describe(
+            "Snapshot profile. Use vcfaBuiltIns for workflows in subfolders below Library and actions in com.vmware modules.",
+          ),
       },
     },
-    ({ goal, includeOptionalDomains }) =>
+    ({ goal, includeOptionalDomains, profile }) =>
       promptResult(
         "Collect reusable VCFA/vRO context.",
         [
           goal ? `Goal: ${goal}` : "Goal: create reusable VCFA/vRO context.",
+          `Profile: ${profile ?? "default"}`,
           `Include optional domains: ${includeOptionalDomains === true ? "yes" : "no"}`,
           "",
           "Use collect-context-snapshot before major workflow, action, template, or subscription work in an unfamiliar environment.",
+          "Use profile vcfaBuiltIns when the snapshot should focus on VMware baseline content: workflows in subfolders below Library and actions in com.vmware modules.",
           "Use vcfa-discover-capabilities for exploratory conversational discovery; use collect-context-snapshot when the inventory should be persisted for future agents.",
           "Persist both Markdown and JSON so humans and agents can reuse the same snapshot before rediscovering assets.",
           ...discoveryGuardrails(),

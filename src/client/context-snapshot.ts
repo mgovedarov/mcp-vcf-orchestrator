@@ -46,12 +46,15 @@ export type ContextSnapshotDomain =
   | (typeof CORE_DOMAINS)[number]
   | (typeof OPTIONAL_DOMAINS)[number];
 
+export type ContextSnapshotProfile = "default" | "vcfaBuiltIns";
+
 export interface CollectContextSnapshotParams {
   fileBaseName?: string;
   overwrite?: boolean;
   domains?: ContextSnapshotDomain[];
   includeOptionalDomains?: boolean;
   maxItemsPerDomain?: number;
+  profile?: ContextSnapshotProfile;
 }
 
 export interface CollectContextSnapshotResult {
@@ -110,8 +113,10 @@ type SnapshotSection = unknown[] | Record<string, unknown[]>;
 
 interface ContextSnapshot {
   schemaVersion: 1;
+  profile: ContextSnapshotProfile;
   domains: ContextSnapshotDomain[];
   limits: { maxItemsPerDomain: number };
+  criteria?: Record<string, string>;
   warnings: string[];
   counts: Record<string, number>;
   skipped: Record<string, number>;
@@ -122,10 +127,19 @@ export async function collectContextSnapshot(
   client: ContextSnapshotClient,
   params: CollectContextSnapshotParams = {},
 ): Promise<CollectContextSnapshotResult> {
-  const fileBaseName = params.fileBaseName ?? "vcfa-context";
+  const profile = params.profile ?? "default";
+  const fileBaseName =
+    params.fileBaseName ??
+    (profile === "vcfaBuiltIns" ? "vcfa-builtins-context" : "vcfa-context");
   validateFileBaseName(fileBaseName);
-  const maxItemsPerDomain = normalizeLimit(params.maxItemsPerDomain);
-  const domains = resolveDomains(params.domains, params.includeOptionalDomains);
+  const maxItemsPerDomain = normalizeLimit(
+    params.maxItemsPerDomain ?? (profile === "vcfaBuiltIns" ? 1000 : undefined),
+  );
+  const domains = resolveDomains(
+    params.domains,
+    params.includeOptionalDomains,
+    profile,
+  );
   const warnings: string[] = [];
   const counts: Record<string, number> = {};
   const skipped: Record<string, number> = {};
@@ -133,8 +147,10 @@ export async function collectContextSnapshot(
 
   const snapshot: ContextSnapshot = {
     schemaVersion: 1,
+    profile,
     domains,
     limits: { maxItemsPerDomain },
+    criteria: profileCriteria(profile),
     warnings,
     counts,
     skipped,
@@ -142,7 +158,13 @@ export async function collectContextSnapshot(
   };
 
   for (const domain of domains) {
-    const result = await collectDomain(client, domain, maxItemsPerDomain, warnings);
+    const result = await collectDomain(
+      client,
+      domain,
+      maxItemsPerDomain,
+      warnings,
+      profile,
+    );
     data[domain] = result.data;
     counts[domain] = result.stats.count;
     skipped[domain] = result.stats.skipped;
@@ -168,9 +190,13 @@ async function collectDomain(
   domain: ContextSnapshotDomain,
   maxItems: number,
   warnings: string[],
+  profile: ContextSnapshotProfile,
 ): Promise<{ data: SnapshotSection; stats: DomainStats }> {
   switch (domain) {
     case "workflows":
+      if (profile === "vcfaBuiltIns") {
+        return collectBuiltInWorkflows(client, maxItems, warnings);
+      }
       return collectListWithDetails(
         "workflows",
         () => client.listWorkflows(),
@@ -181,6 +207,9 @@ async function collectDomain(
         warnings,
       );
     case "actions":
+      if (profile === "vcfaBuiltIns") {
+        return collectBuiltInActions(client, maxItems, warnings);
+      }
       return collectListWithDetails(
         "actions",
         () => client.listActions(),
@@ -302,6 +331,78 @@ async function collectListWithDetails<TListItem, TDetail>(
   return { data, stats: boundedStats(rawItems, maxItems) };
 }
 
+async function collectBuiltInWorkflows(
+  client: ContextSnapshotClient,
+  maxItems: number,
+  warnings: string[],
+): Promise<{ data: unknown[]; stats: DomainStats }> {
+  const libraryCategoryIds =
+    await getLibraryWorkflowDescendantCategoryIds(client, warnings);
+  const list = await client.listWorkflows();
+  const filtered = (list.link ?? []).filter((workflow) =>
+    isLibraryWorkflow(workflow, libraryCategoryIds),
+  );
+  return collectFilteredListWithDetails(
+    "workflows",
+    filtered,
+    (item) => item.id,
+    (id) => client.getWorkflow(id),
+    summarizeWorkflow,
+    maxItems,
+    warnings,
+  );
+}
+
+async function collectBuiltInActions(
+  client: ContextSnapshotClient,
+  maxItems: number,
+  warnings: string[],
+): Promise<{ data: unknown[]; stats: DomainStats }> {
+  const list = await client.listActions();
+  const filtered = (list.link ?? []).filter((action) =>
+    isVmwareActionModule(action.module),
+  );
+  return collectFilteredListWithDetails(
+    "actions",
+    filtered,
+    (item) => item.id || item.fqn,
+    (id) => client.getAction(id),
+    summarizeAction,
+    maxItems,
+    warnings,
+  );
+}
+
+async function collectFilteredListWithDetails<TListItem, TDetail>(
+  domain: string,
+  rawItems: TListItem[],
+  idFn: (item: TListItem) => string | undefined,
+  detailFn: (id: string) => Promise<TDetail>,
+  summarize: (item: TDetail | TListItem) => unknown,
+  maxItems: number,
+  warnings: string[],
+): Promise<{ data: unknown[]; stats: DomainStats }> {
+  const items = sortByNameAndId(rawItems).slice(0, maxItems);
+  const data: unknown[] = [];
+  for (const item of items) {
+    const id = idFn(item);
+    if (!id) {
+      warnings.push(`${domain}: skipped item without an ID or name`);
+      data.push(summarize(item));
+      continue;
+    }
+    try {
+      data.push(summarize(await detailFn(id)));
+    } catch (error) {
+      warnings.push(
+        `${domain}: detail lookup failed for ${id}: ${formatError(error)}`,
+      );
+      data.push(summarize(item));
+    }
+  }
+  return { data, stats: boundedStats(rawItems, maxItems) };
+}
+
 async function collectCategories(
   client: ContextSnapshotClient,
   maxItems: number,
@@ -327,6 +428,81 @@ async function collectCategories(
     }
   }
   return { data, stats: { count, skipped } };
+}
+
+async function getLibraryWorkflowDescendantCategoryIds(
+  client: ContextSnapshotClient,
+  warnings: string[],
+): Promise<Set<string>> {
+  try {
+    const list = await client.listCategories("WorkflowCategory");
+    const categories = list.link ?? [];
+    const libraryRoots = categories.filter(isLibraryCategoryRoot);
+    if (libraryRoots.length === 0) {
+      warnings.push(
+        "workflows: no WorkflowCategory named Library was found; built-ins profile will only match workflow categoryName path metadata",
+      );
+      return new Set();
+    }
+    const rootPaths = libraryRoots.map(normalizeCategoryPath).filter(Boolean);
+    const descendantCategoryIds = new Set(
+      categories
+        .filter((category) => isLibraryDescendantCategory(category, rootPaths))
+        .map((category) => category.id),
+    );
+    if (descendantCategoryIds.size === 0) {
+      warnings.push(
+        "workflows: no Library descendant WorkflowCategory paths were found; built-ins profile will only match workflow categoryName path metadata",
+      );
+    }
+    return descendantCategoryIds;
+  } catch (error) {
+    warnings.push(
+      `workflows: failed to discover Library workflow categories: ${formatError(error)}`,
+    );
+    return new Set();
+  }
+}
+
+function isLibraryWorkflow(
+  workflow: Workflow,
+  libraryCategoryIds: Set<string>,
+): boolean {
+  if (workflow.categoryId && libraryCategoryIds.has(workflow.categoryId)) {
+    return true;
+  }
+  return isLibraryCategoryName(workflow.categoryName);
+}
+
+function isLibraryDescendantCategory(
+  category: Category,
+  rootPaths: string[],
+): boolean {
+  const path = normalizeCategoryPath(category);
+  return rootPaths.some(
+    (rootPath) => path.startsWith(`${rootPath}/`),
+  );
+}
+
+function isLibraryCategoryRoot(category: Category): boolean {
+  return category.name === "Library" || normalizeCategoryPath(category) === "/Library";
+}
+
+function normalizeCategoryPath(category: Category): string {
+  const path = category.path?.trim();
+  if (!path) return "";
+  const normalized = path.replace(/\\/g, "/").replace(/\/+/g, "/");
+  return normalized.startsWith("/") ? normalized : `/${normalized}`;
+}
+
+function isLibraryCategoryName(categoryName?: string): boolean {
+  if (!categoryName) return false;
+  const normalized = categoryName.trim().replace(/\\/g, "/").replace(/^\/+/, "");
+  return normalized.startsWith("Library/");
+}
+
+function isVmwareActionModule(moduleName?: string): boolean {
+  return moduleName === "com.vmware" || moduleName?.startsWith("com.vmware.") === true;
 }
 
 function summarizeWorkflow(workflow: Workflow) {
@@ -501,10 +677,19 @@ function renderMarkdown(snapshot: ContextSnapshot): string {
     "# VCFA Context Snapshot",
     "",
     `Schema version: ${snapshot.schemaVersion}`,
+    `Profile: ${snapshot.profile}`,
     `Domains: ${snapshot.domains.join(", ")}`,
     `Max items per domain: ${snapshot.limits.maxItemsPerDomain}`,
     "",
   ];
+
+  if (snapshot.criteria && Object.keys(snapshot.criteria).length > 0) {
+    lines.push("## Criteria", "");
+    for (const [domain, criteria] of Object.entries(snapshot.criteria)) {
+      lines.push(`- ${domain}: ${criteria}`);
+    }
+    lines.push("");
+  }
 
   if (snapshot.warnings.length > 0) {
     lines.push("## Warnings", "");
@@ -610,8 +795,13 @@ async function ensureWritable(
 function resolveDomains(
   requested?: ContextSnapshotDomain[],
   includeOptionalDomains?: boolean,
+  profile: ContextSnapshotProfile = "default",
 ): ContextSnapshotDomain[] {
-  const domains = requested?.length ? requested : [...CORE_DOMAINS];
+  const domains = requested?.length
+    ? requested
+    : profile === "vcfaBuiltIns"
+      ? (["workflows", "actions"] satisfies ContextSnapshotDomain[])
+      : [...CORE_DOMAINS];
   const resolved = new Set<ContextSnapshotDomain>(domains);
   if (includeOptionalDomains) {
     for (const domain of OPTIONAL_DOMAINS) resolved.add(domain);
@@ -625,6 +815,16 @@ function normalizeLimit(limit?: number): number {
     throw new Error("maxItemsPerDomain must be a positive integer");
   }
   return limit;
+}
+
+function profileCriteria(
+  profile: ContextSnapshotProfile,
+): Record<string, string> | undefined {
+  if (profile !== "vcfaBuiltIns") return undefined;
+  return {
+    workflows: "WorkflowCategory paths below Library",
+    actions: "module is com.vmware or starts with com.vmware.",
+  };
 }
 
 function boundedStats(items: unknown[], maxItems: number): DomainStats {

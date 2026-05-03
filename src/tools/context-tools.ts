@@ -56,6 +56,12 @@ export function registerContextTools(
           .positive()
           .optional()
           .describe("Maximum items to collect per domain. Defaults to 100."),
+        profile: z
+          .enum(["default", "vcfaBuiltIns"])
+          .optional()
+          .describe(
+            "Snapshot profile. Use vcfaBuiltIns to collect workflows in subfolders below Library and actions in com.vmware modules.",
+          ),
       }),
       annotations: { readOnlyHint: true },
     },

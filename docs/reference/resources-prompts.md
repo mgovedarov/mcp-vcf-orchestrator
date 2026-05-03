@@ -76,6 +76,7 @@ Persist reusable Markdown and JSON VCFA/vRO context for future agents.
 | --- | --- | --- | --- | --- |
 | `goal` | string | No | reusable VCFA/vRO context | Optional project or implementation goal for the snapshot. |
 | `includeOptionalDomains` | boolean | No | `false` | Whether to include templates, catalog items, event topics, subscriptions, packages, and plugins in addition to the core context domains. |
+| `profile` | enum | No | `default` | Use `vcfaBuiltIns` when the snapshot should focus on workflows in subfolders below `Library` and actions in `com.vmware` modules. |
 :::
 
 ### `vcfa-build-workflow-from-action`
@@ -161,6 +162,14 @@ Persist reusable context:
 Use prompt vcfa-collect-context-snapshot with:
 goal: "Persist reusable VM provisioning context before implementation work."
 includeOptionalDomains: true
+```
+
+Persist VMware baseline Library/com.vmware context:
+
+```text
+Use prompt vcfa-collect-context-snapshot with:
+goal: "Persist VMware built-in workflow and action baseline context."
+profile: vcfaBuiltIns
 ```
 
 For large environments where the default 100-item-per-domain limit causes skipped items, call the tool directly with a higher limit:
