@@ -21,102 +21,130 @@ The server exposes MCP resources for documentation, artifact patterns, and live 
 
 ## Prompts
 
-| Prompt | Purpose |
-| --- | --- |
-| `vcfa-author-workflow` | Guide workflow authoring, scaffolding, preflight, and import. |
-| `vcfa-review-artifact-import` | Review local artifacts before import. |
-| `vcfa-troubleshoot-deployment` | Inspect a deployment and guide safe remediation. |
-| `vcfa-discover-capabilities` | Discover reusable plugins, categories, actions, workflows, catalog items, and templates. |
-| `vcfa-collect-context-snapshot` | Persist reusable Markdown/JSON VCFA/vRO context for future agents. |
-| `vcfa-build-workflow-from-action` | Discover an existing action and scaffold a verified workflow wrapper. |
-| `vcfa-refactor-workflow` | Inspect, export, preflight, and safely plan workflow refactors. |
-| `vcfa-create-template` | Discover templates and create blueprint templates safely. |
-| `vcfa-review-template` | Review template metadata, content, and catalog readiness. |
-| `vcfa-integrate-workflow-template-subscription` | Plan workflow, template, catalog, deployment, and subscription integration. |
-| `vcfa-discovery-first-implementation-plan` | Produce a phased plan that starts with verified read-only discovery. |
-
 Use prompts when you want the client assistant to follow one of the server's discovery-first playbooks. Prompts are most useful at the start of a task, before tool calls or artifact edits, because they tell the assistant which read-only discovery calls, resources, preflight checks, confirmation points, and verification steps belong in the workflow.
 
 Use `vcfa-discover-capabilities` for exploratory conversational discovery. Use `vcfa-collect-context-snapshot` when that discovery should be persisted as reusable Markdown and JSON inventory for future agents.
 
-## Prompt Parameters
+### `vcfa-author-workflow`
 
-### vcfa-author-workflow
+Guide workflow authoring, scaffolding, preflight, and import. This prompt plans, scaffolds, preflights, and safely imports a vRO workflow artifact.
 
-| Parameter | Required | Description |
-| --- | --- | --- |
-| `goal` | yes | Workflow goal or requirements. |
-| `categoryHint` | no | Workflow category name or path hint. |
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `goal` | string | Yes | - | Workflow goal or requirements. |
+| `categoryHint` | string | No | - | Optional workflow category name or path hint. |
+:::
 
-### vcfa-review-artifact-import
+### `vcfa-review-artifact-import`
 
-| Parameter | Required | Description |
-| --- | --- | --- |
-| `artifactKind` | yes | Artifact kind: `workflow`, `action`, `configuration`, or `package`. |
-| `fileName` | yes | Local artifact file name to review. |
+Review a local workflow, action, configuration, or package artifact before import.
 
-### vcfa-troubleshoot-deployment
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `artifactKind` | enum | Yes | - | Artifact kind to review: `workflow`, `action`, `configuration`, or `package`. |
+| `fileName` | string | Yes | - | Local artifact file name to review. |
+:::
 
-| Parameter | Required | Description |
-| --- | --- | --- |
-| `deploymentId` | yes | Deployment ID to inspect and troubleshoot. |
+### `vcfa-troubleshoot-deployment`
 
-### vcfa-discover-capabilities
+Inspect a deployment and guide safe troubleshooting or remediation.
 
-| Parameter | Required | Description |
-| --- | --- | --- |
-| `goal` | no | Optional automation or troubleshooting goal to focus the discovery. |
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `deploymentId` | string | Yes | - | Deployment ID to troubleshoot. |
+:::
 
-### vcfa-collect-context-snapshot
+### `vcfa-discover-capabilities`
 
-| Parameter | Required | Description |
-| --- | --- | --- |
-| `goal` | no | Optional project or implementation goal for the snapshot. |
-| `includeOptionalDomains` | no | Also collect templates, catalog items, event topics, subscriptions, packages, and plugins. |
+Discover reusable plugins, categories, actions, workflows, catalog items, and templates. Use this for exploratory conversational discovery before creating or importing anything.
 
-### vcfa-build-workflow-from-action
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `goal` | string | No | general discovery | Optional automation or troubleshooting goal to focus the discovery. |
+:::
 
-| Parameter | Required | Description |
-| --- | --- | --- |
-| `actionHint` | yes | Action name, module, ID, or fully qualified name hint. |
-| `workflowGoal` | yes | Desired workflow name or public behavior. |
-| `categoryHint` | no | Workflow category name or path hint. |
+### `vcfa-collect-context-snapshot`
 
-### vcfa-refactor-workflow
+Persist reusable Markdown and JSON VCFA/vRO context for future agents.
 
-| Parameter | Required | Description |
-| --- | --- | --- |
-| `workflowHint` | yes | Workflow ID, name, or search hint for the workflow to refactor. |
-| `refactorGoal` | yes | Desired refactor outcome. |
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `goal` | string | No | reusable VCFA/vRO context | Optional project or implementation goal for the snapshot. |
+| `includeOptionalDomains` | boolean | No | `false` | Whether to include templates, catalog items, event topics, subscriptions, packages, and plugins in addition to the core context domains. |
+:::
 
-### vcfa-create-template
+### `vcfa-build-workflow-from-action`
 
-| Parameter | Required | Description |
-| --- | --- | --- |
-| `templateGoal` | yes | Template purpose or desired workload. |
-| `projectHint` | no | Project name or ID hint. |
+Discover an existing action and scaffold a workflow wrapper around its verified contract.
 
-### vcfa-review-template
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `actionHint` | string | Yes | - | Action name, module, ID, or fully qualified name hint. |
+| `workflowGoal` | string | Yes | - | Desired workflow name or public behavior. |
+| `categoryHint` | string | No | - | Optional workflow category name or path hint. |
+:::
 
-| Parameter | Required | Description |
-| --- | --- | --- |
-| `templateId` | yes | Template ID to review. |
-| `reviewGoal` | no | Optional review focus, such as catalog readiness or small VM shape. |
+### `vcfa-refactor-workflow`
 
-### vcfa-integrate-workflow-template-subscription
+Inspect, export, preflight, and safely plan workflow refactors.
 
-| Parameter | Required | Description |
-| --- | --- | --- |
-| `integrationGoal` | yes | Integration goal or lifecycle event to orchestrate. |
-| `workflowHint` | no | Optional workflow name, ID, or search hint. |
-| `templateHint` | no | Optional template name or ID hint. |
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `workflowHint` | string | Yes | - | Workflow ID, name, or search hint for the workflow to refactor. |
+| `refactorGoal` | string | Yes | - | Desired refactor outcome. |
+:::
 
-### vcfa-discovery-first-implementation-plan
+### `vcfa-create-template`
 
-| Parameter | Required | Description |
-| --- | --- | --- |
-| `goal` | yes | Implementation goal. |
-| `artifactKinds` | no | Optional artifact focus, such as `workflows`, `actions`, `templates`, or `subscriptions`. |
+Discover existing Cloud Assembly templates and draft a new blueprint template safely.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `templateGoal` | string | Yes | - | Template purpose or desired workload. |
+| `projectHint` | string | No | - | Optional project name or ID hint. |
+:::
+
+### `vcfa-review-template`
+
+Inspect an existing blueprint template for correctness, reuse, and catalog readiness.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `templateId` | string | Yes | - | Template ID to review. |
+| `reviewGoal` | string | No | - | Optional review focus, such as catalog readiness or small VM shape. |
+:::
+
+### `vcfa-integrate-workflow-template-subscription`
+
+Plan integration between workflows, templates, catalog items, deployments, and extensibility subscriptions.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `integrationGoal` | string | Yes | - | Integration goal or lifecycle event. |
+| `workflowHint` | string | No | - | Optional workflow name, ID, or search hint. |
+| `templateHint` | string | No | - | Optional template name or ID hint. |
+:::
+
+### `vcfa-discovery-first-implementation-plan`
+
+Produce a concrete implementation plan that starts with verified read-only VCFA/vRO discovery.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `goal` | string | Yes | - | Implementation goal. |
+| `artifactKinds` | string | No | - | Optional artifact focus, such as `workflows`, `actions`, `templates`, or `subscriptions`. |
+:::
 
 ## Prompt Examples
 
