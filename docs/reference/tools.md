@@ -2,310 +2,862 @@
 
 Tools are grouped by operating domain. Read-only tools are safe for discovery; write and delete tools can modify live VCFA/vRO state or local artifact files.
 
+Each tool lists its input schema in a collapsible parameters section. Required confirmation fields such as `confirm` must be set to `true` before the tool performs the write or destructive operation.
+
 ## Context Snapshots
 
-| Tool | Purpose |
-| --- | --- |
-| `collect-context-snapshot` | Collect reusable VCFA/vRO context and persist deterministic Markdown and JSON snapshots without dumping secrets, scripts, template YAML, or binary content. |
+### `collect-context-snapshot`
 
-### collect-context-snapshot parameters
+Collect reusable VCF Automation/vRO environment context and persist deterministic Markdown and JSON snapshots for future agents. Secrets, scripts, template YAML, and binary content are omitted by default.
 
-| Parameter | Type | Default | Description |
-| --- | --- | --- | --- |
-| `fileBaseName` | string | `vcfa-context` | Base file name for the `.json` and `.md` output files. Plain name only — no path separators or extensions. |
-| `overwrite` | boolean | `false` | Replace existing snapshot files. |
-| `domains` | string[] | core domains | Domains to collect. Core: `workflows`, `actions`, `configurations`, `resources`, `categories`. Optional: `templates`, `catalogItems`, `eventTopics`, `subscriptions`, `packages`, `plugins`. |
-| `includeOptionalDomains` | boolean | `false` | Also collect templates, catalog items, event topics, subscriptions, packages, and plugins. |
-| `maxItemsPerDomain` | integer | `100` | Maximum items to collect per domain. Increase this when the environment has more than 100 workflows or actions and you need full coverage. Any positive integer is accepted. |
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `fileBaseName` | string | No | `vcfa-context` | Base file name for the generated `.json` and `.md` files under the configured context directory. Use a plain name only, without path separators or extensions. |
+| `overwrite` | boolean | No | `false` | Replace existing snapshot files with the same generated names. |
+| `domains` | string[] | No | core domains | Domains to collect. Core domains are `workflows`, `actions`, `configurations`, `resources`, and `categories`; optional domains are `templates`, `catalogItems`, `eventTopics`, `subscriptions`, `packages`, and `plugins`. |
+| `includeOptionalDomains` | boolean | No | `false` | Also collect templates, catalog items, event topics, subscriptions, packages, and plugins. |
+| `maxItemsPerDomain` | integer | No | `100` | Maximum items to collect per domain. Increase this when an environment has more than 100 items in a domain and full coverage is needed. |
+:::
 
 ## Artifact Promotion
 
-| Tool | Purpose |
-| --- | --- |
-| `prepare-artifact-promotion` | Run preflight, optionally export a live backup, summarize risks/changes, and recommend the exact confirmed import call. |
+### `prepare-artifact-promotion`
 
-### prepare-artifact-promotion parameters
+Run preflight for a local workflow, action, configuration, or package artifact; optionally export a live backup; summarize risks and changes; and recommend the exact import tool call. This tool never imports.
 
-| Parameter | Type | Required | Description |
-| --- | --- | --- | --- |
-| `kind` | string (enum) | Yes | Artifact kind: `workflow`, `action`, `configuration`, or `package`. |
-| `fileName` | string | Yes | Plain artifact file name under the configured artifact directory for the selected kind. |
-| `target` | object | No | Live target details used for diff and the recommended import call. See [target object](#promotion-target-object) below. |
-| `overwrite` | boolean | No | Overwrite flag included in the recommended import call (default: `true`). |
-| `backup` | object | No | Live backup export settings. See [backup object](#promotion-backup-object) below. |
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `kind` | enum | Yes | - | Artifact kind to prepare: `workflow`, `action`, `configuration`, or `package`. |
+| `fileName` | string | Yes | - | Plain artifact file name under the configured artifact directory for the selected kind. |
+| `target` | object | No | - | Optional live target and import category details used for diff, backup, and the recommended import call. |
+| `overwrite` | boolean | No | `true` | Overwrite flag to include in the recommended import call where supported. |
+| `backup` | object | No | - | Optional live backup export settings. When backup is enabled, the matching live target ID or package name is required. |
 
-#### promotion target object
-
-| Field | Type | Description |
-| --- | --- | --- |
-| `categoryId` | string | Target category ID for workflow or configuration import. |
-| `categoryName` | string | Target category name for action import. |
-| `workflowId` | string | Live workflow ID to diff against or back up. |
-| `actionId` | string | Live action ID to diff against or back up. |
-| `configurationId` | string | Live configuration ID to diff against or back up. |
-| `packageName` | string | Live package name to back up. |
-
-#### promotion backup object
+`target` object:
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `enabled` | boolean | Yes | Whether to export a live backup before promotion. |
-| `fileName` | string | No | Override file name for the backup artifact. |
-| `overwrite` | boolean | No | Overwrite the backup file if it already exists. |
+| `categoryId` | string | No | Target category ID for workflow or configuration import. |
+| `categoryName` | string | No | Target category name for action import. |
+| `workflowId` | string | No | Live workflow ID to diff against or export as a backup. |
+| `actionId` | string | No | Live action ID to diff against or export as a backup. |
+| `configurationId` | string | No | Live configuration ID to export as a backup. |
+| `packageName` | string | No | Live package name to export as a backup. |
+
+`backup` object:
+
+| Field | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `enabled` | boolean | Yes | - | Whether to export a live backup before promotion. |
+| `fileName` | string | No | generated by tool | Optional backup artifact file name override. |
+| `overwrite` | boolean | No | `false` | Overwrite the backup file if it already exists. |
+:::
 
 ## Workflows
 
-| Tool | Purpose |
-| --- | --- |
-| `list-workflows` | List workflows, optionally filtered by name. |
-| `get-workflow` | Get workflow details including input/output parameters. |
-| `create-workflow` | Create a new empty workflow in a category. |
-| `delete-workflow` | Delete a workflow. Irreversible. |
-| `run-workflow` | Execute a workflow with optional inputs. |
-| `run-workflow-and-wait` | Validate inputs, execute a workflow, wait for completion, and return outputs or diagnostics. |
-| `list-workflow-executions` | List past and current executions for a workflow. |
-| `get-workflow-execution` | Check execution status and retrieve outputs. |
-| `export-workflow-file` | Export a workflow artifact to a `.workflow` file. |
-| `scaffold-workflow-file` | Generate a local `.workflow` artifact from structured metadata and scriptable tasks. |
-| `preflight-workflow-file` | Validate a local `.workflow` artifact before import. |
-| `diff-workflow-file` | Compare local workflow artifacts, or a live workflow export against a local artifact. |
-| `import-workflow-file` | Import a `.workflow` artifact into a workflow category. |
+### `list-workflows`
 
-### Workflow execution inputs
+List workflows from VCF Automation Orchestrator. Optionally filter by name substring.
 
-Both `run-workflow` and `run-workflow-and-wait` accept an optional `inputs` array. Each element:
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `filter` | string | No | - | Filter workflows by name using a substring match. |
+:::
+
+### `get-workflow`
+
+Get detailed information about a specific workflow including its input and output parameters.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `id` | string | Yes | - | Workflow ID to inspect. |
+:::
+
+### `create-workflow`
+
+Create a new empty workflow in VCF Automation Orchestrator. Use `list-categories` first to find a workflow category ID. For real workflow content, prefer `scaffold-workflow-file` followed by `import-workflow-file`.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `categoryId` | string | Yes | - | Workflow category ID where the empty workflow is created. |
+| `name` | string | Yes | - | Name for the new workflow. |
+| `description` | string | No | - | Optional workflow description. |
+:::
+
+### `delete-workflow`
+
+Delete a workflow from VCF Automation Orchestrator. This action is irreversible.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `id` | string | Yes | - | Workflow ID to delete. |
+| `confirm` | boolean | Yes | - | Must be `true` to confirm deletion. If `false`, deletion is not performed. |
+:::
+
+### `run-workflow`
+
+Execute a workflow with optional input parameters. Returns the execution ID; use `get-workflow-execution` to poll status and retrieve outputs.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `id` | string | Yes | - | Workflow ID to execute. |
+| `inputs` | array | No | `[]` | Input parameters for the workflow execution. Inspect the workflow with `get-workflow` before running. |
+
+`inputs` array item:
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `name` | string | Yes | Parameter name matching a workflow input parameter. |
-| `type` | string | `run-workflow` only | vRO parameter type (e.g. `string`, `number`, `boolean`, `Array/string`). Optional for `run-workflow-and-wait` — inferred from the workflow definition when omitted. |
+| `type` | string | Yes | vRO parameter type, such as `string`, `number`, `boolean`, `Array/string`, or `Properties`. |
 | `value` | any | Yes | Parameter value compatible with the declared type. |
+:::
 
-### run-workflow-and-wait parameters
+### `run-workflow-and-wait`
 
-| Parameter | Type | Default | Description |
-| --- | --- | --- | --- |
-| `id` | string | — | Workflow ID to execute. |
-| `inputs` | array | `[]` | See [Workflow execution inputs](#workflow-execution-inputs). |
-| `timeoutSeconds` | integer | `300` | Maximum seconds to wait for completion before returning a timeout result. |
-| `pollIntervalSeconds` | integer | `2` | Seconds between execution status polls. |
-| `logLimit` | integer | `20` | Maximum log entries to include when the execution fails or times out. Set to `0` to suppress logs. |
+Validate inputs, execute a workflow, poll until completion, failure, or timeout, and return outputs or useful failure diagnostics.
 
-### list-workflow-executions parameters
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `id` | string | Yes | - | Workflow ID to execute. |
+| `inputs` | array | No | `[]` | Input parameters for the workflow execution. This tool can infer parameter types from the workflow definition when `type` is omitted. |
+| `timeoutSeconds` | integer | No | `300` | Maximum time to wait for completion before returning a timeout result. |
+| `pollIntervalSeconds` | integer | No | `2` | Seconds between execution status polls. |
+| `logLimit` | integer | No | `20` | Maximum execution log entries to include on failure or timeout. Set to `0` to suppress log excerpts. |
 
-| Parameter | Type | Required | Description |
-| --- | --- | --- | --- |
-| `workflowId` | string | Yes | Workflow ID. |
-| `maxResults` | integer | No | Maximum executions to return (default: `20`). |
-| `status` | string (enum) | No | Filter by execution status: `running`, `completed`, `failed`, `canceled`, or `waiting-signal`. |
-
-### scaffold-workflow-file parameters
-
-The required `workflow` object describes the full workflow structure.
-
-#### workflow object
+`inputs` array item:
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `name` | string | Yes | Workflow display name. |
-| `tasks` | array | Yes | Linear sequence of scriptable tasks (at least one). See [task object](#task-object) below. |
-| `id` | string | No | Workflow UUID. Defaults to a generated UUID. |
-| `description` | string | No | Workflow description. |
-| `version` | string | No | Workflow version (default: `1.0.0`). |
-| `apiVersion` | string | No | Workflow API version (default: `6.0.0`). |
-| `inputs` | array | No | Workflow input parameters. See [parameter object](#parameter-object) below. |
-| `outputs` | array | No | Workflow output parameters. See [parameter object](#parameter-object) below. |
-| `attributes` | array | No | Workflow attributes (workflow-scoped variables). See [parameter object](#parameter-object) below. |
+| `name` | string | Yes | Parameter name matching a workflow input parameter. |
+| `type` | string | No | Optional vRO parameter type. When omitted, this tool uses the type from `get-workflow`. |
+| `value` | any | Yes | Parameter value compatible with the workflow input type. |
+:::
 
-#### parameter object
+### `list-workflow-executions`
 
-Used for `inputs`, `outputs`, and `attributes`.
+List past and current executions for a specific workflow. Use this to find an execution ID before calling `get-workflow-execution`.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `workflowId` | string | Yes | - | Workflow ID whose executions should be listed. |
+| `maxResults` | integer | No | `20` | Maximum number of executions to return. |
+| `status` | enum | No | - | Filter executions by status: `running`, `completed`, `failed`, `canceled`, or `waiting-signal`. |
+:::
+
+### `get-workflow-execution`
+
+Check the status and outputs of a workflow execution.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `workflowId` | string | Yes | - | Workflow ID associated with the execution. |
+| `executionId` | string | Yes | - | Execution ID returned by `run-workflow`, `run-workflow-and-wait`, or `list-workflow-executions`. |
+:::
+
+### `export-workflow-file`
+
+Export a vRO workflow as a `.workflow` file under the configured workflow artifact directory.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `id` | string | Yes | - | Workflow ID to export. |
+| `fileName` | string | Yes | - | Plain `.workflow` file name to save under the configured workflow artifact directory. Do not pass a path. |
+| `overwrite` | boolean | No | `false` | Overwrite the file if it already exists. |
+:::
+
+### `scaffold-workflow-file`
+
+Generate a local importable `.workflow` artifact under the configured workflow artifact directory from structured metadata, linear scriptable tasks, scripts, and bindings. Use `import-workflow-file` to upload it afterwards.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `fileName` | string | Yes | - | Plain `.workflow` file name to save under the configured workflow artifact directory. |
+| `overwrite` | boolean | No | `false` | Overwrite the file if it already exists. |
+| `workflow` | object | Yes | - | Complete workflow structure to render into the artifact. |
+
+`workflow` object:
+
+| Field | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `name` | string | Yes | - | Workflow display name. |
+| `tasks` | array | Yes | - | Linear sequence of scriptable tasks. At least one task is required. |
+| `id` | string | No | generated UUID | Workflow UUID. |
+| `description` | string | No | - | Workflow description. |
+| `version` | string | No | `1.0.0` | Workflow version metadata. |
+| `apiVersion` | string | No | `6.0.0` | Workflow API version metadata. |
+| `inputs` | array | No | `[]` | Workflow input parameters. |
+| `outputs` | array | No | `[]` | Workflow output parameters. |
+| `attributes` | array | No | `[]` | Workflow-scoped attributes. |
+
+Workflow parameter object, used for `inputs`, `outputs`, and `attributes`:
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `name` | string | Yes | Parameter name. |
-| `type` | string | Yes | vRO parameter type (e.g. `string`, `number`, `boolean`, `Array/string`, `Properties`). |
-| `description` | string | No | Parameter description. |
+| `name` | string | Yes | Script-safe parameter name. |
+| `type` | string | Yes | vRO parameter type, such as `string`, `number`, `boolean`, `Array/string`, or `Properties`. |
+| `description` | string | No | Optional parameter description. |
 
-#### task object
+Task object:
 
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `script` | string | Yes | JavaScript body of the scriptable task. |
-| `displayName` | string | No | Task display name shown in the vRO UI. |
-| `name` | string | No | Internal workflow item name (default: `itemN`). |
-| `description` | string | No | Task description. |
-| `inBindings` | array | No | Maps workflow inputs or attributes into script variables. See [binding object](#binding-object) below. |
-| `outBindings` | array | No | Maps script variables back to workflow outputs or attributes. See [binding object](#binding-object) below. |
+| Field | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `script` | string | Yes | - | JavaScript body of the scriptable task. |
+| `displayName` | string | No | - | Task display name shown in the vRO UI. |
+| `name` | string | No | `itemN` | Internal workflow item name. |
+| `description` | string | No | - | Task description. |
+| `inBindings` | array | No | `[]` | Bind workflow inputs or attributes into script-local variables. |
+| `outBindings` | array | No | `[]` | Bind script-local variables back to workflow outputs or attributes. |
 
-#### binding object
+Binding object:
 
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `name` | string | Yes | Script-local variable name. |
-| `type` | string | Yes | vRO parameter type. |
-| `source` | string | `inBindings` | Workflow input or attribute name to read from. |
-| `target` | string | `outBindings` | Workflow output or attribute name to write to. |
+| Field | Type | Required | Applies to | Description |
+| --- | --- | --- | --- | --- |
+| `name` | string | Yes | all bindings | Script-local variable name. |
+| `type` | string | Yes | all bindings | vRO parameter type. Must match the referenced workflow parameter or attribute type. |
+| `source` | string | Yes | `inBindings` | Workflow input or attribute name to read from. |
+| `target` | string | Yes | `outBindings` | Workflow output or attribute name to write to. |
+:::
 
-### diff-workflow-file sources
+### `preflight-workflow-file`
+
+Validate a local `.workflow` artifact under the configured workflow artifact directory before importing it.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `fileName` | string | Yes | - | Plain `.workflow` file name under the configured workflow artifact directory to validate. |
+:::
+
+### `diff-workflow-file`
+
+Compare two local `.workflow` artifacts, or compare a live workflow export against a local `.workflow` artifact. The `base` source is current or old; `compare` is proposed or new.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `base` | union | Yes | - | Current or old workflow source. |
+| `compare` | union | Yes | - | Proposed or new workflow source. |
 
 Both `base` and `compare` are discriminated unions selected by `source`:
 
 | `source` value | Additional field | Description |
 | --- | --- | --- |
-| `"file"` | `fileName` (string) | A local `.workflow` file under the configured artifact directory. |
-| `"live"` | `workflowId` (string) | Export the live workflow and use it as the comparison side. |
+| `file` | `fileName` string | Local `.workflow` file under the configured workflow artifact directory. |
+| `live` | `workflowId` string | Live workflow ID to export and use as the comparison side. |
+:::
+
+### `import-workflow-file`
+
+Import a `.workflow` file from the configured workflow artifact directory into a workflow category. Use `list-categories` with type `WorkflowCategory` to find a category ID first.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `categoryId` | string | Yes | - | Workflow category ID to import into. |
+| `fileName` | string | Yes | - | Plain `.workflow` file name under the configured workflow artifact directory to import. |
+| `overwrite` | boolean | No | `true` | Overwrite an existing workflow with the same identity. |
+| `confirm` | boolean | Yes | - | Must be `true` to confirm import. If `false`, import is not performed. |
+:::
 
 ## Actions
 
-| Tool | Purpose |
-| --- | --- |
-| `list-actions` | List scriptable actions, optionally filtered by name. |
-| `get-action` | Get action details including script content and parameters. |
-| `create-action` | Create a new action with script content. |
-| `export-action-file` | Export an action artifact to a `.action` file. |
-| `preflight-action-file` | Validate a local `.action` artifact before import. |
-| `diff-action-file` | Compare local action artifacts, or a live action export against a local artifact. |
-| `import-action-file` | Import a `.action` artifact into an action category. |
-| `delete-action` | Delete an action. Irreversible. |
+### `list-actions`
 
-### create-action parameters
+List actions from VCF Automation Orchestrator. Optionally filter by name.
 
-| Parameter | Type | Required | Description |
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `filter` | string | No | - | Filter actions by name using a substring match. |
+:::
+
+### `get-action`
+
+Get detailed information about a specific action including script content and parameters.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `id` | string | Yes | - | Action ID to inspect. |
+:::
+
+### `create-action`
+
+Create a new action in VCF Automation Orchestrator.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `moduleName` | string | Yes | - | Module or package name to create the action in, for example `com.example.myactions`. |
+| `name` | string | Yes | - | Name for the new action. |
+| `script` | string | Yes | - | JavaScript or TypeScript script content for the action. |
+| `inputParameters` | array | No | `[]` | Input parameter definitions for the action. |
+| `returnType` | string | No | - | Return type, for example `string`, `void`, or `Array/string`. |
+
+`inputParameters` array item:
+
+| Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `moduleName` | string | Yes | Module (package) name for the action (e.g. `com.example.myactions`). |
-| `name` | string | Yes | Action name. |
-| `script` | string | Yes | JavaScript body of the action. |
-| `inputParameters` | array | No | Input parameter definitions. Each element: `{ name, type, description? }`. |
-| `returnType` | string | No | Return type (e.g. `string`, `void`, `Array/string`). |
+| `name` | string | Yes | Action input parameter name. |
+| `type` | string | Yes | vRO parameter type. |
+| `description` | string | No | Optional parameter description. |
+:::
 
-### diff-action-file sources
+### `export-action-file`
 
-Same discriminated union as [diff-workflow-file sources](#diff-workflow-file-sources), replacing `workflowId` with `actionId`:
+Export a vRO action as a `.action` file under the configured action artifact directory.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `id` | string | Yes | - | Action ID to export. |
+| `fileName` | string | Yes | - | Plain `.action` file name to save under the configured action artifact directory. Do not pass a path. |
+| `overwrite` | boolean | No | `false` | Overwrite the file if it already exists. |
+:::
+
+### `preflight-action-file`
+
+Validate a local `.action` artifact under the configured action artifact directory before importing it.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `fileName` | string | Yes | - | Plain `.action` file name under the configured action artifact directory to validate. |
+:::
+
+### `diff-action-file`
+
+Compare two local `.action` artifacts, or compare a live action export against a local `.action` artifact. The `base` source is current or old; `compare` is proposed or new.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `base` | union | Yes | - | Current or old action source. |
+| `compare` | union | Yes | - | Proposed or new action source. |
+
+Both `base` and `compare` are discriminated unions selected by `source`:
 
 | `source` value | Additional field | Description |
 | --- | --- | --- |
-| `"file"` | `fileName` (string) | A local `.action` file under the configured artifact directory. |
-| `"live"` | `actionId` (string) | Export the live action and use it as the comparison side. |
+| `file` | `fileName` string | Local `.action` file under the configured action artifact directory. |
+| `live` | `actionId` string | Live action ID to export and use as the comparison side. |
+:::
+
+### `import-action-file`
+
+Import a `.action` file from the configured action artifact directory into an action category. Use `list-categories` with type `ActionCategory` to find the category name first.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `categoryName` | string | Yes | - | Action category or module name to import into. |
+| `fileName` | string | Yes | - | Plain `.action` file name under the configured action artifact directory to import. |
+| `confirm` | boolean | Yes | - | Must be `true` to confirm import. If `false`, import is not performed. |
+:::
+
+### `delete-action`
+
+Delete an action from VCF Automation Orchestrator. This action is irreversible.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `id` | string | Yes | - | Action ID to delete. |
+| `confirm` | boolean | Yes | - | Must be `true` to confirm deletion. If `false`, deletion is not performed. |
+:::
 
 ## Configuration Elements
 
-| Tool | Purpose |
-| --- | --- |
-| `list-configurations` | List configuration elements, optionally filtered by name. |
-| `get-configuration` | Get configuration element details and attributes. |
-| `create-configuration` | Create a configuration element with attributes. |
-| `update-configuration` | Update a configuration element name, description, or attributes. |
-| `export-configuration-file` | Export a configuration artifact to a `.vsoconf` file. |
-| `preflight-configuration-file` | Validate a local `.vsoconf` artifact before import. |
-| `import-configuration-file` | Import a `.vsoconf` artifact into a configuration category. |
-| `delete-configuration` | Delete a configuration element. Irreversible. |
+### `list-configurations`
+
+List configuration elements from VCF Automation Orchestrator. Optionally filter by name.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `filter` | string | No | - | Filter configuration elements by name using a substring match. |
+:::
+
+### `get-configuration`
+
+Get detailed information about a specific configuration element including its attributes.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `id` | string | Yes | - | Configuration element ID to inspect. |
+:::
+
+### `create-configuration`
+
+Create a new configuration element in VCF Automation Orchestrator. Use `list-categories` with type `ConfigurationElementCategory` to find a category ID first.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `categoryId` | string | Yes | - | Configuration element category ID to create the element in. |
+| `name` | string | Yes | - | Name for the new configuration element. |
+| `description` | string | No | - | Optional description. |
+| `attributes` | array | No | `[]` | Initial attributes for the configuration element. |
+
+`attributes` array item:
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | string | Yes | Attribute name. |
+| `type` | string | Yes | vRO attribute type. |
+| `value` | string | No | Attribute value as a string. |
+:::
+
+### `update-configuration`
+
+Update a configuration element name, description, or attributes. Supplied attributes replace the existing attribute set.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `id` | string | Yes | - | Configuration element ID to update. |
+| `name` | string | No | current name | New name for the configuration element. |
+| `description` | string | No | current description | New description. |
+| `attributes` | array | No | current attributes | New attributes to replace the existing set. |
+
+`attributes` array item:
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | string | Yes | Attribute name. |
+| `type` | string | Yes | vRO attribute type. |
+| `value` | string | No | Attribute value as a string. |
+:::
+
+### `delete-configuration`
+
+Delete a configuration element from VCF Automation Orchestrator. This action is irreversible.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `id` | string | Yes | - | Configuration element ID to delete. |
+| `confirm` | boolean | Yes | - | Must be `true` to confirm deletion. If `false`, deletion is not performed. |
+:::
+
+### `export-configuration-file`
+
+Export a vRO configuration element as a `.vsoconf` file under the configured configuration artifact directory.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `id` | string | Yes | - | Configuration element ID to export. |
+| `fileName` | string | Yes | - | Plain `.vsoconf` file name to save under the configured configuration artifact directory. Do not pass a path. |
+| `overwrite` | boolean | No | `false` | Overwrite the file if it already exists. |
+:::
+
+### `preflight-configuration-file`
+
+Validate a local `.vsoconf` artifact under the configured configuration artifact directory before importing it.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `fileName` | string | Yes | - | Plain `.vsoconf` file name under the configured configuration artifact directory to validate. |
+:::
+
+### `import-configuration-file`
+
+Import a `.vsoconf` file from the configured configuration artifact directory into a configuration element category. Use `list-categories` with type `ConfigurationElementCategory` to find a category ID first.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `categoryId` | string | Yes | - | Configuration element category ID to import into. |
+| `fileName` | string | Yes | - | Plain `.vsoconf` file name under the configured configuration artifact directory to import. |
+| `confirm` | boolean | Yes | - | Must be `true` to confirm import. If `false`, import is not performed. |
+:::
 
 ## Resource Elements
 
-| Tool | Purpose |
-| --- | --- |
-| `list-resource-elements` | List resource elements, optionally filtered by name. |
-| `export-resource-element` | Export a resource element by ID to a local file. |
-| `import-resource-element` | Import a local resource file into a resource category. |
-| `update-resource-element` | Replace an existing resource element's binary content from a local file. |
-| `delete-resource-element` | Delete a resource element, optionally forcing deletion when referenced. |
+### `list-resource-elements`
+
+List resource elements from VCF Automation Orchestrator. Optionally filter by name.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `filter` | string | No | - | Filter resource elements by name using a substring match. |
+:::
+
+### `export-resource-element`
+
+Export a vRO resource element by ID to a file under the configured resource artifact directory.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `id` | string | Yes | - | Resource element ID to export. |
+| `fileName` | string | Yes | - | Plain file name to save under the configured resource artifact directory. Do not pass a path. |
+| `overwrite` | boolean | No | `false` | Overwrite the file if it already exists. |
+:::
+
+### `import-resource-element`
+
+Import a vRO resource element from the configured resource artifact directory into a `ResourceElementCategory`. Use `list-categories` with type `ResourceElementCategory` to find a category ID first.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `categoryId` | string | Yes | - | Resource element category ID to import into. |
+| `fileName` | string | Yes | - | Plain file name under the configured resource artifact directory to import. |
+| `confirm` | boolean | Yes | - | Must be `true` to confirm import. If `false`, import is not performed. |
+:::
+
+### `update-resource-element`
+
+Update an existing resource element's binary content from a file under the configured resource artifact directory.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `id` | string | Yes | - | Resource element ID to update. |
+| `fileName` | string | Yes | - | Plain file name under the configured resource artifact directory containing the replacement content. |
+| `changesetSha` | string | No | - | Optional `X-VRO-Changeset-Sha` value for version-controlled content. |
+| `confirm` | boolean | Yes | - | Must be `true` to confirm update. If `false`, update is not performed. |
+:::
+
+### `delete-resource-element`
+
+Delete a resource element from VCF Automation Orchestrator. This can optionally force deletion when the resource is referenced by workflows.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `id` | string | Yes | - | Resource element ID to delete. |
+| `force` | boolean | No | `false` | Delete even if the resource is referenced by workflows. |
+| `confirm` | boolean | Yes | - | Must be `true` to confirm deletion. If `false`, deletion is not performed. |
+:::
 
 ## Categories
 
-| Tool | Purpose |
-| --- | --- |
-| `list-categories` | List categories by type: `WorkflowCategory`, `ActionCategory`, `ConfigurationElementCategory`, or `ResourceElementCategory`. |
+### `list-categories`
 
-### list-categories parameters
+List categories by type. Categories are needed to create or import workflows, actions, configuration elements, and resource elements.
 
-| Parameter | Type | Required | Description |
-| --- | --- | --- | --- |
-| `type` | string (enum) | Yes | Category type: `WorkflowCategory`, `ActionCategory`, `ConfigurationElementCategory`, or `ResourceElementCategory`. |
-| `filter` | string | No | Filter categories by name (substring match). |
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `type` | enum | Yes | - | Category type: `WorkflowCategory`, `ActionCategory`, `ConfigurationElementCategory`, or `ResourceElementCategory`. |
+| `filter` | string | No | - | Filter categories by name using a substring match. |
+:::
 
 ## Catalog Items
 
-| Tool | Purpose |
-| --- | --- |
-| `list-catalog-items` | List available Service Broker catalog items, optionally searched by name. |
-| `get-catalog-item` | Get catalog item details including type, source, and project assignments. |
+### `list-catalog-items`
+
+List available Service Broker catalog items. Optionally search by name or keyword.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `search` | string | No | - | Search catalog items by name or keyword. |
+:::
+
+### `get-catalog-item`
+
+Get catalog item details including type, source, and project assignments.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `id` | string | Yes | - | Catalog item ID to inspect. |
+:::
 
 ## Deployments
 
-| Tool | Purpose |
-| --- | --- |
-| `list-deployments` | List deployments, optionally filtered by name/keyword or project ID. |
-| `get-deployment` | Get deployment details including status, project, and catalog item info. |
-| `create-deployment` | Deploy a catalog item by ID, deployment name, and project ID. |
-| `delete-deployment` | Delete a deployment. Irreversible. |
-| `list-deployment-actions` | List deployment-level day-2 actions available for a deployment. |
-| `run-deployment-action` | Submit a deployment-level day-2 action request. |
+### `list-deployments`
+
+List deployments, optionally filtered by name or keyword and project ID.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `search` | string | No | - | Search deployments by name or keyword. |
+| `projectId` | string | No | - | Filter deployments by project ID. |
+:::
+
+### `get-deployment`
+
+Get detailed information about a specific deployment by its ID.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `id` | string | Yes | - | Deployment ID to inspect. |
+:::
+
+### `create-deployment`
+
+Create a new deployment from a catalog item. Use `list-catalog-items` to find the catalog item ID, and `list-deployments` to verify afterwards.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `catalogItemId` | string | Yes | - | Catalog item ID to deploy. |
+| `deploymentName` | string | Yes | - | Name for the new deployment. |
+| `projectId` | string | Yes | - | Project ID in which to create the deployment. |
+| `version` | string | No | latest | Catalog item version to deploy. |
+| `reason` | string | No | - | Reason or comment for the deployment request. |
+| `inputs` | object | No | `{}` | Catalog item input parameters as a key/value object. Use `get-catalog-item` or catalog documentation to verify the expected shape before deploying. |
+:::
+
+### `delete-deployment`
+
+Delete a deployment by its ID. This is a destructive live operation.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `id` | string | Yes | - | Deployment ID to delete. |
+| `confirm` | boolean | Yes | - | Must be `true` to confirm deletion. If `false`, deletion is not performed. |
+:::
+
+### `list-deployment-actions`
+
+List deployment-level day-2 actions available for a VCF Automation deployment.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `deploymentId` | string | Yes | - | Deployment ID whose available actions should be listed. |
+:::
+
+### `run-deployment-action`
+
+Run a deployment-level day-2 action. Use `list-deployment-actions` first to find the action ID and any required inputs.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `deploymentId` | string | Yes | - | Deployment ID to act on. |
+| `actionId` | string | Yes | - | Deployment action ID to run. |
+| `reason` | string | No | - | Reason for requesting the day-2 action. |
+| `inputs` | object | No | `{}` | Day-2 action inputs as a key/value object. Use `list-deployment-actions` to discover required inputs before running. |
+| `confirm` | boolean | Yes | - | Must be `true` to confirm the day-2 action request. If `false`, the request is not submitted. |
+:::
 
 ## Blueprint Templates
 
-| Tool | Purpose |
-| --- | --- |
-| `list-templates` | List blueprint templates, optionally filtered by name/keyword or project ID. |
-| `get-template` | Get template details including status, project, validity, and YAML content. |
-| `create-template` | Create a blueprint template with optional YAML content. |
-| `delete-template` | Delete a blueprint template. Irreversible. |
+### `list-templates`
+
+List blueprint templates in VCF Automation Cloud Assembly. Optionally filter by name or keyword and project ID.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `search` | string | No | - | Search templates by name or keyword. |
+| `projectId` | string | No | - | Filter templates by project ID. |
+:::
+
+### `get-template`
+
+Get detailed information about a specific blueprint template by its ID.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `id` | string | Yes | - | Template or blueprint ID to inspect. |
+:::
+
+### `create-template`
+
+Create a new blueprint template in VCF Automation Cloud Assembly. Use `list-templates` to verify afterwards.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `name` | string | Yes | - | Name for the new template. |
+| `projectId` | string | Yes | - | Project ID in which to create the template. |
+| `description` | string | No | - | Optional template description. |
+| `content` | string | No | empty template | YAML blueprint content for the template. Treat this as Cloud Assembly blueprint content and verify conventions from existing templates or docs before authoring. |
+| `requestScopeOrg` | boolean | No | `false` | If `true`, the template is available org-wide rather than project-scoped. |
+:::
+
+### `delete-template`
+
+Delete a blueprint template by its ID. This action is irreversible.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `id` | string | Yes | - | Template or blueprint ID to delete. |
+| `confirm` | boolean | Yes | - | Must be `true` to confirm deletion. If `false`, deletion is not performed. |
+:::
 
 ## Packages
 
-| Tool | Purpose |
-| --- | --- |
-| `list-packages` | List vRO packages, optionally filtered by name. |
-| `get-package` | Get details of a package by fully qualified package name. |
-| `export-package` | Export a package as a ZIP file. |
-| `preflight-package` | Validate a `.package` or `.zip` artifact before import. |
-| `import-package` | Import a package file into Orchestrator. |
-| `delete-package` | Delete a package after confirmation, optionally deleting contained elements. |
+### `list-packages`
+
+List vRO packages available on the Orchestrator instance. Optionally filter by name substring.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `filter` | string | No | - | Filter packages by name using a substring match. |
+:::
+
+### `get-package`
+
+Get details of a specific vRO package by its fully qualified package name.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `name` | string | Yes | - | Fully qualified package name, for example `com.example.mypackage`. |
+:::
+
+### `export-package`
+
+Export a vRO package as a ZIP file under the configured package artifact directory on the server.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `name` | string | Yes | - | Fully qualified package name to export, for example `com.example.mypackage`. |
+| `fileName` | string | Yes | - | Plain `.package` or `.zip` file name to save under the configured package artifact directory. Do not pass a path. |
+| `overwrite` | boolean | No | `false` | Overwrite the file if it already exists. |
+:::
+
+### `preflight-package`
+
+Validate a local `.package` or `.zip` artifact under the configured package artifact directory before importing it.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `fileName` | string | Yes | - | Plain `.package` or `.zip` file name under the configured package artifact directory to validate. |
+:::
+
+### `import-package`
+
+Import a vRO package from the configured package artifact directory into the Orchestrator instance.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `fileName` | string | Yes | - | Plain `.package` or `.zip` file name under the configured package artifact directory to import. |
+| `overwrite` | boolean | No | `true` | Whether to overwrite existing package contents. |
+| `confirm` | boolean | Yes | - | Must be `true` to confirm import. If `false`, import is not performed. |
+:::
+
+### `delete-package`
+
+Delete a vRO package by its fully qualified name. Optionally delete all workflows, actions, and configurations inside the package.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `name` | string | Yes | - | Fully qualified package name to delete, for example `com.example.mypackage`. |
+| `deleteContents` | boolean | No | `false` | Also delete all elements inside the package. |
+| `confirm` | boolean | Yes | - | Must be `true` to confirm deletion. If `false`, deletion is not performed. |
+:::
 
 ## Plugins
 
-| Tool | Purpose |
-| --- | --- |
-| `list-plugins` | List installed vRO plugins, optionally filtered by name. |
+### `list-plugins`
+
+List installed plugins in VCF Automation Orchestrator. Optionally filter by name substring.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `filter` | string | No | - | Filter plugins by name using a substring match. |
+:::
 
 ## Extensibility Subscriptions
 
-| Tool | Purpose |
-| --- | --- |
-| `list-event-topics` | List available Event Broker topics. |
-| `list-subscriptions` | List extensibility subscriptions, optionally filtered by project ID. |
-| `get-subscription` | Get subscription details including constraints, blocking, and priority. |
-| `create-subscription` | Create a subscription linking an event topic to a vRO workflow or ABX action. |
-| `update-subscription` | Update a subscription. |
-| `delete-subscription` | Delete a subscription. |
+### `list-event-topics`
 
-### create-subscription parameters
+List available Event Broker topics.
 
-| Parameter | Type | Required | Description |
-| --- | --- | --- | --- |
-| `name` | string | Yes | Subscription name. |
-| `eventTopicId` | string | Yes | Event topic ID (use `list-event-topics` to discover available topics). |
-| `runnableType` | string (enum) | Yes | Runnable to trigger: `extensibility.vro` (vRO workflow) or `extensibility.abx` (ABX action). |
-| `runnableId` | string | Yes | ID of the workflow or ABX action to trigger. |
-| `projectId` | string | No | Project ID to scope the subscription. |
-| `description` | string | No | Subscription description. |
-| `blocking` | boolean | No | Whether the subscription blocks the event pipeline until the runnable completes. |
-| `priority` | number | No | Subscription priority. Lower number = higher priority. |
-| `timeout` | number | No | Timeout in minutes for runnable execution. |
-| `disabled` | boolean | No | Create the subscription in disabled state (default: `false`). |
+::: details Parameters
+This tool takes no parameters.
+:::
 
-### update-subscription parameters
+### `list-subscriptions`
 
-All fields except `id` are optional; only supplied fields are updated.
+List extensibility subscriptions, optionally filtered by project ID.
 
-| Parameter | Type | Required | Description |
-| --- | --- | --- | --- |
-| `id` | string | Yes | Subscription ID to update. |
-| `name` | string | No | New subscription name. |
-| `description` | string | No | New description. |
-| `disabled` | boolean | No | Enable (`false`) or disable (`true`) the subscription. |
-| `runnableId` | string | No | New workflow or ABX action ID. |
-| `runnableType` | string (enum) | No | New runnable type: `extensibility.vro` or `extensibility.abx`. |
-| `blocking` | boolean | No | Update blocking behaviour. |
-| `priority` | number | No | Update priority. |
-| `timeout` | number | No | Update timeout in minutes. |
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `projectId` | string | No | - | Filter subscriptions by project ID. |
+:::
+
+### `get-subscription`
+
+Get subscription details including constraints, blocking setting, and priority.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `id` | string | Yes | - | Subscription ID to inspect. |
+:::
+
+### `create-subscription`
+
+Create a subscription linking an Event Broker topic to a vRO workflow or ABX action.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `name` | string | Yes | - | Name for the subscription. |
+| `eventTopicId` | string | Yes | - | Event topic ID to subscribe to. Use `list-event-topics` to discover available topics. |
+| `runnableType` | enum | Yes | - | Runnable type to trigger: `extensibility.vro` for a vRO workflow or `extensibility.abx` for an ABX action. |
+| `runnableId` | string | Yes | - | ID of the workflow or ABX action to trigger. |
+| `projectId` | string | No | - | Project ID to scope the subscription to. |
+| `description` | string | No | - | Optional subscription description. |
+| `blocking` | boolean | No | - | Whether the subscription blocks the event pipeline until the runnable completes. |
+| `priority` | number | No | - | Subscription priority. Lower number means higher priority. |
+| `timeout` | number | No | - | Timeout in minutes for runnable execution. |
+| `disabled` | boolean | No | `false` | Create the subscription in a disabled state. |
+:::
+
+### `update-subscription`
+
+Update a subscription. All fields except `id` are optional; only supplied fields are updated.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `id` | string | Yes | - | Subscription ID to update. |
+| `name` | string | No | current name | New subscription name. |
+| `description` | string | No | current description | New description. |
+| `disabled` | boolean | No | current state | Set to `true` to disable or `false` to enable. |
+| `runnableId` | string | No | current runnable | New workflow or ABX action ID. |
+| `runnableType` | enum | No | current type | New runnable type: `extensibility.vro` or `extensibility.abx`. |
+| `blocking` | boolean | No | current setting | New blocking setting. |
+| `priority` | number | No | current priority | New subscription priority. Lower number means higher priority. |
+| `timeout` | number | No | current timeout | New timeout in minutes. |
+:::
+
+### `delete-subscription`
+
+Delete an extensibility subscription.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `id` | string | Yes | - | Subscription ID to delete. |
+| `confirm` | boolean | Yes | - | Must be `true` to confirm deletion. If `false`, deletion is not performed. |
+:::

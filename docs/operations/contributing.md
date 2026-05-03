@@ -17,11 +17,13 @@ When adding a new MCP tool:
 2. Use existing client modules before introducing new API logic.
 3. Mark read-only and destructive annotations accurately.
 4. Add tests for success, error, confirmation, and formatting behavior.
-5. Update the tool reference and relevant how-to docs.
+5. Update the tool reference with a collapsible parameters section directly under the tool, and update relevant how-to docs.
 
 ## Adding Resources Or Prompts
 
 Resources and prompts are registered in the resource and prompt modules. Keep content concrete and discovery-first. When an agent needs environment-specific facts, prompts should direct it to discovery tools instead of relying on memory.
+
+When adding or changing a prompt, update the prompt reference with a collapsible parameters section directly under the prompt.
 
 ## Artifact Work
 
@@ -33,6 +35,7 @@ Docs live under `docs/` and are built with VitePress.
 
 - Add pages to the sidebar in `docs/.vitepress/config.ts`.
 - Keep examples aligned with current tool names and schemas.
+- Keep tool and prompt parameters documented directly under each tool or prompt in collapsible sections.
 - Distinguish read-only discovery from live write or destructive operations.
 - Run `npm run docs:build` before opening a docs PR.
 
