@@ -24,6 +24,35 @@ Tools are grouped by operating domain. Read-only tools are safe for discovery; w
 | --- | --- |
 | `prepare-artifact-promotion` | Run preflight, optionally export a live backup, summarize risks/changes, and recommend the exact confirmed import call. |
 
+### prepare-artifact-promotion parameters
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | string (enum) | Yes | Artifact kind: `workflow`, `action`, `configuration`, or `package`. |
+| `fileName` | string | Yes | Plain artifact file name under the configured artifact directory for the selected kind. |
+| `target` | object | No | Live target details used for diff and the recommended import call. See [target object](#promotion-target-object) below. |
+| `overwrite` | boolean | No | Overwrite flag included in the recommended import call (default: `true`). |
+| `backup` | object | No | Live backup export settings. See [backup object](#promotion-backup-object) below. |
+
+#### promotion target object
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `categoryId` | string | Target category ID for workflow or configuration import. |
+| `categoryName` | string | Target category name for action import. |
+| `workflowId` | string | Live workflow ID to diff against or back up. |
+| `actionId` | string | Live action ID to diff against or back up. |
+| `configurationId` | string | Live configuration ID to diff against or back up. |
+| `packageName` | string | Live package name to back up. |
+
+#### promotion backup object
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `enabled` | boolean | Yes | Whether to export a live backup before promotion. |
+| `fileName` | string | No | Override file name for the backup artifact. |
+| `overwrite` | boolean | No | Overwrite the backup file if it already exists. |
+
 ## Workflows
 
 | Tool | Purpose |
@@ -42,6 +71,91 @@ Tools are grouped by operating domain. Read-only tools are safe for discovery; w
 | `diff-workflow-file` | Compare local workflow artifacts, or a live workflow export against a local artifact. |
 | `import-workflow-file` | Import a `.workflow` artifact into a workflow category. |
 
+### Workflow execution inputs
+
+Both `run-workflow` and `run-workflow-and-wait` accept an optional `inputs` array. Each element:
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | string | Yes | Parameter name matching a workflow input parameter. |
+| `type` | string | `run-workflow` only | vRO parameter type (e.g. `string`, `number`, `boolean`, `Array/string`). Optional for `run-workflow-and-wait` — inferred from the workflow definition when omitted. |
+| `value` | any | Yes | Parameter value compatible with the declared type. |
+
+### run-workflow-and-wait parameters
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `id` | string | — | Workflow ID to execute. |
+| `inputs` | array | `[]` | See [Workflow execution inputs](#workflow-execution-inputs). |
+| `timeoutSeconds` | integer | `300` | Maximum seconds to wait for completion before returning a timeout result. |
+| `pollIntervalSeconds` | integer | `2` | Seconds between execution status polls. |
+| `logLimit` | integer | `20` | Maximum log entries to include when the execution fails or times out. Set to `0` to suppress logs. |
+
+### list-workflow-executions parameters
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `workflowId` | string | Yes | Workflow ID. |
+| `maxResults` | integer | No | Maximum executions to return (default: `20`). |
+| `status` | string (enum) | No | Filter by execution status: `running`, `completed`, `failed`, `canceled`, or `waiting-signal`. |
+
+### scaffold-workflow-file parameters
+
+The required `workflow` object describes the full workflow structure.
+
+#### workflow object
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | string | Yes | Workflow display name. |
+| `tasks` | array | Yes | Linear sequence of scriptable tasks (at least one). See [task object](#task-object) below. |
+| `id` | string | No | Workflow UUID. Defaults to a generated UUID. |
+| `description` | string | No | Workflow description. |
+| `version` | string | No | Workflow version (default: `1.0.0`). |
+| `apiVersion` | string | No | Workflow API version (default: `6.0.0`). |
+| `inputs` | array | No | Workflow input parameters. See [parameter object](#parameter-object) below. |
+| `outputs` | array | No | Workflow output parameters. See [parameter object](#parameter-object) below. |
+| `attributes` | array | No | Workflow attributes (workflow-scoped variables). See [parameter object](#parameter-object) below. |
+
+#### parameter object
+
+Used for `inputs`, `outputs`, and `attributes`.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | string | Yes | Parameter name. |
+| `type` | string | Yes | vRO parameter type (e.g. `string`, `number`, `boolean`, `Array/string`, `Properties`). |
+| `description` | string | No | Parameter description. |
+
+#### task object
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `script` | string | Yes | JavaScript body of the scriptable task. |
+| `displayName` | string | No | Task display name shown in the vRO UI. |
+| `name` | string | No | Internal workflow item name (default: `itemN`). |
+| `description` | string | No | Task description. |
+| `inBindings` | array | No | Maps workflow inputs or attributes into script variables. See [binding object](#binding-object) below. |
+| `outBindings` | array | No | Maps script variables back to workflow outputs or attributes. See [binding object](#binding-object) below. |
+
+#### binding object
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | string | Yes | Script-local variable name. |
+| `type` | string | Yes | vRO parameter type. |
+| `source` | string | `inBindings` | Workflow input or attribute name to read from. |
+| `target` | string | `outBindings` | Workflow output or attribute name to write to. |
+
+### diff-workflow-file sources
+
+Both `base` and `compare` are discriminated unions selected by `source`:
+
+| `source` value | Additional field | Description |
+| --- | --- | --- |
+| `"file"` | `fileName` (string) | A local `.workflow` file under the configured artifact directory. |
+| `"live"` | `workflowId` (string) | Export the live workflow and use it as the comparison side. |
+
 ## Actions
 
 | Tool | Purpose |
@@ -54,6 +168,25 @@ Tools are grouped by operating domain. Read-only tools are safe for discovery; w
 | `diff-action-file` | Compare local action artifacts, or a live action export against a local artifact. |
 | `import-action-file` | Import a `.action` artifact into an action category. |
 | `delete-action` | Delete an action. Irreversible. |
+
+### create-action parameters
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `moduleName` | string | Yes | Module (package) name for the action (e.g. `com.example.myactions`). |
+| `name` | string | Yes | Action name. |
+| `script` | string | Yes | JavaScript body of the action. |
+| `inputParameters` | array | No | Input parameter definitions. Each element: `{ name, type, description? }`. |
+| `returnType` | string | No | Return type (e.g. `string`, `void`, `Array/string`). |
+
+### diff-action-file sources
+
+Same discriminated union as [diff-workflow-file sources](#diff-workflow-file-sources), replacing `workflowId` with `actionId`:
+
+| `source` value | Additional field | Description |
+| --- | --- | --- |
+| `"file"` | `fileName` (string) | A local `.action` file under the configured artifact directory. |
+| `"live"` | `actionId` (string) | Export the live action and use it as the comparison side. |
 
 ## Configuration Elements
 
@@ -83,6 +216,13 @@ Tools are grouped by operating domain. Read-only tools are safe for discovery; w
 | Tool | Purpose |
 | --- | --- |
 | `list-categories` | List categories by type: `WorkflowCategory`, `ActionCategory`, `ConfigurationElementCategory`, or `ResourceElementCategory`. |
+
+### list-categories parameters
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `type` | string (enum) | Yes | Category type: `WorkflowCategory`, `ActionCategory`, `ConfigurationElementCategory`, or `ResourceElementCategory`. |
+| `filter` | string | No | Filter categories by name (substring match). |
 
 ## Catalog Items
 
@@ -138,3 +278,34 @@ Tools are grouped by operating domain. Read-only tools are safe for discovery; w
 | `create-subscription` | Create a subscription linking an event topic to a vRO workflow or ABX action. |
 | `update-subscription` | Update a subscription. |
 | `delete-subscription` | Delete a subscription. |
+
+### create-subscription parameters
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | string | Yes | Subscription name. |
+| `eventTopicId` | string | Yes | Event topic ID (use `list-event-topics` to discover available topics). |
+| `runnableType` | string (enum) | Yes | Runnable to trigger: `extensibility.vro` (vRO workflow) or `extensibility.abx` (ABX action). |
+| `runnableId` | string | Yes | ID of the workflow or ABX action to trigger. |
+| `projectId` | string | No | Project ID to scope the subscription. |
+| `description` | string | No | Subscription description. |
+| `blocking` | boolean | No | Whether the subscription blocks the event pipeline until the runnable completes. |
+| `priority` | number | No | Subscription priority. Lower number = higher priority. |
+| `timeout` | number | No | Timeout in minutes for runnable execution. |
+| `disabled` | boolean | No | Create the subscription in disabled state (default: `false`). |
+
+### update-subscription parameters
+
+All fields except `id` are optional; only supplied fields are updated.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | string | Yes | Subscription ID to update. |
+| `name` | string | No | New subscription name. |
+| `description` | string | No | New description. |
+| `disabled` | boolean | No | Enable (`false`) or disable (`true`) the subscription. |
+| `runnableId` | string | No | New workflow or ABX action ID. |
+| `runnableType` | string (enum) | No | New runnable type: `extensibility.vro` or `extensibility.abx`. |
+| `blocking` | boolean | No | Update blocking behaviour. |
+| `priority` | number | No | Update priority. |
+| `timeout` | number | No | Update timeout in minutes. |
