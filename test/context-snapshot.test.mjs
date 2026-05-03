@@ -164,6 +164,201 @@ test("collectContextSnapshot includes optional domains when requested", async ()
   }
 });
 
+test("collectContextSnapshot vcfaBuiltIns profile filters Library subfolder workflows and VMware actions", async () => {
+  const contextDir = await mkdtemp(join(tmpdir(), "vcfa-context-"));
+  try {
+    const client = {
+      ...baseClient(contextDir),
+      listCategories: async (categoryType) => {
+        if (categoryType === "WorkflowCategory") {
+          return {
+            link: [
+              {
+                id: "library-root",
+                name: "Library",
+                type: "WorkflowCategory",
+                path: "/Library",
+              },
+              {
+                id: "library-vc",
+                name: "vCenter",
+                type: "WorkflowCategory",
+                path: "/Library/vCenter",
+              },
+              {
+                id: "custom",
+                name: "Custom",
+                type: "WorkflowCategory",
+                path: "/Custom",
+              },
+            ],
+          };
+        }
+        return { link: [] };
+      },
+      listWorkflows: async () => ({
+        link: [
+          {
+            id: "wf-library",
+            name: "Library Root Workflow",
+            categoryId: "library-root",
+            categoryName: "Library",
+          },
+          {
+            id: "wf-library-child",
+            name: "Library Child Workflow",
+            categoryId: "library-vc",
+            categoryName: "vCenter",
+          },
+          {
+            id: "wf-custom",
+            name: "Custom Workflow",
+            categoryId: "custom",
+            categoryName: "Custom",
+          },
+        ],
+      }),
+      getWorkflow: async (id) => ({
+        id,
+        name:
+          id === "wf-library-child"
+            ? "Library Child Workflow"
+            : "Library Root Workflow",
+        categoryId: id === "wf-library-child" ? "library-vc" : "library-root",
+        categoryName: id === "wf-library-child" ? "vCenter" : "Library",
+        inputParameters: [],
+        outputParameters: [],
+      }),
+      listActions: async () => ({
+        link: [
+          {
+            id: "action-vmware-root",
+            name: "vmwareRoot",
+            module: "com.vmware",
+            fqn: "com.vmware.vmwareRoot",
+          },
+          {
+            id: "action-vmware-child",
+            name: "vmwareChild",
+            module: "com.vmware.library",
+            fqn: "com.vmware.library.vmwareChild",
+          },
+          {
+            id: "action-custom",
+            name: "custom",
+            module: "com.example",
+            fqn: "com.example.custom",
+          },
+        ],
+      }),
+      getAction: async (id) => ({
+        id,
+        name: id === "action-vmware-root" ? "vmwareRoot" : "vmwareChild",
+        module:
+          id === "action-vmware-root" ? "com.vmware" : "com.vmware.library",
+        fqn:
+          id === "action-vmware-root"
+            ? "com.vmware.vmwareRoot"
+            : "com.vmware.library.vmwareChild",
+        "input-parameters": [],
+        "output-type": "void",
+        script: "// built-in",
+      }),
+    };
+
+    const result = await collectContextSnapshot(client, {
+      profile: "vcfaBuiltIns",
+      overwrite: true,
+    });
+    const json = JSON.parse(await readFile(result.jsonPath, "utf8"));
+    const markdown = await readFile(result.markdownPath, "utf8");
+
+    assert.equal(json.profile, "vcfaBuiltIns");
+    assert.deepEqual(json.domains, ["actions", "workflows"]);
+    assert.equal(json.limits.maxItemsPerDomain, 1000);
+    assert.match(result.jsonPath, /vcfa-builtins-context\.json$/);
+    assert.deepEqual(
+      json.data.workflows.map((workflow) => workflow.id),
+      ["wf-library-child"],
+    );
+    assert.deepEqual(
+      json.data.actions.map((action) => action.id),
+      ["action-vmware-child", "action-vmware-root"],
+    );
+    assert.equal(result.counts.workflows, 1);
+    assert.equal(result.skipped.workflows, 0);
+    assert.equal(result.counts.actions, 2);
+    assert.equal(result.skipped.actions, 0);
+    assert.match(markdown, /Profile: vcfaBuiltIns/);
+    assert.match(markdown, /WorkflowCategory paths below Library/);
+  } finally {
+    await rm(contextDir, { recursive: true, force: true });
+  }
+});
+
+test("collectContextSnapshot vcfaBuiltIns profile warns when Library subfolders cannot be identified", async () => {
+  const contextDir = await mkdtemp(join(tmpdir(), "vcfa-context-"));
+  try {
+    const client = {
+      ...baseClient(contextDir),
+      listCategories: async (categoryType) => {
+        if (categoryType === "WorkflowCategory") {
+          return {
+            link: [
+              { id: "library-root", name: "Library", type: "WorkflowCategory" },
+              { id: "library-child", name: "vCenter", type: "WorkflowCategory" },
+            ],
+          };
+        }
+        return { link: [] };
+      },
+      listWorkflows: async () => ({
+        link: [
+          {
+            id: "wf-library-child",
+            name: "Library Child Workflow",
+            categoryId: "library-child",
+            categoryName: "vCenter",
+          },
+        ],
+      }),
+    };
+
+    const result = await collectContextSnapshot(client, {
+      fileBaseName: "builtins-missing-paths",
+      profile: "vcfaBuiltIns",
+    });
+    const json = JSON.parse(await readFile(result.jsonPath, "utf8"));
+
+    assert.equal(result.counts.workflows, 0);
+    assert.deepEqual(json.data.workflows, []);
+    assert.match(
+      result.warnings.join("\n"),
+      /no Library descendant WorkflowCategory paths were found/,
+    );
+  } finally {
+    await rm(contextDir, { recursive: true, force: true });
+  }
+});
+
+test("collectContextSnapshot vcfaBuiltIns profile leaves explicitly requested non-core domains unfiltered", async () => {
+  const contextDir = await mkdtemp(join(tmpdir(), "vcfa-context-"));
+  try {
+    const result = await collectContextSnapshot(baseClient(contextDir), {
+      fileBaseName: "builtins-explicit",
+      profile: "vcfaBuiltIns",
+      domains: ["templates"],
+    });
+    const json = JSON.parse(await readFile(result.jsonPath, "utf8"));
+
+    assert.deepEqual(json.domains, ["templates"]);
+    assert.equal(result.counts.templates, 1);
+    assert.equal(json.data.templates[0].name, "Ubuntu");
+  } finally {
+    await rm(contextDir, { recursive: true, force: true });
+  }
+});
+
 test("collectContextSnapshot rejects unsafe names and existing files", async () => {
   const contextDir = await mkdtemp(join(tmpdir(), "vcfa-context-"));
   try {
@@ -217,10 +412,12 @@ test("collect-context-snapshot tool delegates and reports saved paths", async ()
   });
 
   assert.equal(configs.get("collect-context-snapshot").annotations.readOnlyHint, true);
+  assert.ok(configs.get("collect-context-snapshot").inputSchema.shape.profile);
   const result = await handlers.get("collect-context-snapshot")({
     domains: ["workflows"],
+    profile: "vcfaBuiltIns",
   });
-  assert.deepEqual(received, { domains: ["workflows"] });
+  assert.deepEqual(received, { domains: ["workflows"], profile: "vcfaBuiltIns" });
   assert.match(result.content[0].text, /vcfa-context\.json/);
 });
 

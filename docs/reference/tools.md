@@ -18,7 +18,10 @@ Collect reusable VCF Automation/vRO environment context and persist deterministi
 | `domains` | string[] | No | core domains | Domains to collect. Core domains are `workflows`, `actions`, `configurations`, `resources`, and `categories`; optional domains are `templates`, `catalogItems`, `eventTopics`, `subscriptions`, `packages`, and `plugins`. |
 | `includeOptionalDomains` | boolean | No | `false` | Also collect templates, catalog items, event topics, subscriptions, packages, and plugins. |
 | `maxItemsPerDomain` | integer | No | `100` | Maximum items to collect per domain. Increase this when an environment has more than 100 items in a domain and full coverage is needed. |
+| `profile` | enum | No | `default` | Snapshot profile. Use `vcfaBuiltIns` to focus on workflows in subfolders below the `Library` workflow category, plus actions whose module is `com.vmware` or starts with `com.vmware.`. |
 :::
+
+When `profile` is `vcfaBuiltIns`, omitted `domains` default to `workflows` and `actions`, omitted `fileBaseName` defaults to `vcfa-builtins-context`, and omitted `maxItemsPerDomain` defaults to `1000`. Explicitly requested non-workflow/action domains are still collected normally.
 
 ## Artifact Promotion
 
