@@ -186,7 +186,7 @@ Useful live MCP sequence:
 5. `run-workflow` with inputs.
 6. `get-workflow-execution` to poll status and inspect outputs/errors.
 
-Workflow files are read from the `workflows` subdirectory of `VCFA_ARTIFACT_DIR` (defaults to `artifacts/workflows/` in the repository root) unless `VCFA_WORKFLOW_DIR` overrides it.
+Workflow files are read from the `workflows` subdirectory of `VCFA_ARTIFACT_DIR` (defaults to `artifacts/workflows/` in the MCP server process working directory, typically the open project) unless `VCFA_WORKFLOW_DIR` overrides it.
 
 ## Common Pitfalls
 

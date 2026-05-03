@@ -213,7 +213,7 @@ async function collectDomain(
       return collectListWithDetails(
         "actions",
         () => client.listActions(),
-        (item) => item.id || item.fqn,
+        actionDetailReference,
         (id) => client.getAction(id),
         summarizeAction,
         maxItems,
@@ -365,7 +365,7 @@ async function collectBuiltInActions(
   return collectFilteredListWithDetails(
     "actions",
     filtered,
-    (item) => item.id || item.fqn,
+    actionDetailReference,
     (id) => client.getAction(id),
     summarizeAction,
     maxItems,
@@ -451,8 +451,15 @@ async function getLibraryWorkflowDescendantCategoryIds(
         .map((category) => category.id),
     );
     if (descendantCategoryIds.size === 0) {
+      const inferredIds = inferLibraryDescendantCategoryIds(categories, libraryRoots);
+      if (inferredIds.size > 0) {
+        warnings.push(
+          "workflows: WorkflowCategory paths were not returned; inferred Library descendants from category list order",
+        );
+        return inferredIds;
+      }
       warnings.push(
-        "workflows: no Library descendant WorkflowCategory paths were found; built-ins profile will only match workflow categoryName path metadata",
+        "workflows: no Library descendant WorkflowCategory paths were found and category list order could not infer descendants; built-ins profile will only match workflow categoryName path metadata",
       );
     }
     return descendantCategoryIds;
@@ -484,6 +491,24 @@ function isLibraryDescendantCategory(
   );
 }
 
+function inferLibraryDescendantCategoryIds(
+  categories: Category[],
+  libraryRoots: Category[],
+): Set<string> {
+  const libraryRootIds = new Set(libraryRoots.map((category) => category.id));
+  const firstLibraryIndex = categories.findIndex((category) =>
+    libraryRootIds.has(category.id),
+  );
+  if (firstLibraryIndex < 0) return new Set();
+
+  const ids = new Set<string>();
+  for (const category of categories.slice(firstLibraryIndex + 1)) {
+    if (category.name === "web-root") break;
+    ids.add(category.id);
+  }
+  return ids;
+}
+
 function isLibraryCategoryRoot(category: Category): boolean {
   return category.name === "Library" || normalizeCategoryPath(category) === "/Library";
 }
@@ -503,6 +528,11 @@ function isLibraryCategoryName(categoryName?: string): boolean {
 
 function isVmwareActionModule(moduleName?: string): boolean {
   return moduleName === "com.vmware" || moduleName?.startsWith("com.vmware.") === true;
+}
+
+function actionDetailReference(action: Action): string | undefined {
+  if (action.module && action.name) return `${action.module}/${action.name}`;
+  return action.fqn || action.id;
 }
 
 function summarizeWorkflow(workflow: Workflow) {

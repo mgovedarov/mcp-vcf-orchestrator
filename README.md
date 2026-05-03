@@ -57,7 +57,7 @@ Useful optional variables:
 | Variable | Description |
 | --- | --- |
 | `VCFA_IGNORE_TLS` | Set to `true` to skip TLS certificate verification in lab environments. |
-| `VCFA_ARTIFACT_DIR` | Root directory for local artifact files. Defaults to `artifacts/` in the repository root. |
+| `VCFA_ARTIFACT_DIR` | Root directory for local artifact files. Defaults to `artifacts/` in the MCP server process working directory, typically the open project. |
 | `VCFA_PACKAGE_DIR` | Override package artifact directory. |
 | `VCFA_RESOURCE_DIR` | Override resource artifact directory. |
 | `VCFA_WORKFLOW_DIR` | Override workflow artifact directory. |
