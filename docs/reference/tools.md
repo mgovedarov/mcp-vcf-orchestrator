@@ -8,6 +8,16 @@ Tools are grouped by operating domain. Read-only tools are safe for discovery; w
 | --- | --- |
 | `collect-context-snapshot` | Collect reusable VCFA/vRO context and persist deterministic Markdown and JSON snapshots without dumping secrets, scripts, template YAML, or binary content. |
 
+### collect-context-snapshot parameters
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `fileBaseName` | string | `vcfa-context` | Base file name for the `.json` and `.md` output files. Plain name only — no path separators or extensions. |
+| `overwrite` | boolean | `false` | Replace existing snapshot files. |
+| `domains` | string[] | core domains | Domains to collect. Core: `workflows`, `actions`, `configurations`, `resources`, `categories`. Optional: `templates`, `catalogItems`, `eventTopics`, `subscriptions`, `packages`, `plugins`. |
+| `includeOptionalDomains` | boolean | `false` | Also collect templates, catalog items, event topics, subscriptions, packages, and plugins. |
+| `maxItemsPerDomain` | integer | `100` | Maximum items to collect per domain. Increase this when the environment has more than 100 workflows or actions and you need full coverage. Any positive integer is accepted. |
+
 ## Artifact Promotion
 
 | Tool | Purpose |

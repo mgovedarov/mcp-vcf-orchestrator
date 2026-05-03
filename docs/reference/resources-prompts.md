@@ -56,6 +56,16 @@ goal: "Persist reusable VM provisioning context before implementation work."
 includeOptionalDomains: true
 ```
 
+For large environments where the default 100-item-per-domain limit causes skipped items, call the tool directly with a higher limit:
+
+```text
+Use collect-context-snapshot with:
+fileBaseName: vcfa-context-full
+includeOptionalDomains: true
+maxItemsPerDomain: 600
+overwrite: true
+```
+
 Discovery-first implementation planning:
 
 ```text
