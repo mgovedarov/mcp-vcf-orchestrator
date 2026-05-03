@@ -18,11 +18,9 @@ import { registerSubscriptionTools } from "./tools/subscription-tools.js";
 import { registerTemplateTools } from "./tools/template-tools.js";
 import { registerWorkflowTools } from "./tools/workflow-tools.js";
 import { VroClient } from "./vro-client.js";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join, resolve } from "node:path";
 
-const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const DEFAULT_ARTIFACT_DIR = join(REPO_ROOT, "artifacts");
+const DEFAULT_ARTIFACT_DIR = join(process.cwd(), "artifacts");
 
 function getRequiredEnv(name: string): string {
   const value = process.env[name];

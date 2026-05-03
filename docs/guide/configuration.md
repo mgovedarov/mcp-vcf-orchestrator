@@ -24,7 +24,7 @@ It uses the returned bearer token for later VCF Automation, Service Broker, Clou
 | Variable | Description |
 | --- | --- |
 | `VCFA_IGNORE_TLS` | Set to `true` to disable TLS certificate verification for lab environments. |
-| `VCFA_ARTIFACT_DIR` | Root directory for local artifact import/export files. Defaults to `artifacts/` in the repository root. |
+| `VCFA_ARTIFACT_DIR` | Root directory for local artifact import/export files. Defaults to `artifacts/` in the MCP server process working directory, typically the open project. |
 | `VCFA_PACKAGE_DIR` | Override the package artifact directory. |
 | `VCFA_RESOURCE_DIR` | Override the resource element artifact directory. |
 | `VCFA_WORKFLOW_DIR` | Override the workflow artifact directory. |

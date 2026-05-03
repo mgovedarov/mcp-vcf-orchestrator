@@ -252,12 +252,15 @@ test("collectContextSnapshot vcfaBuiltIns profile filters Library subfolder work
         ],
       }),
       getAction: async (id) => ({
-        id,
-        name: id === "action-vmware-root" ? "vmwareRoot" : "vmwareChild",
+        id:
+          id === "com.vmware/vmwareRoot"
+            ? "action-vmware-root"
+            : "action-vmware-child",
+        name: id === "com.vmware/vmwareRoot" ? "vmwareRoot" : "vmwareChild",
         module:
-          id === "action-vmware-root" ? "com.vmware" : "com.vmware.library",
+          id === "com.vmware/vmwareRoot" ? "com.vmware" : "com.vmware.library",
         fqn:
-          id === "action-vmware-root"
+          id === "com.vmware/vmwareRoot"
             ? "com.vmware.vmwareRoot"
             : "com.vmware.library.vmwareChild",
         "input-parameters": [],
@@ -296,7 +299,7 @@ test("collectContextSnapshot vcfaBuiltIns profile filters Library subfolder work
   }
 });
 
-test("collectContextSnapshot vcfaBuiltIns profile warns when Library subfolders cannot be identified", async () => {
+test("collectContextSnapshot vcfaBuiltIns profile infers Library subfolders when paths are absent", async () => {
   const contextDir = await mkdtemp(join(tmpdir(), "vcfa-context-"));
   try {
     const client = {
@@ -330,11 +333,14 @@ test("collectContextSnapshot vcfaBuiltIns profile warns when Library subfolders 
     });
     const json = JSON.parse(await readFile(result.jsonPath, "utf8"));
 
-    assert.equal(result.counts.workflows, 0);
-    assert.deepEqual(json.data.workflows, []);
+    assert.equal(result.counts.workflows, 1);
+    assert.deepEqual(
+      json.data.workflows.map((workflow) => workflow.id),
+      ["wf-library-child"],
+    );
     assert.match(
       result.warnings.join("\n"),
-      /no Library descendant WorkflowCategory paths were found/,
+      /inferred Library descendants from category list order/,
     );
   } finally {
     await rm(contextDir, { recursive: true, force: true });
@@ -354,6 +360,47 @@ test("collectContextSnapshot vcfaBuiltIns profile leaves explicitly requested no
     assert.deepEqual(json.domains, ["templates"]);
     assert.equal(result.counts.templates, 1);
     assert.equal(json.data.templates[0].name, "Ubuntu");
+  } finally {
+    await rm(contextDir, { recursive: true, force: true });
+  }
+});
+
+test("collectContextSnapshot uses action module and name for detail lookup when available", async () => {
+  const contextDir = await mkdtemp(join(tmpdir(), "vcfa-context-"));
+  const actionLookups = [];
+  try {
+    const client = {
+      ...baseClient(contextDir),
+      listActions: async () => ({
+        link: [
+          {
+            id: "opaque-action-id",
+            name: "getVmIp",
+            module: "com.example.actions",
+            fqn: "com.example.actions.getVmIp",
+          },
+        ],
+      }),
+      getAction: async (id) => {
+        actionLookups.push(id);
+        return {
+          id,
+          name: "getVmIp",
+          module: "com.example.actions",
+          fqn: "com.example.actions.getVmIp",
+          "input-parameters": [],
+          "output-type": "string",
+          script: "return vm.ipAddress;",
+        };
+      },
+    };
+
+    await collectContextSnapshot(client, {
+      fileBaseName: "action-detail-reference",
+      domains: ["actions"],
+    });
+
+    assert.deepEqual(actionLookups, ["com.example.actions/getVmIp"]);
   } finally {
     await rm(contextDir, { recursive: true, force: true });
   }
