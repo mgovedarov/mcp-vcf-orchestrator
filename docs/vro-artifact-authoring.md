@@ -186,7 +186,7 @@ Useful live MCP sequence:
 5. `run-workflow` with inputs.
 6. `get-workflow-execution` to poll status and inspect outputs/errors.
 
-For this repository, set `VCFA_ARTIFACT_DIR` to the root directory for generated artifacts before importing. Workflow files are read from its `workflows` subdirectory unless `VCFA_WORKFLOW_DIR` overrides it.
+Workflow files are read from the `workflows` subdirectory of `VCFA_ARTIFACT_DIR` (defaults to `artifacts/workflows/` in the repository root) unless `VCFA_WORKFLOW_DIR` overrides it.
 
 ## Common Pitfalls
 
