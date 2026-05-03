@@ -223,3 +223,158 @@ test("collect-context-snapshot tool delegates and reports saved paths", async ()
   assert.deepEqual(received, { domains: ["workflows"] });
   assert.match(result.content[0].text, /vcfa-context\.json/);
 });
+
+test("collectContextSnapshot count matches list tool output size", async () => {
+  const contextDir = await mkdtemp(join(tmpdir(), "vcfa-context-"));
+  try {
+    // Client returns exactly 5 workflows and 3 actions
+    const client = {
+      ...baseClient(contextDir),
+      listWorkflows: async () => ({
+        link: [
+          { id: "wf-1", name: "Alpha" },
+          { id: "wf-2", name: "Beta" },
+          { id: "wf-3", name: "Gamma" },
+          { id: "wf-4", name: "Delta" },
+          { id: "wf-5", name: "Epsilon" },
+        ],
+      }),
+      getWorkflow: async (id) => ({
+        id,
+        name: id,
+        description: "",
+        version: "1.0.0",
+        categoryName: "VCFA",
+        inputParameters: [],
+        outputParameters: [],
+      }),
+      listActions: async () => ({
+        link: [
+          { id: "ac-1", name: "actionOne", module: "com.example", fqn: "com.example/actionOne" },
+          { id: "ac-2", name: "actionTwo", module: "com.example", fqn: "com.example/actionTwo" },
+          { id: "ac-3", name: "actionThree", module: "com.example", fqn: "com.example/actionThree" },
+        ],
+      }),
+      getAction: async (id) => ({
+        id,
+        name: id,
+        module: "com.example",
+        fqn: `com.example/${id}`,
+        "input-parameters": [],
+        "output-type": "void",
+        script: "// no-op",
+      }),
+    };
+
+    const result = await collectContextSnapshot(client, {
+      fileBaseName: "count-check",
+      domains: ["workflows", "actions"],
+    });
+
+    // Counts must exactly match the number of items the list tool returned
+    assert.equal(result.counts.workflows, 5);
+    assert.equal(result.skipped.workflows, 0);
+    assert.equal(result.counts.actions, 3);
+    assert.equal(result.skipped.actions, 0);
+
+    const json = JSON.parse(await readFile(result.jsonPath, "utf8"));
+    assert.equal(json.data.workflows.length, 5);
+    assert.equal(json.data.actions.length, 3);
+  } finally {
+    await rm(contextDir, { recursive: true, force: true });
+  }
+});
+
+test("collectContextSnapshot workflow items contain actionable metadata for next steps", async () => {
+  const contextDir = await mkdtemp(join(tmpdir(), "vcfa-context-"));
+  try {
+    const result = await collectContextSnapshot(baseClient(contextDir), {
+      fileBaseName: "actionable",
+      domains: ["workflows", "actions"],
+    });
+
+    const json = JSON.parse(await readFile(result.jsonPath, "utf8"));
+
+    // Workflows must carry inputs and outputs so a developer knows the contract without a follow-up get-workflow
+    const workflow = json.data.workflows[0];
+    assert.ok(Array.isArray(workflow.inputs), "workflow must have inputs array");
+    assert.ok(Array.isArray(workflow.outputs), "workflow must have outputs array");
+    assert.ok(workflow.inputs.length > 0, "workflow inputs must be populated");
+    assert.ok(workflow.outputs.length > 0, "workflow outputs must be populated");
+    assert.ok(typeof workflow.inputs[0].name === "string", "input must have name");
+    assert.ok(typeof workflow.inputs[0].type === "string", "input must have type");
+
+    // Actions must carry returnType and inputs so a developer can verify action contract
+    const action = json.data.actions[0];
+    assert.ok(typeof action.returnType === "string", "action must have returnType");
+    assert.ok(Array.isArray(action.inputs), "action must have inputs array");
+    assert.ok(action.inputs.length > 0, "action inputs must be populated");
+    assert.ok(typeof action.inputs[0].name === "string", "action input must have name");
+    assert.ok(typeof action.inputs[0].type === "string", "action input must have type");
+  } finally {
+    await rm(contextDir, { recursive: true, force: true });
+  }
+});
+
+test("collectContextSnapshot template items contain projectId for catalog-ready check", async () => {
+  const contextDir = await mkdtemp(join(tmpdir(), "vcfa-context-"));
+  try {
+    const result = await collectContextSnapshot(baseClient(contextDir), {
+      fileBaseName: "template-meta",
+      domains: ["workflows"],
+      includeOptionalDomains: true,
+    });
+
+    const json = JSON.parse(await readFile(result.jsonPath, "utf8"));
+    const template = json.data.templates[0];
+
+    // projectId is required so a developer can target create-template without guessing
+    assert.ok(typeof template.projectId === "string", "template must have projectId");
+    assert.ok(template.projectId.length > 0, "template projectId must not be empty");
+
+    // Content must be redacted (sha256 + length) not inline YAML
+    assert.equal(template.content.included, false);
+    assert.match(template.content.sha256, /^[0-9a-f]{64}$/);
+    assert.ok(typeof template.content.length === "number", "content must record original length");
+  } finally {
+    await rm(contextDir, { recursive: true, force: true });
+  }
+});
+
+test("collectContextSnapshot respects maxItemsPerDomain across multiple domains", async () => {
+  const contextDir = await mkdtemp(join(tmpdir(), "vcfa-context-"));
+  try {
+    // 2 workflows and 1 action available; cap at 1 per domain
+    const client = {
+      ...baseClient(contextDir),
+      listActions: async () => ({
+        link: [{ id: "ac-1", name: "onlyAction", module: "com.example", fqn: "com.example/onlyAction" }],
+      }),
+      getAction: async (id) => ({
+        id,
+        name: "onlyAction",
+        module: "com.example",
+        fqn: "com.example/onlyAction",
+        "input-parameters": [],
+        "output-type": "void",
+        script: "// no-op",
+      }),
+    };
+
+    const result = await collectContextSnapshot(client, {
+      fileBaseName: "multi-cap",
+      domains: ["workflows", "actions"],
+      maxItemsPerDomain: 1,
+    });
+
+    // Workflows: 2 available, 1 cap → 1 collected + 1 skipped
+    assert.equal(result.counts.workflows, 1);
+    assert.equal(result.skipped.workflows, 1);
+
+    // Actions: 1 available, 1 cap → 1 collected + 0 skipped
+    assert.equal(result.counts.actions, 1);
+    assert.equal(result.skipped.actions, 0);
+  } finally {
+    await rm(contextDir, { recursive: true, force: true });
+  }
+});

@@ -18,6 +18,11 @@ import { registerSubscriptionTools } from "./tools/subscription-tools.js";
 import { registerTemplateTools } from "./tools/template-tools.js";
 import { registerWorkflowTools } from "./tools/workflow-tools.js";
 import { VroClient } from "./vro-client.js";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const DEFAULT_ARTIFACT_DIR = join(REPO_ROOT, "artifacts");
 
 function getRequiredEnv(name: string): string {
   const value = process.env[name];
@@ -35,7 +40,7 @@ async function main(): Promise<void> {
   const organization = getRequiredEnv("VCFA_ORGANIZATION");
   const password = getRequiredEnv("VCFA_PASSWORD");
   const ignoreTls = process.env["VCFA_IGNORE_TLS"] === "true";
-  const artifactDir = process.env["VCFA_ARTIFACT_DIR"];
+  const artifactDir = process.env["VCFA_ARTIFACT_DIR"] ?? DEFAULT_ARTIFACT_DIR;
   const packageDir = process.env["VCFA_PACKAGE_DIR"];
   const resourceDir = process.env["VCFA_RESOURCE_DIR"];
   const workflowDir = process.env["VCFA_WORKFLOW_DIR"];

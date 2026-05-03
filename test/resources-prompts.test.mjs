@@ -213,3 +213,106 @@ test("implementation prompts include discovery-first guardrails", async () => {
   assert.match(plan.messages[0].content.text, /preflight\/diff/);
   assert.match(plan.messages[0].content.text, /get-action must verify its contract/);
 });
+
+test("vcfa-discover-capabilities prompt references all discovery tool families", async () => {
+  const prompts = registeredPrompts();
+
+  const discover = await prompts
+    .get("vcfa-discover-capabilities")
+    .handler({ goal: "Audit VM provisioning coverage" });
+
+  const text = discover.messages[0].content.text;
+
+  // Goal is interpolated
+  assert.match(text, /Audit VM provisioning coverage/);
+
+  // Mentions the key discovery domains from its description
+  assert.match(text, /plugins/);
+  assert.match(text, /categories/);
+  assert.match(text, /workflows/);
+  assert.match(text, /actions/);
+  assert.match(text, /catalog items/);
+  assert.match(text, /templates/);
+
+  // Discovery-first guardrail: stop and report, do not invent
+  assert.match(text, /Do not invent IDs/);
+  assert.match(text, /stop and report/);
+
+  // Recommends concrete next tool calls, not creation
+  assert.match(text, /avoid creating or importing artifacts/);
+  assert.match(text, /Summarize what already exists/);
+});
+
+test("vcfa-discover-capabilities prompt works without optional goal", async () => {
+  const prompts = registeredPrompts();
+
+  const discover = await prompts
+    .get("vcfa-discover-capabilities")
+    .handler({});
+
+  const text = discover.messages[0].content.text;
+  assert.match(text, /discover relevant VCFA capabilities/);
+  assert.match(text, /Do not invent IDs/);
+});
+
+test("all discovery pattern resources contain discovery-first instructions", async () => {
+  const resources = registeredResources({});
+
+  const basicTask = await resources
+    .get("vcfa-pattern-workflow-basic-scriptable-task")
+    .handler(new URL("vcfa://patterns/workflows/basic-scriptable-task"));
+  assert.equal(basicTask.contents[0].mimeType, "text/markdown");
+  assert.match(basicTask.contents[0].text, /list-categories/);
+  assert.match(basicTask.contents[0].text, /list-workflows/);
+  assert.match(basicTask.contents[0].text, /scaffold-workflow-file/);
+  assert.match(basicTask.contents[0].text, /preflight-workflow-file/);
+  assert.match(basicTask.contents[0].text, /import-workflow-file/);
+
+  const smallVm = await resources
+    .get("vcfa-pattern-template-small-vm")
+    .handler(new URL("vcfa://patterns/templates/small-vm"));
+  assert.equal(smallVm.contents[0].mimeType, "text/markdown");
+  assert.match(smallVm.contents[0].text, /list-templates/);
+  assert.match(smallVm.contents[0].text, /get-template/);
+  assert.match(smallVm.contents[0].text, /create-template/);
+  assert.match(smallVm.contents[0].text, /do not guess/i);
+
+  const catalogReady = await resources
+    .get("vcfa-pattern-template-catalog-ready")
+    .handler(new URL("vcfa://patterns/templates/catalog-ready"));
+  assert.equal(catalogReady.contents[0].mimeType, "text/markdown");
+  assert.match(catalogReady.contents[0].text, /list-catalog-items/);
+  assert.match(catalogReady.contents[0].text, /list-deployments/);
+  assert.match(catalogReady.contents[0].text, /stop and report/);
+});
+
+test("workflow-scaffold schema resource contains all required contract fields", async () => {
+  const resources = registeredResources({});
+
+  const schema = await resources
+    .get("vcfa-schema-workflow-scaffold")
+    .handler(new URL("vcfa://schemas/workflow-scaffold"));
+
+  assert.equal(schema.contents[0].mimeType, "application/json");
+  const parsed = JSON.parse(schema.contents[0].text);
+
+  // Top-level contract shape
+  assert.ok(parsed.tool, "schema must have tool field");
+  assert.equal(parsed.tool, "scaffold-workflow-file");
+  assert.ok(parsed.workflow, "schema must have workflow field");
+  assert.ok(Array.isArray(parsed.nextSteps), "schema must have nextSteps array");
+
+  // Workflow fields required for discovery-to-scaffold flow
+  assert.ok(parsed.workflow.inputs, "schema must describe inputs");
+  assert.ok(parsed.workflow.outputs, "schema must describe outputs");
+  assert.ok(parsed.workflow.tasks, "schema must describe tasks");
+
+  // Validation info for scaffold rules
+  assert.ok(parsed.validation, "schema must describe validation rules");
+  assert.match(parsed.validation, /binding|parameter names|task/);
+
+  // Next steps enforce preflight before import
+  const steps = parsed.nextSteps.join(" ");
+  assert.match(steps, /preflight-workflow-file/);
+  assert.match(steps, /import/i);
+});
