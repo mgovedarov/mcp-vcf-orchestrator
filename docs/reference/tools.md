@@ -8,7 +8,7 @@ Each tool lists its input schema in a collapsible parameters section. Required c
 
 ### `collect-context-snapshot`
 
-Collect reusable VCF Automation/vRO environment context and persist deterministic Markdown and JSON snapshots for future agents. Secrets, scripts, template YAML, and binary content are omitted by default.
+Collect reusable VCF Automation/vRO environment context and persist deterministic Markdown and JSON snapshots for future agents. Secrets, scripts, template YAML, and binary content are omitted by default. When the MCP client exposes workspace roots and `VCFA_CONTEXT_DIR` is not set, snapshots are written under the current workspace's `artifacts/context/` directory.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
@@ -22,6 +22,13 @@ Collect reusable VCF Automation/vRO environment context and persist deterministi
 :::
 
 When `profile` is `vcfaBuiltIns`, omitted `domains` default to `workflows` and `actions`, omitted `fileBaseName` defaults to `vcfa-builtins-context`, and omitted `maxItemsPerDomain` defaults to `1000`. Explicitly requested non-workflow/action domains are still collected normally.
+
+After a successful collection, the tool response includes agent-facing resource URIs:
+
+- `vcfa://context/latest` for the newest snapshot manifest.
+- `vcfa://context/snapshots/{fileName}` for the generated JSON and Markdown snapshot files.
+
+The server also emits a resource-list change notification so MCP clients can rediscover persisted context snapshots.
 
 ## Artifact Promotion
 

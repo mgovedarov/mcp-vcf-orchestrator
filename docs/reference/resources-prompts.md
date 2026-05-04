@@ -14,6 +14,8 @@ The server exposes MCP resources for documentation, artifact patterns, and live 
 | `vcfa://patterns/templates/conventions` | Blueprint template metadata/content conventions and authoring rules. |
 | `vcfa://patterns/templates/small-vm` | Guidance for minimal small VM blueprint templates. |
 | `vcfa://patterns/templates/catalog-ready` | Guidance for catalog-facing templates and deployment workflow alignment. |
+| `vcfa://context/latest` | Manifest for the most recent persisted context snapshot pair, including file paths, counts, warnings count, and snapshot resource URIs. |
+| `vcfa://context/snapshots/{fileName}` | Persisted context snapshot file content for a generated `.json` or `.md` snapshot under the effective context directory. |
 | `vcfa://workflows/{id}` | Workflow metadata as JSON. |
 | `vcfa://actions/{id}` | Action metadata and script details as JSON. |
 | `vcfa://deployments/{id}` | Deployment details as JSON. |
@@ -70,6 +72,8 @@ Discover reusable plugins, categories, actions, workflows, catalog items, and te
 ### `vcfa-collect-context-snapshot`
 
 Persist reusable Markdown and JSON VCFA/vRO context for future agents.
+
+When the MCP client exposes workspace roots and `VCFA_CONTEXT_DIR` is not set, generated files are saved under the current workspace's `artifacts/context/` directory. The `vcfaBuiltIns` profile focuses on Library workflows and VMware built-in actions; action details are resolved from the opaque action IDs returned by vRO so list-level module path quirks do not cause false 404 warnings.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |

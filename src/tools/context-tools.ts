@@ -1,6 +1,8 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { basename } from "node:path";
 import { z } from "zod";
+import { resolveEffectiveContextDirectory } from "../context-directory.js";
 import type { VroClient } from "../vro-client.js";
 
 const contextDomainSchema = z.enum([
@@ -26,7 +28,7 @@ export function registerContextTools(
     {
       title: "Collect Context Snapshot",
       description:
-        "Collect reusable VCF Automation/vRO environment context and persist deterministic Markdown and JSON snapshots for future agents. Secrets, scripts, template YAML, and binary content are omitted by default.",
+        "Collect reusable VCF Automation/vRO environment context and persist deterministic Markdown and JSON snapshots for future agents. Secrets, scripts, template YAML, and binary content are omitted by default. When available, snapshots default to the MCP client's current workspace artifacts/context directory.",
       inputSchema: z.object({
         fileBaseName: z
           .string()
@@ -67,7 +69,14 @@ export function registerContextTools(
     },
     async (params): Promise<CallToolResult> => {
       try {
-        const result = await client.collectContextSnapshot(params);
+        const contextDir = await resolveEffectiveContextDirectory(server, client);
+        const result = await client.collectContextSnapshot({
+          ...params,
+          contextDir,
+        });
+        server.sendResourceListChanged();
+        const jsonResourceUri = snapshotResourceUri(result.jsonPath);
+        const markdownResourceUri = snapshotResourceUri(result.markdownPath);
         const warnings =
           result.warnings.length > 0
             ? `\nWarnings:\n${result.warnings.map((warning) => `  • ${warning}`).join("\n")}`
@@ -82,6 +91,10 @@ export function registerContextTools(
                 `Markdown: ${result.markdownPath}`,
                 `Counts: ${JSON.stringify(result.counts)}`,
                 `Skipped: ${JSON.stringify(result.skipped)}`,
+                "Agent resources:",
+                "  • Latest: vcfa://context/latest",
+                `  • JSON: ${jsonResourceUri}`,
+                `  • Markdown: ${markdownResourceUri}`,
                 warnings,
               ]
                 .filter(Boolean)
@@ -102,4 +115,8 @@ export function registerContextTools(
       }
     },
   );
+}
+
+function snapshotResourceUri(path: string): string {
+  return `vcfa://context/snapshots/${encodeURIComponent(basename(path))}`;
 }

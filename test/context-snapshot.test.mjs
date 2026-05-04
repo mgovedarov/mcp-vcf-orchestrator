@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import test from "node:test";
 import { collectContextSnapshot } from "../dist/client/context-snapshot.js";
 import { registerContextTools } from "../dist/tools/context-tools.js";
@@ -253,14 +254,14 @@ test("collectContextSnapshot vcfaBuiltIns profile filters Library subfolder work
       }),
       getAction: async (id) => ({
         id:
-          id === "com.vmware/vmwareRoot"
+          id === "action-vmware-root"
             ? "action-vmware-root"
             : "action-vmware-child",
-        name: id === "com.vmware/vmwareRoot" ? "vmwareRoot" : "vmwareChild",
+        name: id === "action-vmware-root" ? "vmwareRoot" : "vmwareChild",
         module:
-          id === "com.vmware/vmwareRoot" ? "com.vmware" : "com.vmware.library",
+          id === "action-vmware-root" ? "com.vmware" : "com.vmware.library",
         fqn:
-          id === "com.vmware/vmwareRoot"
+          id === "action-vmware-root"
             ? "com.vmware.vmwareRoot"
             : "com.vmware.library.vmwareChild",
         "input-parameters": [],
@@ -338,10 +339,49 @@ test("collectContextSnapshot vcfaBuiltIns profile infers Library subfolders when
       json.data.workflows.map((workflow) => workflow.id),
       ["wf-library-child"],
     );
-    assert.match(
-      result.warnings.join("\n"),
-      /inferred Library descendants from category list order/,
-    );
+    assert.equal(result.warnings.length, 0);
+  } finally {
+    await rm(contextDir, { recursive: true, force: true });
+  }
+});
+
+test("collectContextSnapshot vcfaBuiltIns profile uses action ids for detail lookup", async () => {
+  const contextDir = await mkdtemp(join(tmpdir(), "vcfa-context-"));
+  const actionLookups = [];
+  try {
+    const client = {
+      ...baseClient(contextDir),
+      listActions: async () => ({
+        link: [
+          {
+            id: "opaque-vmware-action-id",
+            name: "processSnmpResult",
+            module: "com.vmware.library",
+            fqn: "com.vmware.library.processSnmpResult",
+          },
+        ],
+      }),
+      getAction: async (id) => {
+        actionLookups.push(id);
+        return {
+          id,
+          name: "processSnmpResult",
+          module: "com.vmware.library.snmp",
+          fqn: "com.vmware.library.snmp.processSnmpResult",
+          "input-parameters": [],
+          "output-type": "Array/Properties",
+          script: "// built-in",
+        };
+      },
+    };
+
+    await collectContextSnapshot(client, {
+      fileBaseName: "builtins-action-id-lookup",
+      profile: "vcfaBuiltIns",
+      domains: ["actions"],
+    });
+
+    assert.deepEqual(actionLookups, ["opaque-vmware-action-id"]);
   } finally {
     await rm(contextDir, { recursive: true, force: true });
   }
@@ -406,6 +446,52 @@ test("collectContextSnapshot uses action module and name for detail lookup when 
   }
 });
 
+test("collectContextSnapshot aggregates vcfaBuiltIns action 404 detail warnings", async () => {
+  const contextDir = await mkdtemp(join(tmpdir(), "vcfa-context-"));
+  try {
+    const client = {
+      ...baseClient(contextDir),
+      listActions: async () => ({
+        link: [
+          {
+            id: "action-sql",
+            name: "query",
+            module: "com.vmware.library.sql",
+            fqn: "com.vmware.library.sql.query",
+          },
+          {
+            id: "action-powershell",
+            name: "run",
+            module: "com.vmware.library.powershell",
+            fqn: "com.vmware.library.powershell.run",
+          },
+        ],
+      }),
+      getAction: async () => {
+        throw new Error("vRO API error: 404 Not Found");
+      },
+    };
+
+    const result = await collectContextSnapshot(client, {
+      fileBaseName: "builtins-action-404s",
+      profile: "vcfaBuiltIns",
+      domains: ["actions"],
+    });
+    const json = JSON.parse(await readFile(result.jsonPath, "utf8"));
+
+    assert.equal(result.warnings.length, 1);
+    assert.match(result.warnings[0], /404 for 2 VMware built-in item\(s\)/);
+    assert.match(result.warnings[0], /list-level metadata was retained/);
+    assert.match(result.warnings[0], /com\.vmware\.library\.powershell/);
+    assert.deepEqual(
+      json.data.actions.map((action) => action.id),
+      ["action-sql", "action-powershell"],
+    );
+  } finally {
+    await rm(contextDir, { recursive: true, force: true });
+  }
+});
+
 test("collectContextSnapshot rejects unsafe names and existing files", async () => {
   const contextDir = await mkdtemp(join(tmpdir(), "vcfa-context-"));
   try {
@@ -437,6 +523,7 @@ test("collectContextSnapshot rejects unsafe names and existing files", async () 
 
 test("collect-context-snapshot tool delegates and reports saved paths", async () => {
   let received;
+  let resourceNotifications = 0;
   const handlers = new Map();
   const configs = new Map();
   const server = {
@@ -444,8 +531,12 @@ test("collect-context-snapshot tool delegates and reports saved paths", async ()
       configs.set(name, config);
       handlers.set(name, handler);
     },
+    sendResourceListChanged() {
+      resourceNotifications += 1;
+    },
   };
   registerContextTools(server, {
+    getContextDirectory: () => "/tmp/context",
     collectContextSnapshot: async (params) => {
       received = params;
       return {
@@ -464,8 +555,73 @@ test("collect-context-snapshot tool delegates and reports saved paths", async ()
     domains: ["workflows"],
     profile: "vcfaBuiltIns",
   });
-  assert.deepEqual(received, { domains: ["workflows"], profile: "vcfaBuiltIns" });
+  assert.deepEqual(received, {
+    contextDir: "/tmp/context",
+    domains: ["workflows"],
+    profile: "vcfaBuiltIns",
+  });
   assert.match(result.content[0].text, /vcfa-context\.json/);
+  assert.match(result.content[0].text, /Agent resources:/);
+  assert.match(result.content[0].text, /vcfa:\/\/context\/latest/);
+  assert.match(
+    result.content[0].text,
+    /vcfa:\/\/context\/snapshots\/vcfa-context\.json/,
+  );
+  assert.match(
+    result.content[0].text,
+    /vcfa:\/\/context\/snapshots\/vcfa-context\.md/,
+  );
+  assert.equal(resourceNotifications, 1);
+});
+
+test("collect-context-snapshot tool defaults context output to client workspace root", async () => {
+  let received;
+  let resourceNotifications = 0;
+  const handlers = new Map();
+  const workspaceDir = await mkdtemp(join(tmpdir(), "vcfa-workspace-"));
+  const previousContextDir = process.env.VCFA_CONTEXT_DIR;
+  delete process.env.VCFA_CONTEXT_DIR;
+
+  try {
+    const server = {
+      server: {
+        listRoots: async () => ({
+          roots: [{ uri: pathToFileURL(workspaceDir).href, name: "workspace" }],
+        }),
+      },
+      registerTool(name, _config, handler) {
+        handlers.set(name, handler);
+      },
+      sendResourceListChanged() {
+        resourceNotifications += 1;
+      },
+    };
+    registerContextTools(server, {
+      getContextDirectory: () => "/tmp/fallback-context",
+      collectContextSnapshot: async (params) => {
+        received = params;
+        return {
+          jsonPath: join(params.contextDir, "vcfa-context.json"),
+          markdownPath: join(params.contextDir, "vcfa-context.md"),
+          counts: { workflows: 1 },
+          skipped: { workflows: 0 },
+          warnings: [],
+        };
+      },
+    });
+
+    await handlers.get("collect-context-snapshot")({});
+
+    assert.equal(received.contextDir, join(workspaceDir, "artifacts", "context"));
+    assert.equal(resourceNotifications, 1);
+  } finally {
+    if (previousContextDir === undefined) {
+      delete process.env.VCFA_CONTEXT_DIR;
+    } else {
+      process.env.VCFA_CONTEXT_DIR = previousContextDir;
+    }
+    await rm(workspaceDir, { recursive: true, force: true });
+  }
 });
 
 test("collectContextSnapshot count matches list tool output size", async () => {

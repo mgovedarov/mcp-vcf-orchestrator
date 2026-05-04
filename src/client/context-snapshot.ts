@@ -55,6 +55,7 @@ export interface CollectContextSnapshotParams {
   includeOptionalDomains?: boolean;
   maxItemsPerDomain?: number;
   profile?: ContextSnapshotProfile;
+  contextDir?: string;
 }
 
 export interface CollectContextSnapshotResult {
@@ -170,8 +171,16 @@ export async function collectContextSnapshot(
     skipped[domain] = result.stats.skipped;
   }
 
-  const jsonPath = await resolveSnapshotPath(client, `${fileBaseName}.json`);
-  const markdownPath = await resolveSnapshotPath(client, `${fileBaseName}.md`);
+  const jsonPath = await resolveSnapshotPath(
+    client,
+    `${fileBaseName}.json`,
+    params.contextDir,
+  );
+  const markdownPath = await resolveSnapshotPath(
+    client,
+    `${fileBaseName}.md`,
+    params.contextDir,
+  );
   await ensureWritable(jsonPath, `${fileBaseName}.json`, params.overwrite);
   await ensureWritable(markdownPath, `${fileBaseName}.md`, params.overwrite);
 
@@ -365,11 +374,12 @@ async function collectBuiltInActions(
   return collectFilteredListWithDetails(
     "actions",
     filtered,
-    actionDetailReference,
+    builtInActionDetailReference,
     (id) => client.getAction(id),
     summarizeAction,
     maxItems,
     warnings,
+    { aggregateNotFoundWarnings: true },
   );
 }
 
@@ -381,9 +391,11 @@ async function collectFilteredListWithDetails<TListItem, TDetail>(
   summarize: (item: TDetail | TListItem) => unknown,
   maxItems: number,
   warnings: string[],
+  options: { aggregateNotFoundWarnings?: boolean } = {},
 ): Promise<{ data: unknown[]; stats: DomainStats }> {
   const items = sortByNameAndId(rawItems).slice(0, maxItems);
   const data: unknown[] = [];
+  const notFoundDetails: { id: string; item: TListItem }[] = [];
   for (const item of items) {
     const id = idFn(item);
     if (!id) {
@@ -394,11 +406,19 @@ async function collectFilteredListWithDetails<TListItem, TDetail>(
     try {
       data.push(summarize(await detailFn(id)));
     } catch (error) {
+      if (options.aggregateNotFoundWarnings && isNotFoundError(error)) {
+        notFoundDetails.push({ id, item });
+        data.push(summarize(item));
+        continue;
+      }
       warnings.push(
         `${domain}: detail lookup failed for ${id}: ${formatError(error)}`,
       );
       data.push(summarize(item));
     }
+  }
+  if (notFoundDetails.length > 0) {
+    warnings.push(formatAggregatedNotFoundWarning(domain, notFoundDetails));
   }
   return { data, stats: boundedStats(rawItems, maxItems) };
 }
@@ -453,9 +473,6 @@ async function getLibraryWorkflowDescendantCategoryIds(
     if (descendantCategoryIds.size === 0) {
       const inferredIds = inferLibraryDescendantCategoryIds(categories, libraryRoots);
       if (inferredIds.size > 0) {
-        warnings.push(
-          "workflows: WorkflowCategory paths were not returned; inferred Library descendants from category list order",
-        );
         return inferredIds;
       }
       warnings.push(
@@ -533,6 +550,10 @@ function isVmwareActionModule(moduleName?: string): boolean {
 function actionDetailReference(action: Action): string | undefined {
   if (action.module && action.name) return `${action.module}/${action.name}`;
   return action.fqn || action.id;
+}
+
+function builtInActionDetailReference(action: Action): string | undefined {
+  return action.id || actionDetailReference(action);
 }
 
 function summarizeWorkflow(workflow: Workflow) {
@@ -797,9 +818,10 @@ function validateFileBaseName(fileBaseName: string): void {
 async function resolveSnapshotPath(
   client: ContextSnapshotClient,
   fileName: string,
+  contextDir?: string,
 ): Promise<string> {
   return resolveFileInDirectory(
-    client.getContextDirectory(),
+    contextDir ?? client.getContextDirectory(),
     fileName,
     "Context snapshot",
     "the configured context directory",
@@ -897,4 +919,29 @@ function isEmptyArray(value: unknown): boolean {
 
 function formatError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function isNotFoundError(error: unknown): boolean {
+  return /\b404\b/.test(formatError(error));
+}
+
+function formatAggregatedNotFoundWarning<TListItem>(
+  domain: string,
+  details: { id: string; item: TListItem }[],
+): string {
+  const modules = uniqueSorted(
+    details
+      .map(({ item }) => (item as Record<string, unknown>).module)
+      .filter((moduleName): moduleName is string => typeof moduleName === "string"),
+  );
+  const examples = modules.length > 0 ? modules : details.map(({ id }) => id);
+  const suffix =
+    examples.length > 0
+      ? ` Examples: ${examples.slice(0, 5).join(", ")}${examples.length > 5 ? ", ..." : ""}.`
+      : "";
+  return `${domain}: detail lookup returned 404 for ${details.length} VMware built-in item(s); list-level metadata was retained.${suffix} This usually means the instance advertises optional plugin modules whose detail endpoint is unavailable.`;
+}
+
+function uniqueSorted(values: string[]): string[] {
+  return [...new Set(values)].sort((a, b) => a.localeCompare(b));
 }

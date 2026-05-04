@@ -97,6 +97,16 @@ export class ActionClient {
   }
 
   async getAction(id: string): Promise<Action> {
+    if (!this.parseActionReference(id)) {
+      try {
+        return await this.http.get<Action>(
+          `/actions/${encodeURIComponent(id)}`,
+        );
+      } catch {
+        // Older callers may pass friendly IDs that only resolve via list metadata.
+      }
+    }
+
     const { moduleName, actionName } = await this.resolveActionReference(id);
     return this.http.get<Action>(
       `/actions/${encodeURIComponent(moduleName)}/${encodeURIComponent(actionName)}`,

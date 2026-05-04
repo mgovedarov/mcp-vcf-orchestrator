@@ -955,6 +955,13 @@ test("getAction resolves listed action ids to definition endpoint", async () => 
     calls.push({ url: String(url), init });
     if (calls.length === 1) return authResponse();
     if (calls.length === 2) {
+      return new Response(JSON.stringify({ status: 404 }), {
+        status: 404,
+        statusText: "Not Found",
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (calls.length === 3) {
       return Response.json({
         link: [
           {
@@ -979,11 +986,40 @@ test("getAction resolves listed action ids to definition endpoint", async () => 
   const action = await client.getAction("action-1");
 
   assert.equal(
-    calls[2].url,
+    calls[1].url,
+    "https://vcfa.example.test/vco/api/actions/action-1",
+  );
+  assert.equal(calls[1].init.method, "GET");
+  assert.equal(
+    calls[3].url,
     "https://vcfa.example.test/vco/api/actions/com.example.actions/getVmIp",
   );
-  assert.equal(calls[2].init.method, "GET");
+  assert.equal(calls[3].init.method, "GET");
   assert.equal(action.script, "return vm.ipAddress;");
+});
+
+test("getAction accepts opaque action ids directly", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return Response.json({
+      id: "opaque-action-id",
+      name: "processSnmpResult",
+      module: "com.vmware.library.snmp",
+      script: "return result;",
+    });
+  };
+
+  const client = new VroClient(config());
+  const action = await client.getAction("opaque-action-id");
+
+  assert.equal(calls.length, 2);
+  assert.equal(
+    calls[1].url,
+    "https://vcfa.example.test/vco/api/actions/opaque-action-id",
+  );
+  assert.equal(action.module, "com.vmware.library.snmp");
 });
 
 test("getAction accepts fully-qualified action names", async () => {

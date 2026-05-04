@@ -1,14 +1,28 @@
 import assert from "node:assert/strict";
+import {
+  mkdtemp,
+  realpath,
+  rm,
+  symlink,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import { registerVcfaPrompts } from "../dist/prompts/index.js";
 import { registerVcfaResources } from "../dist/resources/index.js";
 
-function registeredResources(client) {
+function registeredResources(client, serverOverrides = {}) {
   const resources = new Map();
   const server = {
+    server: {
+      listRoots: async () => ({ roots: [] }),
+    },
     registerResource(name, uriOrTemplate, config, handler) {
       resources.set(name, { uriOrTemplate, config, handler });
     },
+    ...serverOverrides,
   };
   registerVcfaResources(server, client);
   return resources;
@@ -110,6 +124,148 @@ test("dynamic resources call client methods and return json", async () => {
   assert.match(action.contents[0].text, /getVmIp/);
   assert.match(deployment.contents[0].text, /demo/);
   assert.match(pkg.contents[0].text, /com\.example\.package/);
+});
+
+test("context snapshot resources list and read persisted files", async () => {
+  const contextDir = await mkdtemp(join(tmpdir(), "vcfa-context-resources-"));
+  try {
+    await writeFile(join(contextDir, "snapshot.json"), JSON.stringify({ ok: true }));
+    await writeFile(join(contextDir, "snapshot.md"), "# Snapshot\n");
+    await writeFile(join(contextDir, "ignore.txt"), "nope");
+    const resources = registeredResources({
+      getContextDirectory: () => contextDir,
+    });
+    const contextResource = resources.get("vcfa-context-snapshot");
+
+    const listed = await contextResource.uriOrTemplate.listCallback({});
+    assert.deepEqual(
+      listed.resources.map((resource) => resource.uri),
+      [
+        "vcfa://context/snapshots/snapshot.json",
+        "vcfa://context/snapshots/snapshot.md",
+      ],
+    );
+
+    const json = await contextResource.handler(
+      new URL("vcfa://context/snapshots/snapshot.json"),
+      { fileName: "snapshot.json" },
+    );
+    assert.equal(json.contents[0].mimeType, "application/json");
+    assert.match(json.contents[0].text, /"ok":true/);
+
+    const markdown = await contextResource.handler(
+      new URL("vcfa://context/snapshots/snapshot.md"),
+      { fileName: "snapshot.md" },
+    );
+    assert.equal(markdown.contents[0].mimeType, "text/markdown");
+    assert.match(markdown.contents[0].text, /# Snapshot/);
+  } finally {
+    await rm(contextDir, { recursive: true, force: true });
+  }
+});
+
+test("latest context snapshot resource returns newest snapshot pair manifest", async () => {
+  const contextDir = await mkdtemp(join(tmpdir(), "vcfa-context-latest-"));
+  try {
+    await writeFile(
+      join(contextDir, "old.json"),
+      JSON.stringify({ profile: "default", counts: { workflows: 1 }, warnings: [] }),
+    );
+    await writeFile(join(contextDir, "old.md"), "# Old\n");
+    await writeFile(
+      join(contextDir, "new.json"),
+      JSON.stringify({
+        profile: "vcfaBuiltIns",
+        counts: { actions: 5 },
+        warnings: ["review"],
+      }),
+    );
+    await writeFile(join(contextDir, "new.md"), "# New\n");
+    await utimes(join(contextDir, "old.json"), new Date(1_000), new Date(1_000));
+    await utimes(join(contextDir, "old.md"), new Date(1_000), new Date(1_000));
+    await utimes(join(contextDir, "new.json"), new Date(2_000), new Date(2_000));
+    await utimes(join(contextDir, "new.md"), new Date(2_000), new Date(2_000));
+
+    const resources = registeredResources({
+      getContextDirectory: () => contextDir,
+    });
+    const result = await resources
+      .get("vcfa-context-latest")
+      .handler(new URL("vcfa://context/latest"));
+    const manifest = JSON.parse(result.contents[0].text);
+
+    assert.equal(manifest.available, true);
+    assert.equal(manifest.jsonPath, await realpath(join(contextDir, "new.json")));
+    assert.equal(
+      manifest.markdownPath,
+      await realpath(join(contextDir, "new.md")),
+    );
+    assert.equal(manifest.profile, "vcfaBuiltIns");
+    assert.deepEqual(manifest.counts, { actions: 5 });
+    assert.equal(manifest.warningsCount, 1);
+    assert.equal(manifest.resourceUris.json, "vcfa://context/snapshots/new.json");
+    assert.equal(manifest.resourceUris.markdown, "vcfa://context/snapshots/new.md");
+  } finally {
+    await rm(contextDir, { recursive: true, force: true });
+  }
+});
+
+test("latest context snapshot resource reports no available snapshots", async () => {
+  const contextDir = await mkdtemp(join(tmpdir(), "vcfa-context-empty-"));
+  try {
+    const resources = registeredResources({
+      getContextDirectory: () => contextDir,
+    });
+    const result = await resources
+      .get("vcfa-context-latest")
+      .handler(new URL("vcfa://context/latest"));
+    const manifest = JSON.parse(result.contents[0].text);
+
+    assert.equal(manifest.available, false);
+    assert.equal(manifest.contextDir, contextDir);
+    assert.match(manifest.message, /No context snapshot pairs/);
+  } finally {
+    await rm(contextDir, { recursive: true, force: true });
+  }
+});
+
+test("context snapshot resources reject unsafe file names and symlinks", async () => {
+  const contextDir = await mkdtemp(join(tmpdir(), "vcfa-context-unsafe-"));
+  try {
+    await writeFile(join(contextDir, "snapshot.json"), "{}");
+    await symlink(join(contextDir, "snapshot.json"), join(contextDir, "link.json"));
+    const resources = registeredResources({
+      getContextDirectory: () => contextDir,
+    });
+    const contextResource = resources.get("vcfa-context-snapshot");
+
+    await assert.rejects(
+      contextResource.handler(new URL("vcfa://context/snapshots/bad.txt"), {
+        fileName: "bad.txt",
+      }),
+      /must end with .json or .md/,
+    );
+    await assert.rejects(
+      contextResource.handler(new URL("vcfa://context/snapshots/..%2Fbad.json"), {
+        fileName: "../bad.json",
+      }),
+      /must not contain path separators/,
+    );
+    await assert.rejects(
+      contextResource.handler(new URL("vcfa://context/snapshots/missing.json"), {
+        fileName: "missing.json",
+      }),
+      /was not found/,
+    );
+    await assert.rejects(
+      contextResource.handler(new URL("vcfa://context/snapshots/link.json"), {
+        fileName: "link.json",
+      }),
+      /must not be a symbolic link/,
+    );
+  } finally {
+    await rm(contextDir, { recursive: true, force: true });
+  }
 });
 
 test("prompts return workflow instructions with provided arguments", async () => {

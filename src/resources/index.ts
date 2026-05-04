@@ -1,9 +1,15 @@
-import { readFile } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import {
   ResourceTemplate,
   type McpServer,
 } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { ReadResourceResult } from "@modelcontextprotocol/sdk/types.js";
+import type {
+  ListResourcesResult,
+  ReadResourceResult,
+} from "@modelcontextprotocol/sdk/types.js";
+import { basename, extname } from "node:path";
+import { resolveEffectiveContextDirectory } from "../context-directory.js";
+import { getExistingFile, rejectSymlink, resolveFileInDirectory } from "../client/files.js";
 import type { VroClient } from "../vro-client.js";
 
 const README_URL = new URL("../../README.md", import.meta.url);
@@ -220,6 +226,13 @@ function singleVariable(
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
 }
 
+interface SnapshotFile {
+  fileName: string;
+  path: string;
+  mimeType: string;
+  mtimeMs: number;
+}
+
 export function registerVcfaResources(
   server: McpServer,
   client: VroClient,
@@ -246,6 +259,41 @@ export function registerVcfaResources(
       mimeType: "text/markdown",
     },
     (uri) => markdownFileResource(uri, README_URL),
+  );
+
+  server.registerResource(
+    "vcfa-context-latest",
+    "vcfa://context/latest",
+    {
+      title: "Latest VCFA Context Snapshot",
+      description:
+        "Manifest for the most recent persisted VCFA context snapshot pair.",
+      mimeType: "application/json",
+    },
+    async (uri) =>
+      jsonResource(
+        uri.href,
+        await latestContextSnapshotManifest(server, client),
+      ),
+  );
+
+  server.registerResource(
+    "vcfa-context-snapshot",
+    new ResourceTemplate("vcfa://context/snapshots/{fileName}", {
+      list: async () => listContextSnapshotResources(server, client),
+    }),
+    {
+      title: "VCFA Context Snapshot File",
+      description:
+        "Read a persisted VCFA context snapshot Markdown or JSON file.",
+      mimeType: "text/plain",
+    },
+    async (uri, variables) =>
+      readContextSnapshotResource(
+        uri.href,
+        await resolveEffectiveContextDirectory(server, client),
+        singleVariable(variables, "fileName"),
+      ),
   );
 
   server.registerResource(
@@ -382,4 +430,176 @@ export function registerVcfaResources(
         await client.getPackage(singleVariable(variables, "name")),
       ),
   );
+}
+
+async function listContextSnapshotResources(
+  server: McpServer,
+  client: VroClient,
+): Promise<ListResourcesResult> {
+  const contextDir = await resolveEffectiveContextDirectory(server, client);
+  const files = await listSnapshotFiles(contextDir);
+  return {
+    resources: files.map((file) => ({
+      uri: snapshotResourceUri(file.fileName),
+      name: file.fileName,
+      title: `VCFA Context Snapshot: ${file.fileName}`,
+      description: `Persisted VCFA context snapshot at ${file.path}`,
+      mimeType: file.mimeType,
+    })),
+  };
+}
+
+async function latestContextSnapshotManifest(
+  server: McpServer,
+  client: VroClient,
+): Promise<Record<string, unknown>> {
+  const contextDir = await resolveEffectiveContextDirectory(server, client);
+  const files = await listSnapshotFiles(contextDir);
+  const pairs = snapshotPairs(files);
+  const latest = pairs.sort((a, b) => b.mtimeMs - a.mtimeMs)[0];
+  if (!latest) {
+    return {
+      available: false,
+      contextDir,
+      message: "No context snapshot pairs are available.",
+    };
+  }
+
+  const json = await readSnapshotJson(latest.json.path);
+  const warnings = Array.isArray(json?.warnings) ? json.warnings : undefined;
+  return {
+    available: true,
+    contextDir,
+    jsonPath: latest.json.path,
+    markdownPath: latest.markdown.path,
+    profile: stringField(json, "profile"),
+    counts: recordField(json, "counts"),
+    warningsCount: warnings?.length ?? 0,
+    resourceUris: {
+      latest: "vcfa://context/latest",
+      json: snapshotResourceUri(latest.json.fileName),
+      markdown: snapshotResourceUri(latest.markdown.fileName),
+    },
+  };
+}
+
+async function readContextSnapshotResource(
+  uri: string,
+  contextDir: string,
+  fileName: string,
+): Promise<ReadResourceResult> {
+  validateSnapshotFileName(fileName);
+  const filePath = await resolveFileInDirectory(
+    contextDir,
+    fileName,
+    "Context snapshot resource",
+    "the configured context directory",
+  );
+  const existing = await getExistingFile(filePath);
+  if (!existing) {
+    throw new Error(`Context snapshot resource was not found: ${fileName}`);
+  }
+  await rejectSymlink(
+    filePath,
+    "Context snapshot resource must not be a symbolic link",
+  );
+  return textResource(uri, snapshotMimeType(fileName), await readFile(filePath, "utf8"));
+}
+
+async function listSnapshotFiles(contextDir: string): Promise<SnapshotFile[]> {
+  const entries = await readdir(contextDir, { withFileTypes: true }).catch(
+    (error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return [];
+      throw error;
+    },
+  );
+  const files: SnapshotFile[] = [];
+  for (const entry of entries) {
+    if (!entry.isFile() || !isSnapshotFileName(entry.name)) continue;
+    const path = await resolveFileInDirectory(
+      contextDir,
+      entry.name,
+      "Context snapshot resource",
+      "the configured context directory",
+    );
+    const file = await stat(path);
+    files.push({
+      fileName: entry.name,
+      path,
+      mimeType: snapshotMimeType(entry.name),
+      mtimeMs: file.mtimeMs,
+    });
+  }
+  return files.sort((a, b) => a.fileName.localeCompare(b.fileName));
+}
+
+function snapshotPairs(files: SnapshotFile[]): Array<{
+  json: SnapshotFile;
+  markdown: SnapshotFile;
+  mtimeMs: number;
+}> {
+  const grouped = new Map<string, { json?: SnapshotFile; markdown?: SnapshotFile }>();
+  for (const file of files) {
+    const baseName = file.fileName.slice(0, -extname(file.fileName).length);
+    const group = grouped.get(baseName) ?? {};
+    if (file.fileName.endsWith(".json")) group.json = file;
+    if (file.fileName.endsWith(".md")) group.markdown = file;
+    grouped.set(baseName, group);
+  }
+  return [...grouped.values()]
+    .filter(
+      (group): group is { json: SnapshotFile; markdown: SnapshotFile } =>
+        group.json !== undefined && group.markdown !== undefined,
+    )
+    .map((group) => ({
+      ...group,
+      mtimeMs: Math.max(group.json.mtimeMs, group.markdown.mtimeMs),
+    }));
+}
+
+async function readSnapshotJson(path: string): Promise<Record<string, unknown> | null> {
+  try {
+    return JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function validateSnapshotFileName(fileName: string): void {
+  if (fileName !== basename(fileName)) {
+    throw new Error("Context snapshot resource file name must not contain path separators");
+  }
+  if (!isSnapshotFileName(fileName)) {
+    throw new Error("Context snapshot resource file name must end with .json or .md");
+  }
+}
+
+function isSnapshotFileName(fileName: string): boolean {
+  return fileName.endsWith(".json") || fileName.endsWith(".md");
+}
+
+function snapshotMimeType(fileName: string): string {
+  return fileName.endsWith(".json") ? "application/json" : "text/markdown";
+}
+
+function snapshotResourceUri(fileName: string): string {
+  return `vcfa://context/snapshots/${encodeURIComponent(fileName)}`;
+}
+
+function stringField(
+  value: Record<string, unknown> | null,
+  field: string,
+): string | undefined {
+  const item = value?.[field];
+  return typeof item === "string" ? item : undefined;
+}
+
+function recordField(
+  value: Record<string, unknown> | null,
+  field: string,
+): Record<string, unknown> | undefined {
+  const item = value?.[field];
+  return item && typeof item === "object" && !Array.isArray(item)
+    ? (item as Record<string, unknown>)
+    : undefined;
 }

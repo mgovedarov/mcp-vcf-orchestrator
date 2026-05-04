@@ -63,7 +63,7 @@ Useful optional variables:
 | `VCFA_WORKFLOW_DIR` | Override workflow artifact directory. |
 | `VCFA_ACTION_DIR` | Override action artifact directory. |
 | `VCFA_CONFIGURATION_DIR` | Override configuration artifact directory. |
-| `VCFA_CONTEXT_DIR` | Override persisted context snapshot directory. |
+| `VCFA_CONTEXT_DIR` | Override persisted context snapshot directory. If unset, context snapshots prefer the MCP client's current workspace root at `artifacts/context/`, falling back to `VCFA_ARTIFACT_DIR/context`. |
 
 ## Tool Coverage
 

@@ -27,7 +27,7 @@ The safest workflow is discovery first:
 
 When starting in a new VCFA or vRO environment, use the server to map current state before drafting new automation:
 
-1. Configure `VCFA_HOST`, `VCFA_USERNAME`, `VCFA_ORGANIZATION`, and `VCFA_PASSWORD`. Artifacts are written to `artifacts/` in the MCP server process working directory by default, typically the open project; set `VCFA_ARTIFACT_DIR` to override.
+1. Configure `VCFA_HOST`, `VCFA_USERNAME`, `VCFA_ORGANIZATION`, and `VCFA_PASSWORD`. Artifacts are written to `artifacts/` in the MCP server process working directory by default, typically the open project; set `VCFA_ARTIFACT_DIR` to override. Context snapshots prefer the MCP client's current workspace root at `artifacts/context/` unless `VCFA_CONTEXT_DIR` is set.
 2. Verify access with read-only discovery: `list-plugins`, `list-categories`, `list-workflows`, `list-actions`, `list-templates`, `list-catalog-items`, `list-event-topics`, and `list-subscriptions`.
 3. Inspect reusable candidates with `get-workflow`, `get-action`, `get-template`, or `get-catalog-item` before designing a replacement.
 4. Read the relevant MCP resources, especially `vcfa://docs/artifact-authoring`, `vcfa://schemas/workflow-scaffold`, and the matching `vcfa://patterns/*` resource.

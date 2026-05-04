@@ -30,7 +30,7 @@ It uses the returned bearer token for later VCF Automation, Service Broker, Clou
 | `VCFA_WORKFLOW_DIR` | Override the workflow artifact directory. |
 | `VCFA_ACTION_DIR` | Override the action artifact directory. |
 | `VCFA_CONFIGURATION_DIR` | Override the configuration artifact directory. |
-| `VCFA_CONTEXT_DIR` | Override the persisted context snapshot directory. |
+| `VCFA_CONTEXT_DIR` | Override the persisted context snapshot directory. If unset, context snapshots prefer the MCP client's current workspace root at `artifacts/context/`, falling back to `VCFA_ARTIFACT_DIR/context`. |
 
 ## Artifact Directories
 
