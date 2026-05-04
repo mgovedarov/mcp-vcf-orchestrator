@@ -1,6 +1,6 @@
 {
   "name": "@mgovedarov/mcp-vcf-orchestrator",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "MCP server for VCF Automation Orchestrator — manage workflows, actions, configuration elements, and extensibility subscriptions via AI assistants",
   "type": "module",
   "main": "dist/index.js",
