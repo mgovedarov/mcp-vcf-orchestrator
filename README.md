@@ -84,6 +84,48 @@ The server includes tools for:
 
 See the [tool reference](docs/reference/tools.md) for the full list.
 
+## Prompt Examples
+
+Discover what is reusable before building:
+
+```text
+Use prompt vcfa-discover-capabilities with:
+goal: "Map reusable VM provisioning workflows, actions, templates, catalog items, and subscriptions."
+```
+
+Persist environment context for future agents:
+
+```text
+Use prompt vcfa-collect-context-snapshot with:
+goal: "Persist reusable VM provisioning context before implementation work."
+includeOptionalDomains: true
+```
+
+Persist VMware built-in workflow and action baseline context:
+
+```text
+Use prompt vcfa-collect-context-snapshot with:
+goal: "Persist VMware built-in workflow and action baseline context."
+profile: vcfaBuiltIns
+```
+
+Author a real importable workflow artifact:
+
+```text
+Use prompt vcfa-author-workflow with:
+goal: "Build a workflow that accepts a project name and returns matching VM names."
+categoryHint: "VCFA"
+```
+
+Wrap an existing vRO action as a workflow:
+
+```text
+Use prompt vcfa-build-workflow-from-action with:
+actionHint: "getAllMachines"
+workflowGoal: "Expose machine inventory lookup as a workflow."
+categoryHint: "VCFA"
+```
+
 ## Development
 
 ```bash
