@@ -12,6 +12,7 @@ The server supports VCF 9 Automation and Aria Automation 8.x environments with R
 - Browse catalog items, create deployments, and discover day-2 actions.
 - Manage extensibility subscriptions that connect event topics to workflows or ABX actions.
 - Collect practical context through MCP resources and prompts so agents avoid inventing environment-specific details.
+- Validate docs, checked examples, coverage, docs builds, and npm package contents with one local command.
 
 ## Operating Model
 
@@ -34,6 +35,10 @@ When starting in a new VCFA or vRO environment, use the server to map current st
 5. Export existing assets before changing them. Then scaffold or edit local artifacts, run preflight and diff tools, and import only after explicit confirmation.
 
 Use the built-in MCP prompts when the assistant should follow a known workflow rather than free-form instructions. For example, use `vcfa-discover-capabilities` to inventory an unfamiliar environment conversationally, `vcfa-collect-context-snapshot` to persist reusable Markdown/JSON inventory with `collect-context-snapshot`, `vcfa-discovery-first-implementation-plan` to plan a change, `vcfa-build-workflow-from-action` to wrap a verified action, and `vcfa-review-artifact-import` before importing a local artifact. When you specifically need VMware baseline context, use `vcfa-collect-context-snapshot` with `profile: vcfaBuiltIns` to focus the snapshot on workflows in subfolders below `Library` and actions in `com.vmware` modules. See [Resources And Prompts](../reference/resources-prompts.md) for prompt arguments and examples.
+
+The repository also includes a root `examples/` directory with checked, high-value flows for workflow artifacts, artifact promotion, template/catalog/subscription planning, and context collection. `npm run validate:docs` verifies those examples against current registered tool and prompt names.
+
+For repository validation, run `npm run validate`. It builds, tests, checks coverage thresholds, validates docs/examples drift, builds the VitePress site, and verifies npm package contents.
 
 ## Documentation Map
 

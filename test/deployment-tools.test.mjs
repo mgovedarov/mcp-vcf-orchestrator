@@ -28,6 +28,81 @@ test("list-deployment-actions reports empty action lists", async () => {
   );
 });
 
+test("deployment tools list, get, create, and delete with confirmation", async () => {
+  let createParams;
+  let deletedId;
+  const handlers = registeredDeploymentTools({
+    listDeployments: async (search, projectId) => ({
+      totalElements: 1,
+      content: [
+        {
+          id: "deployment-1",
+          name: `Ubuntu ${search}`,
+          status: "CREATE_SUCCESSFUL",
+          projectId,
+        },
+      ],
+    }),
+    getDeployment: async (id) => ({
+      id,
+      name: "Ubuntu VM",
+      status: "CREATE_SUCCESSFUL",
+      description: "Example deployment",
+      projectName: "Development",
+      catalogItemId: "catalog-1",
+    }),
+    createDeploymentFromCatalogItem: async (params) => {
+      createParams = params;
+      return { id: "request-1", name: params.deploymentName, status: "SUBMITTED" };
+    },
+    deleteDeployment: async (id) => {
+      deletedId = id;
+    },
+  });
+
+  const list = await handlers.get("list-deployments")({
+    search: "22.04",
+    projectId: "project-1",
+  });
+  assert.match(list.content[0].text, /Ubuntu 22\.04 \(id: deployment-1\)/);
+  assert.match(list.content[0].text, /projectId: project-1/);
+
+  const detail = await handlers.get("get-deployment")({ id: "deployment-1" });
+  assert.match(detail.content[0].text, /Deployment: Ubuntu VM/);
+  assert.match(detail.content[0].text, /Catalog Item ID: catalog-1/);
+
+  const created = await handlers.get("create-deployment")({
+    catalogItemId: "catalog-1",
+    deploymentName: "Ubuntu VM",
+    projectId: "project-1",
+    version: "1.0.0",
+    reason: "Test deployment",
+    inputs: { size: "small" },
+  });
+  assert.deepEqual(createParams, {
+    catalogItemId: "catalog-1",
+    deploymentName: "Ubuntu VM",
+    projectId: "project-1",
+    version: "1.0.0",
+    reason: "Test deployment",
+    inputs: { size: "small" },
+  });
+  assert.match(created.content[0].text, /ID: request-1/);
+
+  const refused = await handlers.get("delete-deployment")({
+    id: "deployment-1",
+    confirm: false,
+  });
+  assert.equal(deletedId, undefined);
+  assert.match(refused.content[0].text, /setting confirm to true/);
+
+  await handlers.get("delete-deployment")({
+    id: "deployment-1",
+    confirm: true,
+  });
+  assert.equal(deletedId, "deployment-1");
+});
+
 test("list-deployment-actions formats actions and input hints", async () => {
   const handlers = registeredDeploymentTools({
     listDeploymentActions: async () => ({

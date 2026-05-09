@@ -45,3 +45,7 @@ For subscriptions, disabling is often safer than deleting during testing.
 ## Discovery Guardrail
 
 Do not invent environment-specific values. If discovery does not return a required category, action, workflow, project, template, parameter, return type, or schema detail, stop and report the missing fact.
+
+## Live Validation
+
+Keep local repository validation separate from live VCFA validation. `npm run validate` should not contact VCFA. Live smoke checks may use read-only list/get tools against a sandbox environment, but imports, deletes, deployment day-2 actions, subscription changes, and template creation require explicit confirmation and disposable test assets.

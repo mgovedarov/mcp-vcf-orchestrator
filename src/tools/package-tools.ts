@@ -20,7 +20,7 @@ export function registerPackageTools(
           .optional()
           .describe("Filter packages by name (substring match)"),
       }),
-      annotations: { readOnlyHint: false },
+      annotations: { readOnlyHint: true },
     },
     async ({ filter }): Promise<CallToolResult> => {
       try {
@@ -70,7 +70,7 @@ export function registerPackageTools(
             "The fully-qualified package name (e.g. com.example.mypackage)",
           ),
       }),
-      annotations: { readOnlyHint: false },
+      annotations: { readOnlyHint: true },
     },
     async ({ name }): Promise<CallToolResult> => {
       try {

@@ -6,8 +6,10 @@ on:
       - ".github/workflows/package-check.yml"
       - "README.md"
       - "docs/**"
+      - "examples/**"
       - "package-lock.json"
       - "package.json"
+      - "scripts/**"
       - "src/**"
       - "tsconfig.json"
   push:
@@ -16,8 +18,10 @@ on:
       - ".github/workflows/package-check.yml"
       - "README.md"
       - "docs/**"
+      - "examples/**"
       - "package-lock.json"
       - "package.json"
+      - "scripts/**"
       - "src/**"
       - "tsconfig.json"
 
@@ -44,5 +48,5 @@ jobs:
       - name: Build package output
         run: npm run build
 
-      - name: Dry-run package publish
-        run: npm pack --dry-run
+      - name: Validate package contents
+        run: npm run validate:package
