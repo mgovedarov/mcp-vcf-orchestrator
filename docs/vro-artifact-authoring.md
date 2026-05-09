@@ -92,15 +92,14 @@ var props = new Properties();
 props.put("name", "value");
 ```
 
-Built-in action confirmed in this environment:
+Historical built-in action observed during one live validation session:
 
 - `com.vmware.library.vra.infrastructure.machine/getAllMachines`
-- ID: `9d533b42-de3f-4a32-912e-2be46d6bf2de`
 - Script: `return VraEntitiesFinder.getMachines(host)`
 - Input: `host (VRA:Host)`
 - Return: `Array/VRA:Machine`
 
-Action details can be inspected with MCP:
+Do not reuse live IDs from historical notes. Action details must be rediscovered in the target environment with MCP:
 
 - `list-actions` with a filter
 - `get-action` by ID
@@ -151,7 +150,7 @@ Runtime behavior:
   - `owner`
   - `address`
 
-Live validation on 2026-04-30:
+Historical live validation on 2026-04-30:
 
 - `projectName = "MainPrj"` completed successfully.
 - It returned `vmCount = 4` from the VRA machine inventory.
@@ -159,6 +158,8 @@ Live validation on 2026-04-30:
 - Deployment-aware fallback paths were attempted in the artifact, but this vRO runtime did not expose deployment listing through the tested scripting APIs.
 - Blank `projectName` failed with `projectName is required.`
 - Unknown project failed with `Project not found: __does_not_exist__`.
+
+Treat these validation results as an example of the checks to run, not as a portable environment contract. Different VCFA/vRO environments can expose different projects, host names, plugin object shapes, and inventory coverage.
 
 ## Validation Commands
 

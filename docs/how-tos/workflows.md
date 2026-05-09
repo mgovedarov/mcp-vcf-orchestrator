@@ -56,3 +56,20 @@ Before creating new workflow code, discover existing plugins and reusable action
 4. `get-action(id: "<candidate-action-id>")`
 
 If discovery does not find the required action, category, parameter, or plugin, stop and report the missing detail instead of inventing a schema.
+
+## Use Prompt-Driven Discovery
+
+When the environment is unfamiliar, start with a prompt or persisted snapshot instead of ad hoc guessing:
+
+```text
+Use prompt vcfa-discover-capabilities with:
+goal: "Find reusable VM provisioning workflows, actions, templates, catalog items, and subscriptions."
+```
+
+For reusable context that future agents can read:
+
+```text
+collect-context-snapshot(fileBaseName: "vm-provisioning-context", includeOptionalDomains: true, maxItemsPerDomain: 300, overwrite: true)
+```
+
+The snapshot output includes Markdown and JSON files plus `vcfa://context/latest` and `vcfa://context/snapshots/{fileName}` resource URIs for later discovery.

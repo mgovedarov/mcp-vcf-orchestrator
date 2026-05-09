@@ -77,9 +77,21 @@ test("action tools format detail responses and pass create payloads", async () =
 });
 
 test("configuration tools format attributes and guard imports and deletes", async () => {
+  let created;
+  let updated;
+  let exported;
   let imported;
   let deletedId;
   const handlers = registeredTools(registerConfigTools, {
+    listConfigurations: async (filter) => ({
+      link: [
+        {
+          id: "config-1",
+          name: `Settings ${filter}`,
+          description: "Runtime settings",
+        },
+      ],
+    }),
     getConfiguration: async (id) => ({
       id,
       name: "Settings",
@@ -93,6 +105,17 @@ test("configuration tools format attributes and guard imports and deletes", asyn
         },
       ],
     }),
+    createConfiguration: async (categoryId, name, description, attributes) => {
+      created = { categoryId, name, description, attributes };
+      return { id: "config-2", name };
+    },
+    updateConfiguration: async (id, patch) => {
+      updated = { id, patch };
+    },
+    exportConfigurationFile: async (id, fileName, overwrite) => {
+      exported = { id, fileName, overwrite };
+      return `/tmp/configurations/${fileName}`;
+    },
     getConfigurationDirectory: () => "/tmp/configurations",
     importConfigurationFile: async (categoryId, fileName) => {
       imported = { categoryId, fileName };
@@ -102,10 +125,54 @@ test("configuration tools format attributes and guard imports and deletes", asyn
     },
   });
 
+  const list = await handlers.get("list-configurations")({ filter: "prod" });
+  assert.match(list.content[0].text, /Settings prod \(id: config-1\)/);
+  assert.match(list.content[0].text, /Runtime settings/);
+
   const detail = await handlers.get("get-configuration")({ id: "config-1" });
   assert.match(detail.content[0].text, /Configuration: Settings/);
   assert.match(detail.content[0].text, /host \(string\):/);
   assert.match(detail.content[0].text, /Host name/);
+
+  const createResult = await handlers.get("create-configuration")({
+    categoryId: "category-1",
+    name: "Settings",
+    description: "Runtime settings",
+    attributes: [{ name: "host", type: "string", value: "vcfa.example.test" }],
+  });
+  assert.deepEqual(created, {
+    categoryId: "category-1",
+    name: "Settings",
+    description: "Runtime settings",
+    attributes: [{ name: "host", type: "string", value: "vcfa.example.test" }],
+  });
+  assert.match(createResult.content[0].text, /ID: config-2/);
+
+  await handlers.get("update-configuration")({
+    id: "config-1",
+    description: "Updated settings",
+    attributes: [{ name: "enabled", type: "boolean", value: "true" }],
+  });
+  assert.deepEqual(updated, {
+    id: "config-1",
+    patch: {
+      name: undefined,
+      description: "Updated settings",
+      attributes: [{ name: "enabled", type: "boolean", value: "true" }],
+    },
+  });
+
+  const exportResult = await handlers.get("export-configuration-file")({
+    id: "config-1",
+    fileName: "settings.vsoconf",
+    overwrite: true,
+  });
+  assert.deepEqual(exported, {
+    id: "config-1",
+    fileName: "settings.vsoconf",
+    overwrite: true,
+  });
+  assert.match(exportResult.content[0].text, /exported successfully/);
 
   const importRefused = await handlers.get("import-configuration-file")({
     categoryId: "category-1",
@@ -225,6 +292,8 @@ test("diff-action-file is read-only, delegates exact params, and reports errors"
 });
 
 test("resource tools format lists and guard updates and deletes", async () => {
+  let exported;
+  let imported;
   let updated;
   let deleted;
   const handlers = registeredTools(registerResourceTools, {
@@ -239,6 +308,14 @@ test("resource tools format lists and guard updates and deletes", async () => {
         },
       ],
     }),
+    getResourceDirectory: () => "/tmp/resources",
+    exportResource: async (id, fileName, overwrite) => {
+      exported = { id, fileName, overwrite };
+      return `/tmp/resources/${fileName}`;
+    },
+    importResource: async (categoryId, fileName) => {
+      imported = { categoryId, fileName };
+    },
     updateResourceContent: async (id, fileName, changesetSha) => {
       updated = { id, fileName, changesetSha };
     },
@@ -255,6 +332,36 @@ test("resource tools format lists and guard updates and deletes", async () => {
     /Logo portal \(id: resource-1\) \[image\/png\]/,
   );
   assert.match(list.content[0].text, /category: Branding/);
+
+  const exportResult = await handlers.get("export-resource-element")({
+    id: "resource-1",
+    fileName: "logo.png",
+    overwrite: true,
+  });
+  assert.deepEqual(exported, {
+    id: "resource-1",
+    fileName: "logo.png",
+    overwrite: true,
+  });
+  assert.match(exportResult.content[0].text, /exported successfully/);
+
+  const importRefused = await handlers.get("import-resource-element")({
+    categoryId: "resource-category-1",
+    fileName: "logo.png",
+    confirm: false,
+  });
+  assert.equal(imported, undefined);
+  assert.match(importRefused.content[0].text, /\/tmp\/resources/);
+
+  await handlers.get("import-resource-element")({
+    categoryId: "resource-category-1",
+    fileName: "logo.png",
+    confirm: true,
+  });
+  assert.deepEqual(imported, {
+    categoryId: "resource-category-1",
+    fileName: "logo.png",
+  });
 
   const updateRefused = await handlers.get("update-resource-element")({
     id: "resource-1",

@@ -10,6 +10,7 @@
   "files": [
     "dist",
     "docs/**/*.md",
+    "examples/**/*.md",
     "README.md"
   ],
   "scripts": {
@@ -20,6 +21,10 @@
     "docs:preview": "vitepress preview docs",
     "test": "npm run build && node --test test/*.test.mjs",
     "test:coverage": "npm run build && node --test --experimental-test-coverage test/*.test.mjs",
+    "test:coverage:check": "npm run build && node --test --experimental-test-coverage --test-coverage-lines=80 --test-coverage-branches=70 --test-coverage-functions=80 test/*.test.mjs",
+    "validate:docs": "node scripts/validate-docs.mjs",
+    "validate:package": "node scripts/validate-package.mjs",
+    "validate": "npm run build && npm test && npm run test:coverage:check && npm run validate:docs && npm run docs:build && npm run validate:package",
     "prepublishOnly": "npm run build",
     "inspect": "npx @modelcontextprotocol/inspector node dist/index.js"
   },

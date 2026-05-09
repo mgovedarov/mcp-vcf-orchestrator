@@ -17,6 +17,8 @@ Full documentation is available in the GitHub Pages site:
 
 The docs include installation, configuration, MCP client setup, tool references, resources/prompts, how-tos, artifact lifecycle guidance, safety notes, troubleshooting, and contributor guidance.
 
+Checked examples for common workflows are available in [examples/README.md](examples/README.md). These examples are validated against the registered tool and prompt names so stale snippets are caught during development.
+
 ## Quick Start
 
 Run directly from npm:
@@ -84,6 +86,8 @@ The server includes tools for:
 
 See the [tool reference](docs/reference/tools.md) for the full list.
 
+The source and reference docs are kept in sync by `npm run validate:docs`, which compares registered tools, prompts, and resources against the documentation and checks documented examples for stale tool names or top-level arguments.
+
 ## Prompt Examples
 
 Discover what is reusable before building:
@@ -135,6 +139,12 @@ npm run build
 # Run tests
 npm test
 
+# Run the full local validation gate
+npm run validate
+
+# Check docs/examples drift only
+npm run validate:docs
+
 # Run in dev mode
 VCFA_HOST=... VCFA_USERNAME=... VCFA_ORGANIZATION=... VCFA_PASSWORD=... npm start
 
@@ -145,6 +155,10 @@ npm run docs:build
 npm run docs:dev
 ```
 
+`npm run validate` builds the project, runs unit tests, enforces conservative coverage thresholds, validates docs/examples drift, builds the VitePress docs, and dry-runs npm packaging with package-content checks.
+
 ## Safety
 
 Use read-only discovery tools before live writes. Import, delete, deployment action, and overwrite operations require explicit confirmation. Local artifact tools only read or write under configured artifact directories and reject unsafe paths.
+
+Live VCFA validation should be run separately from local validation. Read-only list/get smoke checks are appropriate for sandbox environments; write, import, delete, and day-2 action tests should use disposable assets and explicit confirmation.
