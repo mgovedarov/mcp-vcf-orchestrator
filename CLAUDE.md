@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Validate**: `npm run validate` – builds, runs tests, enforces conservative coverage thresholds, checks docs/examples drift, builds docs, and validates npm package contents.
 - **Docs/examples drift**: `npm run validate:docs` – checks registered tool, prompt, and resource names against reference docs, validates local Markdown links, and verifies documented tool-call examples use current top-level argument names.
 - **Package contents**: `npm run validate:package` – runs `npm pack --dry-run --json` with an isolated temporary npm cache and verifies the published file set.
-- **Environment**: The server reads VCFA_HOST, VCFA_USERNAME, VCFA_ORGANIZATION, VCFA_PASSWORD, and optionally VCFA_IGNORE_TLS, VCFA_ARTIFACT_DIR, VCFA_PACKAGE_DIR, VCFA_RESOURCE_DIR, VCFA_WORKFLOW_DIR, VCFA_ACTION_DIR, VCFA_CONFIGURATION_DIR, and VCFA_CONTEXT_DIR from the environment (see `.env.example`).
+- **Environment**: The server reads VCFA_HOST, VCFA_USERNAME, VCFA_ORGANIZATION, VCFA_PASSWORD, and optionally VCFA_IGNORE_TLS, VCFA_ARTIFACT_DIR, VCFA_PACKAGE_DIR, VCFA_RESOURCE_DIR, VCFA_WORKFLOW_DIR, VCFA_ACTION_DIR, VCFA_CONFIGURATION_DIR, VCFA_CONTEXT_DIR, VCFA_PROJECT_PACKAGE_NAME, and VCFA_PROJECT_PACKAGE_DESCRIPTION from the environment (see `.env.example`).
 
 ## Architecture Overview
 
@@ -31,6 +31,11 @@ Key architectural concepts:
 - **Configuration Management**: Settings are stored as configuration elements within the platform; the server treats them as first‑class data objects.
 - **Event‑Driven Subscriptions**: The server can subscribe to VMware event topics (e.g., `compute.allocation.pre`) and trigger ABX or VRO workflows.
 - **Artifact Safety**: Local artifact tools keep files inside configured artifact directories; imports should be preceded by preflight, diff, optional backup, and explicit confirmation.
+- **Workflow Authoring**: Use native vRO action workflow items for workflow steps that only invoke one existing action; use scriptable tasks for multiple action calls or additional orchestration logic. Prefer horizontal left-to-right workflow layouts.
+- **Workflow Input Forms**: Workflows with user inputs need a valid `input_form_` for the vRO start page. Use UTF-16BE JSON with a BOM, page-level titles, section objects with only `id` and `fields`, matching field/schema IDs, and `options.externalValidations: []`.
+- **Package Publishing**: Publish reusable vRO content through the project package path by default: ensure the exact project package, add discovered content, rebuild, export, inspect import details, and import the package.
+- **Package Reuse**: Package-first workflows must reuse the exact project package from `VCFA_PROJECT_PACKAGE_NAME` or an explicit `packageName`; do not create random, timestamped, or task-specific packages.
+- **Direct Imports**: Use direct workflow/action/configuration imports only for narrow validation or explicitly requested single-artifact tests; project content should move into vRO via packages.
 - **Discovery Guardrails**: Prompts and docs should tell agents to discover required workflow/action/template/category/project facts instead of inventing environment-specific values.
 
 ## Key Files for Navigation

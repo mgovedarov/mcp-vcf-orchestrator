@@ -8,15 +8,70 @@ These notes capture the practical details learned while adding workflow artifact
 - The archive contains at least:
   - `workflow-info`
   - `workflow-content`
+  - `input_form_` for generated artifacts with UI-startable inputs
 - `workflow-content` is XML encoded as UTF-16 with a BOM.
+- `input_form_` is JSON encoded as UTF-16BE with a BOM.
 - The XML root looks like:
   - `<workflow xmlns="http://vmware.com/vco/workflow" ... id="..." version="..." api-version="6.0.0">`
 - User-facing inputs live under `<input>`.
 - Workflow outputs live under `<output>`.
 - Scriptable tasks are `<workflow-item type="task">` nodes with a `<script encoded="false"><![CDATA[...]]></script>` body.
+- Prefer native vRO action workflow items when a workflow step only executes one existing action. Avoid wrapping a single action in a scriptable task that only calls `System.getModule(...)`.
+- Use scriptable tasks when the item performs multiple action calls or additional orchestration logic such as validation, branching, input shaping, or result aggregation.
+- Prefer horizontal workflow layouts: arrange sequential items left-to-right with increasing `x` positions and stable `y` positions unless a branch needs vertical separation.
 - Task input/output bindings must connect workflow parameters to script variables:
   - `<in-binding><bind name="projectName" type="string" export-name="projectName"/></in-binding>`
   - `<out-binding><bind name="vms" type="Array/Properties" export-name="vms"/></out-binding>`
+
+## Workflow Input Forms
+
+Workflows intended to start from the vRO UI need a valid `input_form_` entry. The MCP scaffold builder generates this automatically from workflow inputs.
+
+Valid package/exported input form shape:
+
+```json
+{
+  "layout": {
+    "pages": [
+      {
+        "id": "page_general",
+        "sections": [
+          {
+            "id": "section_inputs",
+            "fields": [
+              {
+                "id": "message",
+                "display": "textField",
+                "signpostPosition": "right-middle",
+                "state": { "visible": true, "read-only": false }
+              }
+            ]
+          }
+        ],
+        "title": "General"
+      }
+    ]
+  },
+  "schema": {
+    "message": {
+      "id": "message",
+      "type": { "dataType": "string" },
+      "label": "Message",
+      "constraints": { "required": true }
+    }
+  },
+  "options": { "externalValidations": [] },
+  "itemId": ""
+}
+```
+
+Important compatibility notes:
+
+- Section objects must contain only `id` and `fields`; put the visible title on the page, not the section.
+- Field objects should use `id`, `display`, `signpostPosition`, and `state`. Avoid unverified properties such as `size`.
+- Field IDs must match keys in `schema`.
+- Use `textField` for string, `passwordField` for `SecureString`, `checkbox` for boolean, `decimalField` for number, and `valuePickerTree` for vRO reference types such as `VC:VirtualMachine`.
+- `preflight-workflow-file` and `preflight-package` validate `input_form_` entries and fail on the section/field shapes known to break the vRO start page.
 
 ## Import And Export Endpoints
 
@@ -91,6 +146,8 @@ var machinesViaAction = System.getModule("com.vmware.library.vra.infrastructure.
 var props = new Properties();
 props.put("name", "value");
 ```
+
+Use `System.getModule(...).actionName(...)` inside a scriptable task only when the script needs to coordinate multiple action calls or perform additional logic. For a single action call, author a native vRO action workflow item and bind its inputs/output directly.
 
 Historical built-in action observed during one live validation session:
 
@@ -171,10 +228,10 @@ npm test
 
 Before uploading local artifacts, run the matching preflight tool:
 
-- `preflight-workflow-file` checks `.workflow` ZIP structure, `workflow-info`, UTF-16 `workflow-content`, parameters, bindings, task flow, vRO type syntax, action references, and local import path safety.
+- `preflight-workflow-file` checks `.workflow` ZIP structure, `workflow-info`, UTF-16 `workflow-content`, `input_form_` JSON when present, parameters, bindings, task flow, vRO type syntax, action references, and local import path safety.
 - `preflight-action-file` checks `.action` ZIP/path safety and parses recognizable XML metadata conservatively.
 - `preflight-configuration-file` checks `.vsoconf` ZIP/path safety and parses recognizable XML metadata conservatively.
-- `preflight-package` checks `.package`/`.zip` import safety and inspects nested `.workflow`, `.action`, and `.vsoconf` artifacts when they are present.
+- `preflight-package` checks `.package`/`.zip` import safety, inspects nested `.workflow`, `.action`, and `.vsoconf` artifacts when they are present, and validates package element `input_form_` entries.
 
 The import tools run the same preflight checks and fail locally before authentication or multipart upload when blocking errors are found.
 
@@ -191,7 +248,11 @@ Workflow files are read from the `workflows` subdirectory of `VCFA_ARTIFACT_DIR`
 
 ## Common Pitfalls
 
-- `create-workflow` creates only an empty workflow shell; use `import-workflow-file` for real workflow content.
+- `create-workflow` creates only an empty workflow shell; use authored artifacts and the project package publish flow for real reusable workflow content.
+- Do not use a plain scriptable task solely to invoke one action; use a native action workflow item for that case. In exported XML this is still a `type="task"` item, but it has `script-module="<module>/<actionName>"`, a generated `actionResult = System.getModule("<module>").<actionName>(...)` script, and an `out-binding` from `actionResult` to the workflow output.
+- Avoid vertical-only layouts for simple linear workflows; horizontal layouts are easier to scan and match project conventions.
+- Do not omit `input_form_` for workflows with user inputs that should be started from the vRO UI.
+- Do not add `title` to input form sections or unverified properties like `size` to fields; vRO can reject the start page with schema validation errors.
 - `.workflow` content must preserve UTF-16 encoding with BOM.
 - Multipart imports break if `Content-Type` is set manually without the boundary.
 - `VRA:Machine` inventory and VCFA deployments are not always a one-to-one match.

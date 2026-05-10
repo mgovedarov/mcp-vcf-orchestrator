@@ -239,7 +239,66 @@ test("preflightPackageFile summarizes nested recognizable artifacts", async () =
     assert.equal(report.metadata.workflowArtifacts, 1);
     assert.equal(report.metadata.actionArtifacts, 0);
     assert.equal(report.metadata.configurationArtifacts, 0);
+    assert.equal(report.metadata.inputForms, 1);
     assert.equal(report.parameters.length, 2);
+  } finally {
+    await rm(packageDir, { recursive: true, force: true });
+  }
+});
+
+test("preflightPackageFile rejects package input forms with invalid section fields", async () => {
+  const packageDir = await mkdtemp(join(tmpdir(), "vcfa-preflight-packages-"));
+  const invalidInputForm = {
+    layout: {
+      pages: [
+        {
+          id: "page_general",
+          sections: [
+            {
+              id: "section_inputs",
+              title: "Inputs",
+              fields: [
+                {
+                  id: "message",
+                  display: "value",
+                  size: 1,
+                  state: { visible: true, "read-only": false },
+                },
+              ],
+            },
+          ],
+          title: "General",
+        },
+      ],
+    },
+    schema: {
+      message: {
+        id: "message",
+        type: { dataType: "string" },
+        label: "Message",
+      },
+    },
+    itemId: "",
+  };
+  await writeFile(
+    join(packageDir, "invalid-form.package"),
+    zipSync({
+      "elements/workflow-1/input_form_": utf16BeWithBom(JSON.stringify(invalidInputForm)),
+      "manifest.xml": new TextEncoder().encode("<package />"),
+    }),
+  );
+
+  try {
+    const report = await preflightPackageFile(packageDir, "invalid-form.package");
+    assert.equal(report.valid, false);
+    assert.match(
+      report.errors.join("\n"),
+      /sections\/0 must not have additional property title/,
+    );
+    assert.match(
+      report.errors.join("\n"),
+      /fields\/0 must not have additional property size/,
+    );
   } finally {
     await rm(packageDir, { recursive: true, force: true });
   }
@@ -467,6 +526,16 @@ test("malformed imports fail preflight before authentication or upload", async (
 
 function utf16LeWithBom(value) {
   return new Uint8Array([0xff, 0xfe, ...Buffer.from(value, "utf16le")]);
+}
+
+function utf16BeWithBom(value) {
+  const littleEndian = Buffer.from(value, "utf16le");
+  for (let index = 0; index < littleEndian.length; index += 2) {
+    const first = littleEndian[index];
+    littleEndian[index] = littleEndian[index + 1] ?? 0;
+    littleEndian[index + 1] = first;
+  }
+  return new Uint8Array([0xfe, 0xff, ...littleEndian]);
 }
 
 function workflowArchiveWithFlow(outName) {

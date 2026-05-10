@@ -31,11 +31,18 @@ interface NormalizedSpec {
   tasks: NormalizedWorkflowArtifactTask[];
 }
 
+interface InputFormType {
+  dataType: string;
+  referenceType?: string;
+  itemType?: InputFormType;
+}
+
 export function buildWorkflowArtifact(spec: WorkflowArtifactSpec): Uint8Array {
   const normalized = normalizeWorkflowArtifactSpec(spec);
   return zipSync({
     "workflow-info": utf8Bytes(buildWorkflowInfo(normalized)),
     "workflow-content": utf16LeWithBom(renderWorkflowContentXml(normalized)),
+    "input_form_": utf16BeWithBom(renderWorkflowInputFormJson(normalized)),
   });
 }
 
@@ -58,6 +65,16 @@ export function buildWorkflowInfo(spec: WorkflowArtifactSpec): string {
     )}" version="${escapeXmlAttribute(normalized.version)}" />`,
     "",
   ].join("\n");
+}
+
+export function buildWorkflowInputForm(spec: WorkflowArtifactSpec): Uint8Array {
+  return utf16BeWithBom(
+    renderWorkflowInputFormJson(normalizeWorkflowArtifactSpec(spec)),
+  );
+}
+
+export function buildWorkflowInputFormJson(spec: WorkflowArtifactSpec): string {
+  return renderWorkflowInputFormJson(normalizeWorkflowArtifactSpec(spec));
 }
 
 export function normalizeWorkflowArtifactSpec(
@@ -268,7 +285,7 @@ function renderWorkflowContentXml(spec: NormalizedSpec): string {
     ...spec.tasks.map((task, index) =>
       renderTask(task, spec.tasks[index + 1]?.name),
     ),
-    "  <presentation />",
+    renderPresentation(spec.inputs),
     "  <workflow-note />",
     "</workflow>",
     "",
@@ -326,6 +343,108 @@ function renderTask(
   ].join("\n");
 }
 
+function renderPresentation(inputs: WorkflowArtifactParameter[]): string {
+  if (inputs.length === 0) {
+    return "  <presentation />";
+  }
+
+  return [
+    "  <presentation>",
+    "    <p-step>",
+    "      <title><![CDATA[General]]></title>",
+    "      <p-group>",
+    "        <title><![CDATA[Inputs]]></title>",
+    ...inputs.map(
+      (input) =>
+        `        <p-param name="${escapeXmlAttribute(input.name)}"><desc>${cdata(input.description ?? input.name)}</desc></p-param>`,
+    ),
+    "      </p-group>",
+    "    </p-step>",
+    "  </presentation>",
+  ].join("\n");
+}
+
+function renderWorkflowInputFormJson(spec: NormalizedSpec): string {
+  const schema = Object.fromEntries(
+    spec.inputs.map((input) => [
+      input.name,
+      {
+        id: input.name,
+        type: inputFormType(input.type),
+        label: input.description || input.name,
+        constraints: { required: true },
+      },
+    ]),
+  );
+
+  const pages = spec.inputs.length === 0
+    ? []
+    : [
+        {
+          id: "page_general",
+          sections: [
+            {
+              id: "section_inputs",
+              fields: spec.inputs.map((input) => ({
+                id: input.name,
+                display: inputFormDisplay(input.type),
+                signpostPosition: "right-middle",
+                state: { visible: true, "read-only": false },
+              })),
+            },
+          ],
+          title: "General",
+        },
+      ];
+
+  return `${JSON.stringify({
+    layout: { pages },
+    schema,
+    options: { externalValidations: [] },
+    itemId: "",
+  })}\n`;
+}
+
+function inputFormType(type: string): InputFormType {
+  const arrayItemType = type.match(/^Array\/(.+)$/)?.[1];
+  if (arrayItemType) {
+    return { dataType: "array", itemType: inputFormType(arrayItemType) };
+  }
+
+  if (type.includes(":")) {
+    return { dataType: "reference", referenceType: type };
+  }
+
+  switch (type) {
+    case "boolean":
+      return { dataType: "boolean" };
+    case "number":
+      return { dataType: "decimal" };
+    case "SecureString":
+      return { dataType: "secureString" };
+    case "string":
+    default:
+      return { dataType: "string" };
+  }
+}
+
+function inputFormDisplay(type: string): string {
+  if (type.startsWith("Array/")) return "multiValuePicker";
+  if (type.includes(":")) return "valuePickerTree";
+
+  switch (type) {
+    case "boolean":
+      return "checkbox";
+    case "number":
+      return "decimalField";
+    case "SecureString":
+      return "passwordField";
+    case "string":
+    default:
+      return "textField";
+  }
+}
+
 function renderBindings(
   elementName: "in-binding" | "out-binding",
   bindings: WorkflowArtifactBinding[],
@@ -360,6 +479,16 @@ function escapeXmlAttribute(value: string): string {
 
 function utf16LeWithBom(value: string): Uint8Array {
   return new Uint8Array([0xff, 0xfe, ...Buffer.from(value, "utf16le")]);
+}
+
+function utf16BeWithBom(value: string): Uint8Array {
+  const littleEndian = Buffer.from(value, "utf16le");
+  for (let index = 0; index < littleEndian.length; index += 2) {
+    const first = littleEndian[index];
+    littleEndian[index] = littleEndian[index + 1] ?? 0;
+    littleEndian[index + 1] = first;
+  }
+  return new Uint8Array([0xfe, 0xff, ...littleEndian]);
 }
 
 function utf8Bytes(value: string): Uint8Array {

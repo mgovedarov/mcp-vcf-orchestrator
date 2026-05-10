@@ -22,6 +22,10 @@ const WORKFLOW_SCAFFOLD_SCHEMA = {
   tool: "scaffold-workflow-file",
   purpose:
     "Generate a local importable .workflow artifact from structured workflow metadata and linear scriptable tasks.",
+  scope:
+    "This scaffold contract emits scriptable task workflow items. When authoring a workflow that only executes one existing vRO action, prefer a native vRO action workflow item in the workflow XML/package instead of wrapping the action in a scriptable task. Use scriptable tasks when the workflow performs more than one action call or needs additional orchestration logic.",
+  layout:
+    "Prefer horizontal workflow layouts. Place sequential workflow items left-to-right by increasing x positions while keeping y positions stable unless a branch needs vertical separation.",
   fileSafety: {
     fileName:
       "Plain .workflow file name under the configured workflow artifact directory; no paths or traversal.",
@@ -107,6 +111,8 @@ const WORKFLOW_BASIC_SCRIPTABLE_TASK_PATTERN = `# Workflow Pattern: basic-script
 
 Use this pattern when one workflow can be represented as a linear scriptable task with explicit inputs and outputs.
 
+Prefer native action workflow items when the workflow only invokes one existing vRO action. Use a scriptable task for custom JavaScript logic, input shaping, branching, or when one item performs more than one action call.
+
 Discovery first:
 
 - Run \`list-categories\` for \`WorkflowCategory\` when the target category is unknown.
@@ -117,7 +123,9 @@ Implementation shape:
 
 - Declare workflow inputs, outputs, and attributes explicitly in \`scaffold-workflow-file\`.
 - Bind every script variable through \`inBindings\` or \`outBindings\`; binding types must match the referenced workflow parameter or attribute.
+- The scaffold emits a vRO-compatible \`input_form_\` for declared inputs. It uses UTF-16BE JSON with a BOM, page-level titles, section objects with only \`id\` and \`fields\`, field IDs that match schema keys, and \`options.externalValidations: []\`.
 - Keep the script readable because vRO runtime errors often point to item line numbers.
+- Use a horizontal layout when editing workflow XML directly: sequence items left-to-right with increasing x coordinates and a stable y coordinate.
 - Validate required inputs early and fail with clear messages.
 
 Validation flow:
@@ -125,7 +133,8 @@ Validation flow:
 1. \`scaffold-workflow-file\`
 2. \`preflight-workflow-file\`
 3. \`diff-workflow-file\` when replacing an existing workflow
-4. \`import-workflow-file\` only after preflight passes and the user confirms category and overwrite intent
+4. For reusable project content, publish via the project package: \`ensure-project-package\`, \`add-workflow-to-project-package\`, \`rebuild-project-package\`, \`export-project-package\`, \`get-project-package-import-details\`, \`import-project-package\`
+5. Use direct \`import-workflow-file\` only for narrow validation or explicitly requested one-off tests after preflight passes and the user confirms category and overwrite intent
 `;
 
 const WORKFLOW_ACTION_WRAPPER_PATTERN = `# Workflow Pattern: action-wrapper
@@ -142,8 +151,13 @@ Implementation shape:
 
 - Mirror action inputs as workflow inputs unless the user asks for a different public contract.
 - Use action parameter names and types exactly as discovered.
-- Call the action through \`System.getModule("<module>").<actionName>(...)\` only after the module and action name were verified.
+- Prefer a native vRO action workflow item for a single action call. Do not wrap a single action in a scriptable task just to call \`System.getModule("<module>").<actionName>(...)\`.
+- Use a scriptable task only when the workflow item performs multiple action calls or additional orchestration logic beyond a single action invocation.
+- Exported native action items are represented as \`<workflow-item type="task" script-module="<module>/<actionName>">\` with a generated \`<script>\` that assigns the return value to \`actionResult\`, for example \`actionResult = System.getModule("<module>").<actionName>(...);\`. Preserve that generated script and bind \`actionResult\` to the workflow output.
 - Bind the action result to a workflow output with the discovered return type.
+- Prefer horizontal workflow layout when authoring or editing XML/package content: start on the left, place the action item to the right of the start/root item, and place the end item further right.
+- The current \`scaffold-workflow-file\` contract emits scriptable task items. For a single-action wrapper that must use a native action item, author from an exported valid workflow/package shape or extend the artifact manually before package publishing.
+- Preserve or generate a valid \`input_form_\` when the wrapper has workflow inputs so it can be started from the vRO UI.
 
 Validation flow:
 

@@ -2,6 +2,8 @@
 
 Use this flow when the assistant needs to author a real importable `.workflow` artifact.
 
+When a workflow only executes one existing vRO action, prefer a native action workflow item and publish through the project package flow. Use scriptable task scaffolding when the workflow contains custom JavaScript logic, multiple action calls, or orchestration around an action. For manually authored XML/package content, prefer a horizontal left-to-right layout.
+
 ## Discover And Snapshot
 
 ```text

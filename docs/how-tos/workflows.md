@@ -17,9 +17,13 @@ Recommended tool sequence:
 
 `run-workflow-and-wait` validates inputs before running and polls until completion. If the workflow fails, the response includes current item details, stack information, log excerpts, and warnings when diagnostics cannot be fetched.
 
-## Scaffold, Import, And Test A Workflow
+## Scaffold, Publish, And Test A Workflow
 
 Use `scaffold-workflow-file` for real importable `.workflow` artifacts instead of hand-building ZIP/XML content.
+
+For workflows that only call one existing vRO action, prefer a native action workflow item and publish it through the project package flow. Use a scriptable task when the workflow item performs multiple action calls or extra JavaScript logic. For authored XML/package content, arrange simple linear workflows horizontally from left to right.
+
+Generated workflow artifacts include an `input_form_` entry for workflow inputs so the vRO UI can render the start form. The form uses UTF-16BE with a BOM, a single `page_general` page, section objects with only `id` and `fields`, and field entries that reference matching schema keys. Do not add section titles or ad hoc field properties such as `size`; vRO rejects those shapes when opening the workflow start page.
 
 ```text
 User: Create a simple workflow artifact called Echo Message. It should take
@@ -30,10 +34,17 @@ Recommended tool sequence:
 
 1. `scaffold-workflow-file` with workflow inputs, outputs, tasks, and bindings.
 2. `preflight-workflow-file(fileName: "echo-message.workflow")`.
-3. `list-categories(type: "WorkflowCategory", filter: "Dev")`.
-4. `import-workflow-file(..., confirm: true)`.
-5. `list-workflows(filter: "Echo Message")`.
-6. `run-workflow-and-wait(...)`.
+3. For a narrow validation run only, `list-categories(type: "WorkflowCategory", filter: "Dev")` and `import-workflow-file(..., confirm: true)`.
+4. Verify the workflow with `list-workflows(filter: "Echo Message")`, `get-workflow`, and `run-workflow-and-wait(...)`.
+5. Publish reusable project content through the project package:
+   - `ensure-project-package(packageName: "com.example.project")`
+   - `add-workflow-to-project-package(packageName: "com.example.project", workflowId: "<workflow-id>", confirm: true)`
+   - `rebuild-project-package(packageName: "com.example.project", confirm: true)`
+   - `export-project-package(packageName: "com.example.project", fileName: "com.example.project.package", overwrite: true)`
+   - `get-project-package-import-details(packageName: "com.example.project", fileName: "com.example.project.package")`
+   - `import-project-package(packageName: "com.example.project", fileName: "com.example.project.package", overwrite: true, confirm: true)`
+
+Direct `import-workflow-file` is a validation or one-off test path. The project package path is the normal way to push reusable workflow content into vRO.
 
 Example scaffold task:
 
@@ -45,6 +56,25 @@ Example scaffold task:
   "outBindings": [{ "name": "result", "type": "string", "target": "result" }]
 }
 ```
+
+This scaffold example is appropriate because it contains custom inline echo logic. If the workflow were only wrapping an existing `echo` action, use a native action workflow item instead of a scriptable task that only calls the action.
+
+Native action wrapper XML should preserve vRO's exported action-item shape:
+
+```xml
+<workflow-item name="item0" out-name="item1" type="task" script-module="com.example.actions/echo">
+  <script encoded="false"><![CDATA[actionResult = System.getModule("com.example.actions").echo(message);]]></script>
+  <in-binding>
+    <bind name="message" type="string" export-name="message"/>
+  </in-binding>
+  <out-binding>
+    <bind name="actionResult" type="string" export-name="result"/>
+  </out-binding>
+  <position y="100.0" x="180.0"/>
+</workflow-item>
+```
+
+The `script-module` attribute marks the item as a native action item. The generated `actionResult` script and output binding are still required for the action return value to reach the workflow output.
 
 ## Inspect Platform Capabilities Before Writing Code
 

@@ -89,7 +89,7 @@ Get detailed information about a specific workflow including its input and outpu
 
 ### `create-workflow`
 
-Create a new empty workflow in VCF Automation Orchestrator. Use `list-categories` first to find a workflow category ID. For real workflow content, prefer `scaffold-workflow-file` followed by `import-workflow-file`.
+Create a new empty workflow in VCF Automation Orchestrator. Use `list-categories` first to find a workflow category ID. For reusable workflow content, prefer publishing through the project package path after local authoring and validation.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
@@ -188,7 +188,7 @@ Export a vRO workflow as a `.workflow` file under the configured workflow artifa
 
 ### `scaffold-workflow-file`
 
-Generate a local importable `.workflow` artifact under the configured workflow artifact directory from structured metadata, linear scriptable tasks, scripts, and bindings. Use `import-workflow-file` to upload it afterwards.
+Generate a local importable `.workflow` artifact under the configured workflow artifact directory from structured metadata, linear scriptable tasks, scripts, bindings, and a vRO-compatible `input_form_` for declared inputs. Use this scaffold when a scriptable task is appropriate, such as custom JavaScript logic, multiple action calls, or orchestration around an action. For a workflow step that only invokes one existing vRO action, prefer a native action workflow item in authored XML/package content. For reusable project content, publish the resulting workflow through the project package flow after preflight; use `import-workflow-file` only for narrow validation or explicitly requested one-off tests.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
@@ -202,7 +202,7 @@ Generate a local importable `.workflow` artifact under the configured workflow a
 | Field | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `name` | string | Yes | - | Workflow display name. |
-| `tasks` | array | Yes | - | Linear sequence of scriptable tasks. At least one task is required. |
+| `tasks` | array | Yes | - | Linear sequence of scriptable tasks. At least one task is required. Prefer native action workflow items outside this scaffold when a step only invokes one existing vRO action. |
 | `id` | string | No | generated UUID | Workflow UUID. |
 | `description` | string | No | - | Workflow description. |
 | `version` | string | No | `1.0.0` | Workflow version metadata. |
@@ -210,6 +210,8 @@ Generate a local importable `.workflow` artifact under the configured workflow a
 | `inputs` | array | No | `[]` | Workflow input parameters. |
 | `outputs` | array | No | `[]` | Workflow output parameters. |
 | `attributes` | array | No | `[]` | Workflow-scoped attributes. |
+
+The generated `input_form_` is UTF-16BE JSON with a BOM. It places workflow inputs on a `page_general` page, uses section objects with only `id` and `fields`, maps common vRO types to compatible controls, and includes `options.externalValidations: []` for vRO UI compatibility.
 
 Workflow parameter object, used for `inputs`, `outputs`, and `attributes`:
 
@@ -270,7 +272,7 @@ Both `base` and `compare` are discriminated unions selected by `source`:
 
 ### `import-workflow-file`
 
-Import a `.workflow` file from the configured workflow artifact directory into a workflow category. Use `list-categories` with type `WorkflowCategory` to find a category ID first.
+Import a `.workflow` file from the configured workflow artifact directory into a workflow category. Use this direct import path for narrow validation or explicitly requested one-off tests; publish reusable project content through `ensure-project-package`, `add-workflow-to-project-package`, `rebuild-project-package`, `export-project-package`, `get-project-package-import-details`, and `import-project-package`.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
@@ -367,7 +369,7 @@ Both `base` and `compare` are discriminated unions selected by `source`:
 
 ### `import-action-file`
 
-Import a `.action` file from the configured action artifact directory into an action category. Use `list-categories` with type `ActionCategory` to find the category name first.
+Import a `.action` file from the configured action artifact directory into an action category. Use this direct import path for narrow validation or explicitly requested one-off tests; publish reusable project content through the project package tools.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
@@ -746,6 +748,148 @@ Export a vRO package as a ZIP file under the configured package artifact directo
 | `name` | string | Yes | - | Fully qualified package name to export, for example `com.example.mypackage`. |
 | `fileName` | string | Yes | - | Plain `.package` or `.zip` file name to save under the configured package artifact directory. Do not pass a path. |
 | `overwrite` | boolean | No | `false` | Overwrite the file if it already exists. |
+| `exportConfigurationAttributeValues` | boolean | No | - | Include configuration attribute values when supported by vRO. |
+| `exportGlobalTags` | boolean | No | - | Include global tags when supported by vRO. |
+| `exportVersionHistory` | boolean | No | - | Include version history when supported by vRO. |
+| `exportConfigSecureStringAttributeValues` | boolean | No | - | Include secure string configuration values when supported by vRO. |
+:::
+
+### `get-package-import-details`
+
+Analyze a local package file before import and return package elements and certificate details.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `fileName` | string | Yes | - | Plain `.package` or `.zip` file name under the configured package artifact directory. |
+:::
+
+### `create-package`
+
+Create a vRO package by exact fully qualified name. Refuses to create if the package already exists.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `name` | string | Yes | - | Exact fully qualified package name. |
+| `description` | string | No | - | Package description. |
+| `confirm` | boolean | Yes | - | Must be `true` to create the package. |
+:::
+
+### `ensure-project-package`
+
+Resolve and reuse the exact configured project package. Creates it only when `createIfMissing` and `confirm` are both `true`.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `packageName` | string | No | `VCFA_PROJECT_PACKAGE_NAME` | Exact project package name. |
+| `description` | string | No | `VCFA_PROJECT_PACKAGE_DESCRIPTION` | Description used only when the package is created. |
+| `createIfMissing` | boolean | No | `false` | Create the exact package if it is missing. |
+| `confirm` | boolean | No | `false` | Must be `true` with `createIfMissing` to create. |
+:::
+
+### `add-workflow-to-project-package`
+
+Add a workflow and dependencies to the exact project package.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `packageName` | string | No | `VCFA_PROJECT_PACKAGE_NAME` | Exact package name. |
+| `workflowId` | string | Yes | - | Workflow ID to add. |
+| `confirm` | boolean | Yes | - | Must be `true` to add content. |
+:::
+
+### `add-action-to-project-package`
+
+Add an action and dependencies to the exact project package.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `packageName` | string | No | `VCFA_PROJECT_PACKAGE_NAME` | Exact package name. |
+| `categoryName` | string | Yes | - | Action category/module name. |
+| `actionName` | string | Yes | - | Action name. |
+| `confirm` | boolean | Yes | - | Must be `true` to add content. |
+:::
+
+### `add-configuration-to-project-package`
+
+Add a configuration element and dependencies to the exact project package.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `packageName` | string | No | `VCFA_PROJECT_PACKAGE_NAME` | Exact package name. |
+| `configurationId` | string | Yes | - | Configuration element ID. |
+| `confirm` | boolean | Yes | - | Must be `true` to add content. |
+:::
+
+### `add-resource-to-project-package`
+
+Add a resource element and dependencies to the exact project package.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `packageName` | string | No | `VCFA_PROJECT_PACKAGE_NAME` | Exact package name. |
+| `resourceId` | string | Yes | - | Resource element ID. |
+| `confirm` | boolean | Yes | - | Must be `true` to add content. |
+:::
+
+### `rebuild-project-package`
+
+Rebuild the exact project package after adding content.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `packageName` | string | No | `VCFA_PROJECT_PACKAGE_NAME` | Exact package name. |
+| `confirm` | boolean | Yes | - | Must be `true` to rebuild. |
+:::
+
+### `export-project-package`
+
+Export the exact project package to the configured package artifact directory.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `packageName` | string | No | `VCFA_PROJECT_PACKAGE_NAME` | Exact package name. |
+| `fileName` | string | No | `{packageName}.package` | Output package file name. |
+| `overwrite` | boolean | No | `false` | Overwrite the local package file if it exists. |
+| `exportConfigurationAttributeValues` | boolean | No | - | Include configuration attribute values when supported by vRO. |
+| `exportGlobalTags` | boolean | No | - | Include global tags when supported by vRO. |
+| `exportVersionHistory` | boolean | No | - | Include version history when supported by vRO. |
+| `exportConfigSecureStringAttributeValues` | boolean | No | - | Include secure string configuration values when supported by vRO. |
+:::
+
+### `get-project-package-import-details`
+
+Analyze an exported project package file before import.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `packageName` | string | No | `VCFA_PROJECT_PACKAGE_NAME` | Exact package name used for default file naming. |
+| `fileName` | string | No | `{packageName}.package` | Package file name to analyze. |
+:::
+
+### `import-project-package`
+
+Import an exported project package file.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `packageName` | string | No | `VCFA_PROJECT_PACKAGE_NAME` | Exact package name used for default file naming. |
+| `fileName` | string | No | `{packageName}.package` | Package file name to import. |
+| `overwrite` | boolean | No | `true` | Whether to overwrite existing package contents. |
+| `confirm` | boolean | Yes | - | Must be `true` to import. |
+| `importConfigurationAttributeValues` | boolean | No | - | Import configuration attribute values when supported by vRO. |
+| `tagImportMode` | enum | No | - | Tag import mode: `DoNotImport`, `ImportAndOverwriteExistingValue`, or `ImportButPreserveExistingValue`. |
+| `importConfigSecureStringAttributeValues` | boolean | No | - | Import secure string configuration values when supported by vRO. |
 :::
 
 ### `preflight-package`
@@ -768,6 +912,9 @@ Import a vRO package from the configured package artifact directory into the Orc
 | `fileName` | string | Yes | - | Plain `.package` or `.zip` file name under the configured package artifact directory to import. |
 | `overwrite` | boolean | No | `true` | Whether to overwrite existing package contents. |
 | `confirm` | boolean | Yes | - | Must be `true` to confirm import. If `false`, import is not performed. |
+| `importConfigurationAttributeValues` | boolean | No | - | Import configuration attribute values when supported by vRO. |
+| `tagImportMode` | enum | No | - | Tag import mode: `DoNotImport`, `ImportAndOverwriteExistingValue`, or `ImportButPreserveExistingValue`. |
+| `importConfigSecureStringAttributeValues` | boolean | No | - | Import secure string configuration values when supported by vRO. |
 :::
 
 ### `delete-package`

@@ -31,7 +31,7 @@ This custom agent assists with VCF Automation Orchestrator workflows, workflow e
 - Catalog items: `list-catalog-items`, `get-catalog-item`
 - Deployments: `list-deployments`, `get-deployment`, `create-deployment`, `delete-deployment`, `list-deployment-actions`, `run-deployment-action`
 - Templates: `list-templates`, `get-template`, `create-template`, `delete-template`
-- Packages: `list-packages`, `get-package`, `export-package`, `preflight-package`, `import-package`, `delete-package`
+- Packages: `list-packages`, `get-package`, `create-package`, `ensure-project-package`, `add-workflow-to-project-package`, `add-action-to-project-package`, `add-configuration-to-project-package`, `add-resource-to-project-package`, `rebuild-project-package`, `export-project-package`, `get-package-import-details`, `get-project-package-import-details`, `export-package`, `preflight-package`, `import-package`, `import-project-package`, `delete-package`
 - Plugins: `list-plugins`
 - Context and promotion: `collect-context-snapshot`, `prepare-artifact-promotion`
 
@@ -39,6 +39,12 @@ This custom agent assists with VCF Automation Orchestrator workflows, workflow e
 
 - Start with read-only discovery tools or `collect-context-snapshot` in unfamiliar environments.
 - Do not invent VCF Automation/vRO IDs, schemas, workflow parameters, action contracts, project IDs, category IDs, or blueprint YAML fields. If discovery cannot find a required fact, stop and report what is missing.
+- When a workflow step only invokes one existing vRO action, use a native action workflow item instead of a scriptable task that calls `System.getModule`. Use scriptable tasks for multiple action calls or additional orchestration logic.
+- Prefer horizontal left-to-right workflow layouts when authoring or editing workflow XML/package content.
+- Workflows with user inputs need a valid `input_form_` so they can be started from the vRO UI. Use UTF-16BE JSON with a BOM, page-level titles, section objects with only `id` and `fields`, field IDs that match `schema` keys, and `options.externalValidations: []`; do not add section `title` or unverified field properties such as `size`.
+- Publish reusable vRO content through the project package path by default: `ensure-project-package`, add the discovered workflow/action/configuration/resource to that exact package, `rebuild-project-package`, `export-project-package`, `get-project-package-import-details`, then `import-project-package`.
+- Reuse the exact `VCFA_PROJECT_PACKAGE_NAME` package for package-first work. Do not create new packages with random, timestamped, or task-specific names.
+- Use direct artifact imports such as `import-workflow-file` or `import-action-file` only for narrow validation or explicitly requested single-artifact tests; project content should move into vRO via packages.
 - Use preflight tools before artifact imports. Use `prepare-artifact-promotion` when replacing live workflow, action, configuration, or package artifacts.
 - Run live write, import, day-2 action, and delete operations only after the user confirms the exact target and impact.
 - Keep local artifact paths inside configured directories such as `VCFA_ARTIFACT_DIR`, `VCFA_WORKFLOW_DIR`, `VCFA_ACTION_DIR`, `VCFA_CONFIGURATION_DIR`, `VCFA_RESOURCE_DIR`, `VCFA_PACKAGE_DIR`, and `VCFA_CONTEXT_DIR`.
