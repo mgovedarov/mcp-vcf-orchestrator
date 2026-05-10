@@ -450,11 +450,50 @@ export interface VroPackage {
   description?: string;
   version?: string;
   href?: string;
+  workflows?: unknown[];
+  actions?: unknown[];
+  configurations?: unknown[];
+  resources?: unknown[];
+  usedPlugins?: unknown[];
 }
 
 export interface VroPackageList {
   total?: number;
   link: VroPackage[];
+}
+
+export interface ProjectPackageResult {
+  name: string;
+  created: boolean;
+  package?: VroPackage;
+}
+
+export interface PackageImportDetails {
+  packageName?: string;
+  packageAlreadyExists?: boolean;
+  contentVerified?: boolean;
+  certificateValid?: boolean;
+  certificateTrusted?: boolean;
+  certificateUnknown?: boolean;
+  importElementDetails?: unknown[];
+  certificateInfo?: Record<string, unknown>;
+}
+
+export interface PackageExportOptions {
+  exportConfigurationAttributeValues?: boolean;
+  exportGlobalTags?: boolean;
+  exportVersionHistory?: boolean;
+  exportConfigSecureStringAttributeValues?: boolean;
+}
+
+export interface PackageImportOptions {
+  overwrite?: boolean;
+  importConfigurationAttributeValues?: boolean;
+  tagImportMode?:
+    | "DoNotImport"
+    | "ImportAndOverwriteExistingValue"
+    | "ImportButPreserveExistingValue";
+  importConfigSecureStringAttributeValues?: boolean;
 }
 
 // --- Resource Elements ---
@@ -501,6 +540,8 @@ export interface VroClientConfig {
   ignoreTls?: boolean;
   artifactDir?: string;
   packageDir?: string;
+  projectPackageName?: string;
+  projectPackageDescription?: string;
   resourceDir?: string;
   workflowDir?: string;
   actionDir?: string;

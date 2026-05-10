@@ -31,6 +31,8 @@ It uses the returned bearer token for later VCF Automation, Service Broker, Clou
 | `VCFA_ACTION_DIR` | Override the action artifact directory. |
 | `VCFA_CONFIGURATION_DIR` | Override the configuration artifact directory. |
 | `VCFA_CONTEXT_DIR` | Override the persisted context snapshot directory. If unset, context snapshots prefer the MCP client's current workspace root at `artifacts/context/`, falling back to `VCFA_ARTIFACT_DIR/context`. |
+| `VCFA_PROJECT_PACKAGE_NAME` | Stable fully-qualified package name reused by package-first workflows, for example `com.example.project`. |
+| `VCFA_PROJECT_PACKAGE_DESCRIPTION` | Optional description used if the exact project package is explicitly created. |
 
 ## Artifact Directories
 

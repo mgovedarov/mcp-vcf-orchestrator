@@ -18,6 +18,10 @@ function discoveryGuardrails(): string[] {
   return [
     "Discovery guardrail: if a required workflow, action, template, category, project, parameter, or return type is not found, stop and report the missing fact. Do not invent IDs, parameter names, types, schemas, or provider-specific YAML.",
     "When action discovery is required, list-actions must produce an exact candidate and get-action must verify its contract. If list-actions returns no match or only partial/ambiguous action data, stop and ask for the missing action details instead of inventing parameter names or return types.",
+    "Workflow authoring preference: when a workflow only executes one existing vRO action, use a native action workflow item instead of a scriptable task that calls System.getModule. Use scriptable tasks when the workflow item performs multiple action calls or additional orchestration logic.",
+    "Workflow layout preference: when authoring or editing workflow XML/package content, arrange sequential workflow items horizontally from left to right.",
+    "Workflow input form preference: generated workflows with inputs must include a valid input_form_ entry. Use page-level titles, section objects with only id and fields, field IDs that match schema keys, and options.externalValidations: []. Do not add section title or unverified field properties such as size.",
+    "Publish reusable vRO content through the configured project package by default: ensure-project-package, add content, rebuild-project-package, export-project-package, inspect import details, and import-project-package. Use direct artifact imports only for narrow validation or explicitly requested one-off tests.",
     "Prefer reading vcfa://docs/artifact-authoring and the relevant vcfa://patterns/* or vcfa://schemas/* resource before drafting artifacts.",
   ];
 }
@@ -47,7 +51,7 @@ export function registerVcfaPrompts(server: McpServer): void {
           "Use VCFA MCP tools to inspect existing categories, workflows, and reusable actions before creating anything new.",
           ...discoveryGuardrails(),
           "Prefer scaffold-workflow-file for local artifact generation, then run preflight-workflow-file and summarize any errors or warnings.",
-          "Only recommend import-workflow-file after preflight passes and the user has confirmed the target category and import intent.",
+          "For reusable workflow content, recommend adding the workflow to the project package and importing the package. Only recommend direct import-workflow-file for narrow validation or explicitly requested one-off tests after preflight passes and the user confirms the target category and import intent.",
         ]
           .filter((line): line is string => line !== undefined)
           .join("\n"),
@@ -77,7 +81,7 @@ export function registerVcfaPrompts(server: McpServer): void {
           "Run the matching preflight tool for this artifact and summarize blocking errors, warnings, metadata, parameters, and action references.",
           ...discoveryGuardrails(),
           "Check the target category or package context with list-categories, list-packages, list-workflows, list-actions, or list-configurations as appropriate.",
-          "Recommend the exact import tool call only after explaining risks and required confirmation.",
+          "For reusable project content, recommend the package import path. Recommend a direct artifact import only after explaining why it is a validation or one-off import, plus the risks and required confirmation.",
         ].join("\n"),
       ),
   );
@@ -207,7 +211,7 @@ export function registerVcfaPrompts(server: McpServer): void {
           "Use list-actions with a focused filter, then get-action on the exact match to verify module, name, inputs, return type, and script behavior.",
           "Use list-categories for WorkflowCategory if the category is not already known.",
           ...discoveryGuardrails(),
-          "Scaffold the wrapper with scaffold-workflow-file, preflight it, and summarize the exact import-workflow-file call only after preflight passes and the user confirms import.",
+          "For a single-action wrapper, prefer a native vRO action workflow item in a horizontally arranged workflow. Use scaffold-workflow-file only when a scriptable task is appropriate, such as multiple action calls or additional orchestration logic. Publish reusable wrappers through the project package path.",
         ]
           .filter((line): line is string => line !== undefined)
           .join("\n"),

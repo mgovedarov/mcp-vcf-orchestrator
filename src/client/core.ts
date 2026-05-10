@@ -13,6 +13,8 @@ export class VroHttpClient {
   readonly deploymentBaseUrl: string;
   readonly blueprintBaseUrl: string;
   readonly packageDir: string;
+  readonly projectPackageName?: string;
+  readonly projectPackageDescription?: string;
   readonly resourceDir: string;
   readonly workflowDir: string;
   readonly actionDir: string;
@@ -39,6 +41,8 @@ export class VroHttpClient {
     this.packageDir = resolve(
       config.packageDir ?? join(artifactDir, "packages"),
     );
+    this.projectPackageName = config.projectPackageName;
+    this.projectPackageDescription = config.projectPackageDescription;
     this.resourceDir = resolve(
       config.resourceDir ?? join(artifactDir, "resources"),
     );

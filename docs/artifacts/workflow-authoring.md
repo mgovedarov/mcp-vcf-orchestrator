@@ -11,7 +11,35 @@ A `.workflow` file is a ZIP archive containing at least:
 
 `workflow-content` is XML encoded as UTF-16 with a BOM. The XML root is a vRO workflow document with metadata such as `id`, `version`, and `api-version`.
 
-Workflow inputs live under `<input>`, outputs under `<output>`, and scriptable task logic lives in `<workflow-item type="task">` nodes.
+Workflow inputs live under `<input>` and outputs under `<output>`. Scriptable task logic lives in `<workflow-item type="task">` nodes.
+
+When a workflow only needs to execute one existing vRO action, model that step as a native vRO action workflow item instead of a scriptable task that calls `System.getModule(...)`. Use a scriptable task when the workflow item performs more than one action call or needs extra JavaScript logic such as branching, input shaping, validation, or result aggregation.
+
+Prefer horizontal workflow layouts in authored XML/package content. Place sequential items from left to right by increasing `x` positions while keeping `y` positions stable unless a branch needs vertical separation.
+
+## Native Action Item Shape
+
+In exported vRO workflow XML, a native action item is still represented as a `type="task"` workflow item, but it includes a `script-module="<module>/<actionName>"` attribute. vRO also exports a generated script that assigns the action return value to `actionResult`; keep that generated shape when manually authoring package content.
+
+```xml
+<workflow-item name="item0" out-name="item1" type="task" script-module="com.example.actions/echo">
+  <display-name><![CDATA[Call echo]]></display-name>
+  <script encoded="false"><![CDATA[actionResult = System.getModule("com.example.actions").echo(message);]]></script>
+  <in-binding>
+    <bind name="message" type="string" export-name="message"/>
+  </in-binding>
+  <out-binding>
+    <bind name="actionResult" type="string" export-name="result"/>
+  </out-binding>
+  <position y="100.0" x="180.0"/>
+</workflow-item>
+<workflow-item name="item1" type="end" end-mode="0">
+  <in-binding/>
+  <position y="100.0" x="420.0"/>
+</workflow-item>
+```
+
+Do not omit the generated `actionResult = System.getModule(...).action(...)` script when hand-editing exported package content. A `script-module` attribute without the generated script can import and run but may return `undefined`.
 
 ## Scriptable Task Bindings
 
@@ -38,6 +66,8 @@ Use `scaffold-workflow-file` with:
 - explicit in/out bindings per task
 
 Then run `preflight-workflow-file` before import.
+
+The current scaffold tool emits scriptable task items. For a single-action wrapper that must use a native action element, start from an exported valid workflow/package shape or manually author the action item before publishing through the project package flow.
 
 ## Robust Script Helpers
 

@@ -614,6 +614,159 @@ test("package import sends multipart file and overwrite query", async () => {
   }
 });
 
+test("package export uses content endpoint with package export options", async () => {
+  const packageDir = await mkdtemp(join(tmpdir(), "vcfa-packages-"));
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return new Response("package-content", { status: 200 });
+  };
+
+  try {
+    const client = new VroClient(config({ packageDir }));
+    await client.exportPackage("com.example.project", "project.package", false, {
+      exportConfigurationAttributeValues: true,
+      exportGlobalTags: false,
+      exportVersionHistory: true,
+    });
+
+    assert.equal(
+      calls[1].url,
+      "https://vcfa.example.test/vco/api/content/packages/com.example.project?exportConfigurationAttributeValues=true&exportGlobalTags=false&exportVersionHistory=true",
+    );
+    assert.equal(calls[1].init.method, "GET");
+  } finally {
+    await rm(packageDir, { recursive: true, force: true });
+  }
+});
+
+test("project package reuse refuses to create without explicit confirmation", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return new Response("missing", { status: 404, statusText: "Not Found" });
+  };
+
+  const client = new VroClient(
+    config({ projectPackageName: "com.example.project" }),
+  );
+  await assert.rejects(
+    () => client.ensureProjectPackage(),
+    /createIfMissing and confirm/,
+  );
+
+  assert.equal(
+    calls[1].url,
+    "https://vcfa.example.test/vco/api/packages/com.example.project",
+  );
+  assert.equal(calls.length, 2);
+});
+
+test("project package reuse creates exact package only when confirmed", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    if (calls.length === 2) {
+      return new Response("missing", { status: 404, statusText: "Not Found" });
+    }
+    return new Response("", { status: 201 });
+  };
+
+  const client = new VroClient(
+    config({ projectPackageName: "com.example.project" }),
+  );
+  const result = await client.ensureProjectPackage({
+    createIfMissing: true,
+    confirm: true,
+    description: "Project package",
+  });
+
+  assert.deepEqual(result, { name: "com.example.project", created: true });
+  assert.equal(calls[2].init.method, "PUT");
+  assert.equal(
+    calls[2].url,
+    "https://vcfa.example.test/vco/api/packages/com.example.project",
+  );
+  assert.deepEqual(JSON.parse(calls[2].init.body), {
+    description: "Project package",
+  });
+});
+
+test("package content helpers target the resolved package endpoints", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return new Response("", { status: 200 });
+  };
+
+  const client = new VroClient(config());
+  await client.addWorkflowToPackage("com.example.project", "workflow-1");
+  await client.addActionToPackage("com.example.project", "com.example", "echo");
+  await client.addConfigurationToPackage("com.example.project", "config-1");
+  await client.addResourceToPackage("com.example.project", "resource-1");
+  await client.rebuildPackage("com.example.project");
+
+  assert.deepEqual(
+    calls.slice(1).map((call) => [call.init.method, call.url]),
+    [
+      [
+        "POST",
+        "https://vcfa.example.test/vco/api/packages/com.example.project/workflow/workflow-1",
+      ],
+      [
+        "POST",
+        "https://vcfa.example.test/vco/api/packages/com.example.project/action/com.example/echo",
+      ],
+      [
+        "POST",
+        "https://vcfa.example.test/vco/api/packages/com.example.project/configuration/config-1",
+      ],
+      [
+        "POST",
+        "https://vcfa.example.test/vco/api/packages/com.example.project/resource/resource-1",
+      ],
+      [
+        "POST",
+        "https://vcfa.example.test/vco/api/packages/com.example.project/rebuild",
+      ],
+    ],
+  );
+});
+
+test("package import details uploads package without importing it", async () => {
+  const packageDir = await mkdtemp(join(tmpdir(), "vcfa-packages-"));
+  await writeFile(join(packageDir, "payload.package"), xmlArchive("package"));
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return Response.json({
+      packageName: "com.example.project",
+      contentVerified: true,
+      importElementDetails: [{ id: "workflow-1" }],
+    });
+  };
+
+  try {
+    const client = new VroClient(config({ packageDir }));
+    const details = await client.getPackageImportDetails("payload.package");
+
+    assert.equal(details.packageName, "com.example.project");
+    assert.equal(
+      calls[1].url,
+      "https://vcfa.example.test/vco/api/packages/import-details",
+    );
+    assert.equal(calls[1].init.method, "POST");
+    assert.equal(calls[1].init.body.get("file").name, "payload.package");
+  } finally {
+    await rm(packageDir, { recursive: true, force: true });
+  }
+});
+
 test("deletePackage sends documented option query", async () => {
   const calls = [];
   globalThis.fetch = async (url, init) => {

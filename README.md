@@ -66,6 +66,8 @@ Useful optional variables:
 | `VCFA_ACTION_DIR` | Override action artifact directory. |
 | `VCFA_CONFIGURATION_DIR` | Override configuration artifact directory. |
 | `VCFA_CONTEXT_DIR` | Override persisted context snapshot directory. If unset, context snapshots prefer the MCP client's current workspace root at `artifacts/context/`, falling back to `VCFA_ARTIFACT_DIR/context`. |
+| `VCFA_PROJECT_PACKAGE_NAME` | Stable fully-qualified vRO package name reused by package-first project workflows, for example `com.example.project`. |
+| `VCFA_PROJECT_PACKAGE_DESCRIPTION` | Optional description used only when the exact project package is explicitly created. |
 
 ## Tool Coverage
 
@@ -74,7 +76,7 @@ The server includes tools for:
 - Workflows, workflow executions, workflow artifact scaffold/preflight/diff/import/export
 - Actions and action artifact import/export/preflight/diff
 - Configuration elements and resource elements
-- vRO packages and plugins
+- vRO packages and plugins, including package-first project package reuse
 - Categories
 - Service Broker catalog items and deployments
 - Deployment day-2 actions

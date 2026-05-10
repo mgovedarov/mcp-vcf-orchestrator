@@ -40,6 +40,9 @@ async function main(): Promise<void> {
   const ignoreTls = process.env["VCFA_IGNORE_TLS"] === "true";
   const artifactDir = process.env["VCFA_ARTIFACT_DIR"] ?? DEFAULT_ARTIFACT_DIR;
   const packageDir = process.env["VCFA_PACKAGE_DIR"];
+  const projectPackageName = process.env["VCFA_PROJECT_PACKAGE_NAME"];
+  const projectPackageDescription =
+    process.env["VCFA_PROJECT_PACKAGE_DESCRIPTION"];
   const resourceDir = process.env["VCFA_RESOURCE_DIR"];
   const workflowDir = process.env["VCFA_WORKFLOW_DIR"];
   const actionDir = process.env["VCFA_ACTION_DIR"];
@@ -62,6 +65,8 @@ async function main(): Promise<void> {
     ignoreTls,
     artifactDir,
     packageDir,
+    projectPackageName,
+    projectPackageDescription,
     resourceDir,
     workflowDir,
     actionDir,
@@ -79,19 +84,20 @@ async function main(): Promise<void> {
         "Use get-workflow to inspect a workflow's input parameters before running it with run-workflow.",
         "Use run-workflow-and-wait for rapid development loops that validate workflow inputs, wait for completion, and return outputs or diagnostics.",
         "After starting a workflow execution with run-workflow, use get-workflow-execution to poll for completion and retrieve outputs.",
-        "Use export-workflow-file to save a workflow artifact under the configured workflow artifact directory; use import-workflow-file to upload a .workflow artifact from that directory into a workflow category.",
-        "Use scaffold-workflow-file to generate a local .workflow artifact from structured workflow metadata and linear scriptable tasks before importing it.",
+        "Use export-workflow-file to save a workflow artifact under the configured workflow artifact directory; use direct import-workflow-file only for narrow validation or explicitly requested single-artifact tests.",
+        "Use scaffold-workflow-file to generate a local .workflow artifact from structured workflow metadata and linear scriptable tasks before publishing or validating it.",
+        "When a workflow step only invokes one existing vRO action, prefer a native action workflow item instead of a scriptable task that calls System.getModule. Use scriptable tasks for multiple action calls or additional orchestration logic. Prefer horizontal left-to-right workflow layouts when authoring or editing XML/package content.",
         "Use preflight-workflow-file, preflight-action-file, preflight-configuration-file, and preflight-package to validate local artifacts before importing them.",
         "Use prepare-artifact-promotion before artifact imports when you need preflight, optional live backup export, workflow/action diff summaries, and the exact confirmed import call; it never imports.",
         "Use collect-context-snapshot to persist reusable Markdown and JSON summaries of workflows, actions, configurations, resources, categories, and optional VCFA domains for future agents.",
-        "Use export-action-file to save an action artifact under the configured action artifact directory; use import-action-file to upload a .action artifact from that directory into an action category by category name.",
+        "Use export-action-file to save an action artifact under the configured action artifact directory; use direct import-action-file only for narrow validation or explicitly requested single-artifact tests.",
         "Use export-configuration-file to save a configuration artifact under the configured configuration artifact directory; use import-configuration-file to upload a .vsoconf artifact from that directory into a configuration category.",
         "Use list-event-topics to discover available event topics before creating extensibility subscriptions.",
         "Use list-subscriptions to see existing event-driven triggers.",
         "Use list-catalog-items to browse the Service Broker catalog; use get-catalog-item to inspect a specific item by ID.",
         "Use list-deployments to see existing deployments; use create-deployment to deploy a catalog item, providing the catalogItemId, deploymentName, and projectId. Use list-deployment-actions to discover available deployment day-2 actions, then run-deployment-action with confirm set to true to submit one.",
         "Use list-templates to browse blueprint templates; use get-template to inspect a specific template by ID; use create-template to create a new template; use delete-template to remove one.",
-        "Use list-packages to browse vRO packages; use export-package to save a package file under the configured package artifact directory; use import-package to upload a package file from that directory; use delete-package with confirm set to true to remove a package.",
+        "Publish reusable vRO content through packages by default: use ensure-project-package, add content to the exact project package, rebuild-project-package, export-project-package, get-project-package-import-details, then import-project-package. Reuse the configured project package from VCFA_PROJECT_PACKAGE_NAME; never create one-off packages unless the user confirms the exact package name.",
         "Use list-resource-elements to browse vRO resource elements; use list-categories with type ResourceElementCategory before importing a resource element; exported and imported resource files are stored under the configured resource artifact directory.",
         "Use list-plugins to see all installed vRO plugins.",
       ].join(" "),

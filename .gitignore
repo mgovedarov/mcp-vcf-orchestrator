@@ -3,3 +3,4 @@ dist/
 docs/.vitepress/cache/
 docs/.vitepress/dist/
 .env
+artifacts/

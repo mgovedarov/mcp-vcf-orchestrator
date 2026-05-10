@@ -452,6 +452,9 @@ function validateWorkflowArchive(
   report: ArtifactPreflightReport,
 ): void {
   inspectWorkflowArchiveFiles(files, report);
+  if (files["input_form_"]) {
+    validateInputFormEntry(files["input_form_"], "input_form_", report);
+  }
 }
 
 function inspectWorkflowArchiveFiles(
@@ -565,6 +568,8 @@ function validatePackageArchive(
       nestedArtifacts += 1;
       counts.configurations += 1;
       validateArchiveBuffer(content, nested, validateGenericXmlArchive);
+    } else if (lowerName.endsWith("/input_form_") || lowerName === "input_form_") {
+      validateInputFormEntry(content, name, report);
     } else {
       continue;
     }
@@ -577,6 +582,11 @@ function validatePackageArchive(
     report.warnings.push(
       ...nested.warnings.map((warning) => `${name}: ${warning}`),
     );
+    if (typeof nested.metadata.inputForms === "number") {
+      report.metadata.inputForms =
+        (typeof report.metadata.inputForms === "number" ? report.metadata.inputForms : 0) +
+        nested.metadata.inputForms;
+    }
   }
 
   report.metadata.workflowArtifacts = counts.workflows;
@@ -587,6 +597,156 @@ function validatePackageArchive(
     report.warnings.push(
       "No nested .workflow, .action, or .vsoconf entries were recognized; only package ZIP/import safety was validated",
     );
+  }
+}
+
+function validateInputFormEntry(
+  content: Uint8Array,
+  entryName: string,
+  report: ArtifactPreflightReport,
+): void {
+  const json = decodeUtf16TextWithBom(content, entryName, "JSON", report);
+  if (!json) return;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json.replace(/^\uFEFF/, ""));
+  } catch (error) {
+    report.errors.push(`${entryName} is not valid JSON: ${errorMessage(error)}`);
+    return;
+  }
+
+  if (!isObject(parsed)) {
+    report.errors.push(`${entryName} must contain a JSON object`);
+    return;
+  }
+
+  const layout = getObject(parsed, "layout");
+  const schema = getObject(parsed, "schema");
+  if (!layout) {
+    report.errors.push(`${entryName} is missing layout`);
+    return;
+  }
+  if (!schema) {
+    report.errors.push(`${entryName} is missing schema`);
+    return;
+  }
+
+  const pages = layout.pages;
+  if (!Array.isArray(pages)) {
+    report.errors.push(`${entryName} layout.pages must be an array`);
+    return;
+  }
+
+  for (const [pageIndex, page] of pages.entries()) {
+    if (!isObject(page)) {
+      report.errors.push(`${entryName} layout.pages/${pageIndex} must be an object`);
+      continue;
+    }
+
+    reportUnknownInputFormKeys(
+      page,
+      ["id", "sections", "title"],
+      `${entryName} layout.pages/${pageIndex}`,
+      report,
+    );
+
+    const sections = page.sections;
+    if (!Array.isArray(sections)) {
+      report.errors.push(`${entryName} layout.pages/${pageIndex}.sections must be an array`);
+      continue;
+    }
+
+    for (const [sectionIndex, section] of sections.entries()) {
+      if (!isObject(section)) {
+        report.errors.push(
+          `${entryName} layout.pages/${pageIndex}.sections/${sectionIndex} must be an object`,
+        );
+        continue;
+      }
+
+      reportUnknownInputFormKeys(
+        section,
+        ["id", "fields"],
+        `${entryName} layout.pages/${pageIndex}.sections/${sectionIndex}`,
+        report,
+      );
+
+      const fields = section.fields;
+      if (!Array.isArray(fields)) {
+        report.errors.push(
+          `${entryName} layout.pages/${pageIndex}.sections/${sectionIndex}.fields must be an array`,
+        );
+        continue;
+      }
+
+      for (const [fieldIndex, field] of fields.entries()) {
+        if (!isObject(field)) {
+          report.errors.push(
+            `${entryName} layout.pages/${pageIndex}.sections/${sectionIndex}.fields/${fieldIndex} must be an object`,
+          );
+          continue;
+        }
+
+        reportUnknownInputFormKeys(
+          field,
+          ["id", "display", "signpostPosition", "state"],
+          `${entryName} layout.pages/${pageIndex}.sections/${sectionIndex}.fields/${fieldIndex}`,
+          report,
+        );
+
+        const fieldId = stringValue(field.id);
+        if (!fieldId) {
+          report.errors.push(
+            `${entryName} layout.pages/${pageIndex}.sections/${sectionIndex}.fields/${fieldIndex} is missing id`,
+          );
+        } else if (!isObject(schema[fieldId])) {
+          report.errors.push(`${entryName} field ${fieldId} is missing a schema entry`);
+        }
+      }
+    }
+  }
+
+  for (const [name, definition] of Object.entries(schema)) {
+    if (!isObject(definition)) {
+      report.errors.push(`${entryName} schema.${name} must be an object`);
+      continue;
+    }
+    if (!stringValue(definition.id)) {
+      report.errors.push(`${entryName} schema.${name} is missing id`);
+    }
+    if (!isObject(definition.type) || !stringValue(definition.type.dataType)) {
+      report.errors.push(`${entryName} schema.${name} is missing type.dataType`);
+    }
+    if (!stringValue(definition.label)) {
+      report.errors.push(`${entryName} schema.${name} is missing label`);
+    }
+  }
+
+  const options = getObject(parsed, "options");
+  if (!options || !Array.isArray(options.externalValidations)) {
+    report.warnings.push(
+      `${entryName} should include options.externalValidations as an array for vRO input form compatibility`,
+    );
+  }
+
+  report.metadata.inputForms =
+    (typeof report.metadata.inputForms === "number" ? report.metadata.inputForms : 0) + 1;
+}
+
+function reportUnknownInputFormKeys(
+  value: XmlObject,
+  allowedKeys: string[],
+  path: string,
+  report: ArtifactPreflightReport,
+): void {
+  const allowed = new Set(allowedKeys);
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) {
+      report.errors.push(
+        `${path} must not have additional property ${key}`,
+      );
+    }
   }
 }
 
@@ -1023,6 +1183,15 @@ function decodeUtf16XmlWithBom(
   entryName: string,
   report: ArtifactPreflightReport,
 ): string | null {
+  return decodeUtf16TextWithBom(content, entryName, "XML", report);
+}
+
+function decodeUtf16TextWithBom(
+  content: Uint8Array,
+  entryName: string,
+  label: string,
+  report: ArtifactPreflightReport,
+): string | null {
   if (content.length < 2) {
     report.errors.push(`${entryName} is empty`);
     return null;
@@ -1030,7 +1199,7 @@ function decodeUtf16XmlWithBom(
   const littleEndian = content[0] === 0xff && content[1] === 0xfe;
   const bigEndian = content[0] === 0xfe && content[1] === 0xff;
   if (!littleEndian && !bigEndian) {
-    report.errors.push(`${entryName} must be UTF-16 XML with a BOM`);
+    report.errors.push(`${entryName} must be UTF-16 ${label} with a BOM`);
     return null;
   }
 
@@ -1038,7 +1207,7 @@ function decodeUtf16XmlWithBom(
   try {
     return new TextDecoder(encoding).decode(content);
   } catch (error) {
-    report.errors.push(`${entryName} is not valid ${encoding} XML: ${errorMessage(error)}`);
+    report.errors.push(`${entryName} is not valid ${encoding} ${label}: ${errorMessage(error)}`);
     return null;
   }
 }

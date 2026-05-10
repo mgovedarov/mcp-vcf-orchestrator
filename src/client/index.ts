@@ -13,7 +13,11 @@ import type {
   DeploymentRequest,
   DiffActionFileParams,
   DiffWorkflowFileParams,
+  PackageExportOptions,
+  PackageImportDetails,
+  PackageImportOptions,
   PrepareArtifactPromotionParams,
+  ProjectPackageResult,
   EventTopicList,
   ResourceElementList,
   ScaffoldWorkflowFileParams,
@@ -590,12 +594,84 @@ export class VroClient {
     name: string,
     fileName: string,
     overwrite = false,
+    options: PackageExportOptions = {},
   ): Promise<string> {
-    return this.packages.exportPackage(name, fileName, overwrite);
+    return this.packages.exportPackage(name, fileName, overwrite, options);
   }
 
   importPackage(fileName: string, overwrite = true): Promise<void> {
     return this.packages.importPackage(fileName, overwrite);
+  }
+
+  importPackageWithOptions(
+    fileName: string,
+    options: PackageImportOptions = {},
+  ): Promise<void> {
+    return this.packages.importPackageWithOptions(fileName, options);
+  }
+
+  getPackageImportDetails(fileName: string): Promise<PackageImportDetails> {
+    return this.packages.getPackageImportDetails(fileName);
+  }
+
+  ensureProjectPackage(params?: {
+    packageName?: string;
+    description?: string;
+    createIfMissing?: boolean;
+    confirm?: boolean;
+  }): Promise<ProjectPackageResult> {
+    return this.packages.ensureProjectPackage(params);
+  }
+
+  resolveProjectPackageName(packageName?: string): string {
+    return this.packages.resolveProjectPackageName(packageName);
+  }
+
+  createPackage(
+    name: string,
+    description?: string,
+    items?: {
+      workflows?: string[];
+      actions?: string[];
+      resources?: string[];
+      configurations?: string[];
+    },
+  ): Promise<void> {
+    return this.packages.createPackage(name, description, items);
+  }
+
+  rebuildPackage(name: string): Promise<void> {
+    return this.packages.rebuildPackage(name);
+  }
+
+  addWorkflowToPackage(packageName: string, workflowId: string): Promise<void> {
+    return this.packages.addWorkflowToPackage(packageName, workflowId);
+  }
+
+  addActionToPackage(
+    packageName: string,
+    categoryName: string,
+    actionName: string,
+  ): Promise<void> {
+    return this.packages.addActionToPackage(
+      packageName,
+      categoryName,
+      actionName,
+    );
+  }
+
+  addConfigurationToPackage(
+    packageName: string,
+    configurationId: string,
+  ): Promise<void> {
+    return this.packages.addConfigurationToPackage(
+      packageName,
+      configurationId,
+    );
+  }
+
+  addResourceToPackage(packageName: string, resourceId: string): Promise<void> {
+    return this.packages.addResourceToPackage(packageName, resourceId);
   }
 
   preflightPackageFile(fileName: string): Promise<ArtifactPreflightReport> {

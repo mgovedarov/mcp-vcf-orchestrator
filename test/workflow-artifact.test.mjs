@@ -15,6 +15,7 @@ import {
   buildWorkflowArtifact,
   buildWorkflowContent,
   buildWorkflowContentXml,
+  buildWorkflowInputFormJson,
 } from "../dist/client/workflow-artifact.js";
 import { VroClient } from "../dist/vro-client.js";
 
@@ -91,6 +92,7 @@ test("buildWorkflowArtifact creates a .workflow zip with required entries", () =
 
   assert.ok(files["workflow-info"]);
   assert.ok(files["workflow-content"]);
+  assert.ok(files["input_form_"]);
 
   const info = new TextDecoder().decode(files["workflow-info"]);
   assert.match(info, /workflow-info id="workflow-1"/);
@@ -100,6 +102,60 @@ test("buildWorkflowArtifact creates a .workflow zip with required entries", () =
   assert.equal(content[1], 0xfe);
   const xml = new TextDecoder("utf-16le").decode(content);
   assert.match(xml, /<script encoded="false"><!\[CDATA\[/);
+  assert.match(xml, /<presentation>/);
+
+  const form = files["input_form_"];
+  assert.equal(form[0], 0xfe);
+  assert.equal(form[1], 0xff);
+  const inputForm = JSON.parse(new TextDecoder("utf-16be").decode(form));
+  assert.deepEqual(inputForm.layout.pages[0], {
+    id: "page_general",
+    sections: [
+      {
+        id: "section_inputs",
+        fields: [
+          {
+            id: "projectName",
+            display: "textField",
+            signpostPosition: "right-middle",
+            state: { visible: true, "read-only": false },
+          },
+        ],
+      },
+    ],
+    title: "General",
+  });
+  assert.deepEqual(inputForm.schema.projectName, {
+    id: "projectName",
+    type: { dataType: "string" },
+    label: "Project",
+    constraints: { required: true },
+  });
+  assert.deepEqual(inputForm.options, { externalValidations: [] });
+});
+
+test("buildWorkflowInputFormJson maps common vRO input types", () => {
+  const inputForm = JSON.parse(
+    buildWorkflowInputFormJson({
+      ...workflow,
+      inputs: [
+        { name: "vm", type: "VC:VirtualMachine", description: "VM" },
+        { name: "enabled", type: "boolean", description: "Enabled" },
+        { name: "password", type: "SecureString", description: "Password" },
+      ],
+      outputs: [],
+      attributes: [],
+      tasks: [{ script: "System.log('form only');" }],
+    }),
+  );
+
+  assert.equal(inputForm.schema.vm.type.dataType, "reference");
+  assert.equal(inputForm.schema.vm.type.referenceType, "VC:VirtualMachine");
+  assert.equal(inputForm.layout.pages[0].sections[0].fields[0].display, "valuePickerTree");
+  assert.equal(inputForm.schema.enabled.type.dataType, "boolean");
+  assert.equal(inputForm.layout.pages[0].sections[0].fields[1].display, "checkbox");
+  assert.equal(inputForm.schema.password.type.dataType, "secureString");
+  assert.equal(inputForm.layout.pages[0].sections[0].fields[2].display, "passwordField");
 });
 
 test("buildWorkflowArtifact reuses generated workflow ID across archive entries", () => {

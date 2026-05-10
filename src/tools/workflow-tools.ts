@@ -1016,7 +1016,7 @@ export function registerWorkflowTools(
     {
       title: "Scaffold Workflow File",
       description:
-        "Generate a local importable .workflow artifact under the configured workflow artifact directory from structured metadata, linear scriptable tasks, scripts, and bindings. Use import-workflow-file to upload it afterwards.",
+        "Generate a local importable .workflow artifact under the configured workflow artifact directory from structured metadata, linear scriptable tasks, scripts, and bindings. Use native action workflow items outside this scaffold for single-action workflow steps; use scriptable tasks for custom logic, multiple action calls, or orchestration. Publish reusable content through the project package path; use import-workflow-file only for validation or one-off tests.",
       inputSchema: z.object({
         fileName: z
           .string()
@@ -1105,7 +1105,9 @@ export function registerWorkflowTools(
               }),
             )
             .min(1)
-            .describe("Linear sequence of scriptable tasks"),
+            .describe(
+              "Linear sequence of scriptable tasks. Prefer a native action workflow item outside this scaffold for a step that only invokes one existing vRO action.",
+            ),
         }),
       }),
       annotations: { readOnlyHint: false },
@@ -1121,7 +1123,7 @@ export function registerWorkflowTools(
           content: [
             {
               type: "text",
-              text: `Workflow scaffold generated successfully at: ${savedPath}\nUse import-workflow-file to upload it into a workflow category.`,
+              text: `Workflow scaffold generated successfully at: ${savedPath}\nFor reusable content, publish through the project package path. Use import-workflow-file only for validation or one-off tests.`,
             },
           ],
         };
