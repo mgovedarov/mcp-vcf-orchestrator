@@ -21,6 +21,7 @@ import { VroClient } from "./vro-client.js";
 import { join, resolve } from "node:path";
 
 const DEFAULT_ARTIFACT_DIR = join(process.cwd(), "artifacts");
+const TARGET_PLATFORM_ENV = "VCFA_TARGET_PLATFORM";
 
 function getRequiredEnv(name: string): string {
   const value = process.env[name];
@@ -37,6 +38,7 @@ async function main(): Promise<void> {
   const username = getRequiredEnv("VCFA_USERNAME");
   const organization = getRequiredEnv("VCFA_ORGANIZATION");
   const password = getRequiredEnv("VCFA_PASSWORD");
+  const targetPlatform = normalizeTargetPlatform(process.env[TARGET_PLATFORM_ENV]);
   const ignoreTls = process.env["VCFA_IGNORE_TLS"] === "true";
   const artifactDir = process.env["VCFA_ARTIFACT_DIR"] ?? DEFAULT_ARTIFACT_DIR;
   const packageDir = process.env["VCFA_PACKAGE_DIR"];
@@ -62,6 +64,7 @@ async function main(): Promise<void> {
     username,
     organization,
     password,
+    targetPlatform,
     ignoreTls,
     artifactDir,
     packageDir,
@@ -79,11 +82,11 @@ async function main(): Promise<void> {
     { name: "vcfa-server", version: "1.0.0" },
     {
       instructions: [
-        "This server connects to a VCF Automation instance.",
+        "This server connects to a VCF Automation instance by default, or to vRA/vRO 8.12+ when VCFA_TARGET_PLATFORM is set to vra8.",
         "Use list-categories before creating workflows, actions, or configuration elements to find the target category ID.",
         "Use get-workflow to inspect a workflow's input parameters before running it with run-workflow.",
         "Use run-workflow-and-wait for rapid development loops that validate workflow inputs, wait for completion, and return outputs or diagnostics.",
-        "After starting a workflow execution with run-workflow, use get-workflow-execution to poll for completion and retrieve outputs.",
+        "After starting a workflow execution with run-workflow, use get-workflow-execution to poll for completion and retrieve outputs; use get-workflow-execution-logs to retrieve execution logs.",
         "Use export-workflow-file to save a workflow artifact under the configured workflow artifact directory; use direct import-workflow-file only for narrow validation or explicitly requested single-artifact tests.",
         "Use scaffold-workflow-file to generate a local .workflow artifact from structured workflow metadata and linear scriptable tasks before publishing or validating it.",
         "When a workflow step only invokes one existing vRO action, prefer a native action workflow item instead of a scriptable task that calls System.getModule. Use scriptable tasks for multiple action calls or additional orchestration logic. Prefer horizontal left-to-right workflow layouts when authoring or editing XML/package content.",
@@ -132,6 +135,20 @@ async function main(): Promise<void> {
     await server.close();
     process.exit(0);
   });
+}
+
+function normalizeTargetPlatform(value: string | undefined): "vcfa" | "vra8" {
+  const normalized = value?.toLowerCase();
+  if (normalized === undefined || normalized === "" || normalized === "vcfa") {
+    return "vcfa";
+  }
+  if (normalized === "vra8") {
+    return "vra8";
+  }
+  console.error(
+    `ERROR: ${TARGET_PLATFORM_ENV} must be one of: vcfa, vra8.`,
+  );
+  process.exit(1);
 }
 
 main().catch((error) => {

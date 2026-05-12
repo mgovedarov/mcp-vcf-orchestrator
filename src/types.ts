@@ -532,11 +532,14 @@ export interface VroPluginList {
 
 // --- Client config ---
 
+export type VroTargetPlatform = "vcfa" | "vra8";
+
 export interface VroClientConfig {
   host: string;
   username: string;
   organization: string;
   password: string;
+  targetPlatform?: VroTargetPlatform;
   ignoreTls?: boolean;
   artifactDir?: string;
   packageDir?: string;

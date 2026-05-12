@@ -29,7 +29,11 @@ If a workflow was started asynchronously, use:
 
 1. `list-workflow-executions`
 2. `get-workflow-execution`
-3. execution logs when available
+3. `get-workflow-execution-logs`
+
+## vRA/vRO 8 Mode
+
+Set `VCFA_TARGET_PLATFORM=vra8` for vRA/vRO 8.12+ Basic-auth mode. This mode supports vRO `/vco/api` read operations, workflow execution, and execution logs. Catalog, deployment, template, subscription, and event-topic tools require Automation-service token auth and return an unsupported-mode message in this phase.
 
 ## Artifact Import Failures
 

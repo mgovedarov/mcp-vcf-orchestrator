@@ -174,6 +174,18 @@ Check the status and outputs of a workflow execution.
 | `executionId` | string | Yes | - | Execution ID returned by `run-workflow`, `run-workflow-and-wait`, or `list-workflow-executions`. |
 :::
 
+### `get-workflow-execution-logs`
+
+Retrieve log entries for a workflow execution. Use this after `run-workflow`, `list-workflow-executions`, or `get-workflow-execution` when detailed execution logs are needed.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `workflowId` | string | Yes | - | Workflow ID associated with the execution. |
+| `executionId` | string | Yes | - | Execution ID returned by `run-workflow`, `run-workflow-and-wait`, or `list-workflow-executions`. |
+| `maxResult` | integer | No | - | Maximum number of execution log entries to return. |
+:::
+
 ### `export-workflow-file`
 
 Export a vRO workflow as a `.workflow` file under the configured workflow artifact directory.

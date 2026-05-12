@@ -8,6 +8,7 @@ These examples are current, import-safe patterns for using the MCP tools. They a
 - [Project Package](./project-package.md): reuse one project package, add content, rebuild, export, and inspect before import.
 - [Artifact Promotion](./artifact-promotion.md): preflight, diff, optional backup, and import recommendation.
 - [Template, Catalog, And Subscription](./template-catalog-subscription.md): review templates, inspect catalog/deployment behavior, and plan subscriptions.
+- vRA/vRO 8.12+ read/run mode: set `VCFA_TARGET_PLATFORM=vra8`, use vRO list/get tools, run workflows with `run-workflow` or `run-workflow-and-wait`, and inspect logs with `get-workflow-execution-logs`.
 
 ## Safety Defaults
 

@@ -759,6 +759,61 @@ export function registerWorkflowTools(
   );
 
   server.registerTool(
+    "get-workflow-execution-logs",
+    {
+      title: "Get Workflow Execution Logs",
+      description:
+        "Retrieve log entries for a workflow execution. Use after run-workflow or list-workflow-executions when detailed execution logs are needed.",
+      inputSchema: z.object({
+        workflowId: z.string().describe("The workflow ID"),
+        executionId: z.string().describe("The execution ID"),
+        maxResult: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe("Maximum number of log entries to return"),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ workflowId, executionId, maxResult }): Promise<CallToolResult> => {
+      try {
+        const result = await client.getWorkflowExecutionLogs(
+          workflowId,
+          executionId,
+          { maxResult },
+        );
+        const logs = result.logs ?? [];
+        if (logs.length === 0) {
+          return {
+            content: [{ type: "text", text: "No execution logs found." }],
+          };
+        }
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Found ${logs.length} execution log(s):\n\n${logs
+                .map((log) => `• ${formatLogEntry(log)}`)
+                .join("\n")}`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to get execution logs: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  server.registerTool(
     "list-workflow-executions",
     {
       title: "List Workflow Executions",

@@ -205,8 +205,9 @@ export class WorkflowClient {
   }
 
   async exportWorkflowBuffer(id: string): Promise<Buffer> {
-    const token = await this.http.ensureAuthenticated();
     const path = `/content/workflows/${encodeURIComponent(id)}`;
+    this.http.assertOperationSupported("GET", path);
+    const authorization = await this.http.authorizationHeader();
     const url = `${this.http.baseUrl}${path}`;
     console.error(`[vro-client] GET ${path}`);
 
@@ -217,7 +218,7 @@ export class WorkflowClient {
       res = await fetch(url, {
         method: "GET",
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: authorization,
           Accept: "application/zip",
         },
         signal: controller.signal,
@@ -290,6 +291,8 @@ export class WorkflowClient {
     fileName: string,
     overwrite = true,
   ): Promise<void> {
+    const path = `/workflows?categoryId=${encodeURIComponent(categoryId)}&overwrite=${overwrite}`;
+    this.http.assertOperationSupported("POST", path);
     ensurePreflightPassed(await this.preflightWorkflowFile(fileName));
     const srcPath = await this.resolveWorkflowPath(fileName);
     await rejectSymlink(
@@ -301,12 +304,12 @@ export class WorkflowClient {
       srcPath,
       "Workflow file path resolves outside the configured workflow artifact directory",
     );
-    const token = await this.http.ensureAuthenticated();
     const buffer = await readFile(srcPath);
     const form = new FormData();
     form.append("file", new Blob([new Uint8Array(buffer)]), fileName);
 
-    const path = `/workflows?categoryId=${encodeURIComponent(categoryId)}&overwrite=${overwrite}`;
+    this.http.assertOperationSupported("POST", path);
+    const authorization = await this.http.authorizationHeader();
     const url = `${this.http.baseUrl}${path}`;
     console.error(`[vro-client] POST ${path}`);
 
@@ -317,7 +320,7 @@ export class WorkflowClient {
       res = await fetch(url, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: authorization,
           Accept: "application/json",
         },
         body: form,

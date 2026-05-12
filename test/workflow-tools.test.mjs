@@ -251,6 +251,53 @@ test("run-workflow-and-wait reports log fetch warnings", async () => {
   );
 });
 
+test("get-workflow-execution-logs formats execution log entries", async () => {
+  let logRequest;
+  const handlers = registeredWorkflowTools({
+    getWorkflowExecutionLogs: async (workflowId, executionId, options) => {
+      logRequest = { workflowId, executionId, options };
+      return {
+        logs: [
+          {
+            severity: "INFO",
+            origin: "item1",
+            "time-stamp": "2026-05-12T10:00:00Z",
+            "short-description": "Started",
+          },
+        ],
+      };
+    },
+  });
+
+  const result = await handlers.get("get-workflow-execution-logs")({
+    workflowId: "workflow-1",
+    executionId: "execution-1",
+    maxResult: 5,
+  });
+
+  assert.deepEqual(logRequest, {
+    workflowId: "workflow-1",
+    executionId: "execution-1",
+    options: { maxResult: 5 },
+  });
+  assert.equal(result.isError, undefined);
+  assert.match(result.content[0].text, /Found 1 execution log/);
+  assert.match(result.content[0].text, /2026-05-12T10:00:00Z \[INFO\] item1 Started/);
+});
+
+test("get-workflow-execution-logs reports empty logs", async () => {
+  const handlers = registeredWorkflowTools({
+    getWorkflowExecutionLogs: async () => ({ logs: [] }),
+  });
+
+  const result = await handlers.get("get-workflow-execution-logs")({
+    workflowId: "workflow-1",
+    executionId: "execution-1",
+  });
+
+  assert.equal(result.content[0].text, "No execution logs found.");
+});
+
 test("scaffold-workflow-file returns saved path", async () => {
   let scaffoldParams;
   const handlers = registeredWorkflowTools({

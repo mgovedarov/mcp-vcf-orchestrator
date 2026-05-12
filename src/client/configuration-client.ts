@@ -92,8 +92,9 @@ export class ConfigurationClient {
       );
     }
 
-    const token = await this.http.ensureAuthenticated();
     const path = `/configurations/${encodeURIComponent(id)}`;
+    this.http.assertOperationSupported("GET", path);
+    const authorization = await this.http.authorizationHeader();
     const url = `${this.http.baseUrl}${path}`;
     console.error(`[vro-client] GET ${path}`);
 
@@ -104,7 +105,7 @@ export class ConfigurationClient {
       res = await fetch(url, {
         method: "GET",
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: authorization,
           Accept: "application/zip",
         },
         signal: controller.signal,
@@ -127,6 +128,8 @@ export class ConfigurationClient {
     categoryId: string,
     fileName: string,
   ): Promise<void> {
+    const path = "/configurations";
+    this.http.assertOperationSupported("POST", path);
     ensurePreflightPassed(await this.preflightConfigurationFile(fileName));
     const srcPath = await this.resolveConfigurationPath(fileName);
     await rejectSymlink(
@@ -138,13 +141,13 @@ export class ConfigurationClient {
       srcPath,
       "Configuration file path resolves outside the configured configuration artifact directory",
     );
-    const token = await this.http.ensureAuthenticated();
     const buffer = await readFile(srcPath);
     const form = new FormData();
     form.append("file", new Blob([new Uint8Array(buffer)]), fileName);
     form.append("categoryId", categoryId);
 
-    const path = "/configurations";
+    this.http.assertOperationSupported("POST", path);
+    const authorization = await this.http.authorizationHeader();
     const url = `${this.http.baseUrl}${path}`;
     console.error(`[vro-client] POST ${path}`);
 
@@ -155,7 +158,7 @@ export class ConfigurationClient {
       res = await fetch(url, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: authorization,
           Accept: "application/json",
         },
         body: form,

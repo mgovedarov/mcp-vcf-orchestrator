@@ -81,6 +81,125 @@ test("specific artifact directories override artifactDir", async () => {
   }
 });
 
+test("default vcfa platform authenticates with Cloud API session token", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return Response.json({ link: [], total: 0 });
+  };
+
+  const client = new VroClient(config());
+  await client.listWorkflows();
+
+  assert.equal(
+    calls[0].url,
+    "https://vcfa.example.test/cloudapi/1.0.0/sessions",
+  );
+  assert.equal(calls[0].init.headers.Authorization, "Basic YWRtaW5Ab3JnOnNlY3JldA==");
+  assert.equal(calls[1].init.headers.Authorization, "Bearer token");
+});
+
+test("vra8 platform uses Basic auth directly against vRO APIs", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    return Response.json({
+      link: [
+        {
+          attributes: [
+            { name: "id", value: "workflow-1" },
+            { name: "name", value: "Workflow" },
+          ],
+        },
+      ],
+      total: 1,
+    });
+  };
+
+  const client = new VroClient(config({ targetPlatform: "vra8" }));
+  const workflows = await client.listWorkflows();
+
+  assert.equal(workflows.link[0].id, "workflow-1");
+  assert.equal(calls.length, 1);
+  assert.equal(
+    calls[0].url,
+    "https://vcfa.example.test/vco/api/workflows",
+  );
+  assert.equal(calls[0].init.headers.Authorization, "Basic YWRtaW5Ab3JnOnNlY3JldA==");
+});
+
+test("client rejects invalid target platform values", () => {
+  assert.throws(
+    () => new VroClient(config({ targetPlatform: "vro8" })),
+    /targetPlatform must be one of: vcfa, vra8/,
+  );
+});
+
+test("vra8 platform rejects Automation-service APIs with clear message", async () => {
+  const client = new VroClient(config({ targetPlatform: "vra8" }));
+
+  await assert.rejects(
+    () => client.listTemplates(),
+    /Automation-service APIs .* not supported .*vra8 Basic-auth mode/,
+  );
+  await assert.rejects(
+    () => client.listDeployments(),
+    /Automation-service APIs .* not supported .*vra8 Basic-auth mode/,
+  );
+  await assert.rejects(
+    () => client.listCatalogItems(),
+    /Automation-service APIs .* not supported .*vra8 Basic-auth mode/,
+  );
+  await assert.rejects(
+    () => client.listSubscriptions(),
+    /Automation-service APIs .* not supported .*vra8 Basic-auth mode/,
+  );
+});
+
+test("vra8 platform rejects vRO writes other than workflow execution", async () => {
+  const client = new VroClient(config({ targetPlatform: "vra8" }));
+
+  await assert.rejects(
+    () => client.createWorkflow("category-1", "Workflow"),
+    /read operations plus workflow execution and execution logs only/,
+  );
+});
+
+test("vra8 platform rejects artifact imports before local file checks", async () => {
+  const client = new VroClient(config({ targetPlatform: "vra8" }));
+  const expected = /read operations plus workflow execution and execution logs only/;
+
+  await assert.rejects(
+    () => client.importWorkflowFile("category-1", "missing.workflow"),
+    expected,
+  );
+  await assert.rejects(
+    () => client.importActionFile("category-name", "missing.action"),
+    expected,
+  );
+  await assert.rejects(
+    () => client.importConfigurationFile("category-1", "missing.vsoconf"),
+    expected,
+  );
+  await assert.rejects(
+    () => client.importPackage("missing.package"),
+    expected,
+  );
+  await assert.rejects(
+    () => client.getPackageImportDetails("missing.package"),
+    expected,
+  );
+  await assert.rejects(
+    () => client.importResource("category-1", "missing.bin"),
+    expected,
+  );
+  await assert.rejects(
+    () => client.updateResourceContent("resource-1", "missing.bin"),
+    expected,
+  );
+});
+
 function xmlArchive(rootName) {
   return zipSync({
     "artifact.xml": new TextEncoder().encode(`<${rootName} name="payload" />`),

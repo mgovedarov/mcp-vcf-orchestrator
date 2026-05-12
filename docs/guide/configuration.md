@@ -9,7 +9,7 @@ The server reads all runtime configuration from environment variables.
 | `VCFA_HOST` | Yes | VCF Automation hostname, for example `vcfa.example.com`. |
 | `VCFA_USERNAME` | Yes | Username without organization, for example `admin`. |
 | `VCFA_ORGANIZATION` | Yes | Organization or tenant, for example `System` or `vsphere.local`. |
-| `VCFA_PASSWORD` | Yes | Password for the VCF Cloud API session. |
+| `VCFA_PASSWORD` | Yes | Password for the VCF Cloud API session, or the vRO Basic-auth password when `VCFA_TARGET_PLATFORM=vra8`. |
 
 The server authenticates by sending Basic Auth as `{VCFA_USERNAME}@{VCFA_ORGANIZATION}:{VCFA_PASSWORD}` to:
 
@@ -19,10 +19,13 @@ https://{VCFA_HOST}/cloudapi/1.0.0/sessions
 
 It uses the returned bearer token for later VCF Automation, Service Broker, Cloud Assembly, and vRO API calls.
 
+For vRA/vRO 8.12+ read/run compatibility, set `VCFA_TARGET_PLATFORM=vra8`. In that mode, the server skips the VCF Cloud API session endpoint and sends Basic auth directly to `/vco/api`. The vRA/vRO 8 mode supports vRO read operations plus workflow execution and execution logs; Automation-service APIs such as catalog, deployments, templates, subscriptions, and event topics are intentionally unsupported until token-auth support is added.
+
 ## Optional Variables
 
 | Variable | Description |
 | --- | --- |
+| `VCFA_TARGET_PLATFORM` | Target platform mode: `vcfa` (default) or `vra8`. |
 | `VCFA_IGNORE_TLS` | Set to `true` to disable TLS certificate verification for lab environments. |
 | `VCFA_ARTIFACT_DIR` | Root directory for local artifact import/export files. Defaults to `artifacts/` in the MCP server process working directory, typically the open project. |
 | `VCFA_PACKAGE_DIR` | Override the package artifact directory. |
