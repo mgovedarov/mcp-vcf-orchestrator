@@ -424,12 +424,13 @@ Delete an action from VCF Automation Orchestrator. This action is irreversible.
 
 ### `list-configurations`
 
-List configuration elements from VCF Automation Orchestrator. Optionally filter by name.
+List configuration elements from VCF Automation Orchestrator. Optionally filter by name or scope to a specific category.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `filter` | string | No | - | Filter configuration elements by name using a substring match. |
+| `categoryId` | string | No | - | Filter configuration elements by ConfigurationElementCategory ID. Use `list-categories` with `type ConfigurationElementCategory` to find a category ID. |
 :::
 
 ### `get-configuration`

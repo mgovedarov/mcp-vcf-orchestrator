@@ -82,16 +82,20 @@ test("configuration tools format attributes and guard imports and deletes", asyn
   let exported;
   let imported;
   let deletedId;
+  let listSeen;
   const handlers = registeredTools(registerConfigTools, {
-    listConfigurations: async (filter) => ({
-      link: [
-        {
-          id: "config-1",
-          name: `Settings ${filter}`,
-          description: "Runtime settings",
-        },
-      ],
-    }),
+    listConfigurations: async (filter, categoryId) => {
+      listSeen = { filter, categoryId };
+      return {
+        link: [
+          {
+            id: "config-1",
+            name: `Settings ${filter}`,
+            description: "Runtime settings",
+          },
+        ],
+      };
+    },
     getConfiguration: async (id) => ({
       id,
       name: "Settings",
@@ -125,7 +129,11 @@ test("configuration tools format attributes and guard imports and deletes", asyn
     },
   });
 
-  const list = await handlers.get("list-configurations")({ filter: "prod" });
+  const list = await handlers.get("list-configurations")({
+    categoryId: "category-1",
+    filter: "prod",
+  });
+  assert.deepEqual(listSeen, { categoryId: "category-1", filter: "prod" });
   assert.match(list.content[0].text, /Settings prod \(id: config-1\)/);
   assert.match(list.content[0].text, /Runtime settings/);
 

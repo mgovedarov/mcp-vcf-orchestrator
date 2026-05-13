@@ -955,6 +955,99 @@ test("category and plugin clients parse attribute links", async () => {
   );
 });
 
+test("listConfigurations with categoryId fetches category relations and filters ConfigurationElements", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return Response.json({
+      relations: {
+        link: [
+          {
+            rel: "down",
+            href: "https://vcfa.example.test/vco/api/configurations/conf-1",
+            attributes: [
+              { name: "id", value: "conf-1" },
+              { name: "name", value: "Email Configuration" },
+              { name: "type", value: "ConfigurationElement" },
+              { name: "version", value: "1.2.0" },
+            ],
+          },
+          {
+            rel: "down",
+            attributes: [
+              { name: "id", value: "sub-cat" },
+              { name: "name", value: "Sub" },
+              { name: "type", value: "ConfigurationElementCategory" },
+            ],
+          },
+          {
+            rel: "up",
+            attributes: [
+              { name: "id", value: "parent-cat" },
+              { name: "name", value: "Swisscom" },
+              { name: "type", value: "ConfigurationElementCategory" },
+            ],
+          },
+        ],
+      },
+    });
+  };
+
+  const client = new VroClient(config());
+  const result = await client.listConfigurations(undefined, "migration-cat");
+
+  assert.equal(result.total, 1);
+  assert.deepEqual(result.link, [
+    {
+      id: "conf-1",
+      name: "Email Configuration",
+      description: undefined,
+      version: "1.2.0",
+      categoryId: "migration-cat",
+      href: "https://vcfa.example.test/vco/api/configurations/conf-1",
+    },
+  ]);
+  assert.equal(
+    calls[1].url,
+    "https://vcfa.example.test/vco/api/categories/migration-cat",
+  );
+});
+
+test("listConfigurations with categoryId and filter applies name substring match", async () => {
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/sessions")) return authResponse();
+    return Response.json({
+      relations: {
+        link: [
+          {
+            rel: "down",
+            attributes: [
+              { name: "id", value: "c1" },
+              { name: "name", value: "Email Configuration" },
+              { name: "type", value: "ConfigurationElement" },
+            ],
+          },
+          {
+            rel: "down",
+            attributes: [
+              { name: "id", value: "c2" },
+              { name: "name", value: "Auth Server Settings" },
+              { name: "type", value: "ConfigurationElement" },
+            ],
+          },
+        ],
+      },
+    });
+  };
+
+  const client = new VroClient(config());
+  const result = await client.listConfigurations("email", "cat-id");
+
+  assert.equal(result.total, 1);
+  assert.equal(result.link[0].name, "Email Configuration");
+});
+
 test("listWorkflowsByCategory resolves paths from category details and relations", async () => {
   const calls = [];
   globalThis.fetch = async (url, init) => {

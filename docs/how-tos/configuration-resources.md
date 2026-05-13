@@ -8,7 +8,7 @@ Recommended sequence:
 
 1. `list-categories(type: "ConfigurationElementCategory", filter: "Integrations")`
 2. `create-configuration(...)`
-3. `list-configurations(filter: "...")`
+3. `list-configurations(categoryId: "...", filter: "...")`
 4. `get-configuration(id: "...")`
 
 Avoid dumping sensitive values in docs, issue comments, or generated context. Prefer redaction when summarizing configuration attributes.
@@ -28,6 +28,6 @@ Recommended sequence:
 
 To rotate a value or replace a shared binary resource:
 
-1. `list-configurations(filter: "...")` or `list-resource-elements(filter: "...")`
+1. `list-configurations(categoryId: "...", filter: "...")` or `list-resource-elements(filter: "...")`
 2. `update-configuration(...)` or `update-resource-element(..., confirm: true)`
 3. Re-read the object to verify the change.
