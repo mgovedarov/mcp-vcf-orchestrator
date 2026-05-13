@@ -411,8 +411,11 @@ export class VroClient {
     return this.actions.deleteAction(id);
   }
 
-  listConfigurations(filter?: string): Promise<ConfigElementList> {
-    return this.configurations.listConfigurations(filter);
+  listConfigurations(
+    filter?: string,
+    categoryId?: string,
+  ): Promise<ConfigElementList> {
+    return this.configurations.listConfigurations(filter, categoryId);
   }
 
   getConfiguration(id: string): Promise<ConfigElement> {

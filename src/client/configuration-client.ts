@@ -19,7 +19,13 @@ import { toVroParameters } from "./parameters.js";
 export class ConfigurationClient {
   constructor(private http: VroHttpClient) {}
 
-  async listConfigurations(filter?: string): Promise<ConfigElementList> {
+  async listConfigurations(
+    filter?: string,
+    categoryId?: string,
+  ): Promise<ConfigElementList> {
+    if (categoryId) {
+      return this.listConfigurationsByCategory(categoryId, filter);
+    }
     let path = "/configurations";
     const params: string[] = [];
     if (filter) {
@@ -39,10 +45,45 @@ export class ConfigurationClient {
         name: a["name"] ?? a["@name"],
         description: a["description"],
         version: a["version"],
-        categoryId: a["categoryId"],
+        categoryId: a["categoryId"] ?? a["category-id"] ?? a["categoryid"],
       };
     });
     return { total: raw.total ?? link.length, link };
+  }
+
+  private async listConfigurationsByCategory(
+    categoryId: string,
+    filter?: string,
+  ): Promise<ConfigElementList> {
+    const raw = await this.http.get<{
+      relations?: {
+        link?: {
+          rel?: string;
+          href?: string;
+          attributes?: { name: string; value: string }[];
+        }[];
+      };
+    }>(`/categories/${encodeURIComponent(categoryId)}`);
+    const links = raw.relations?.link ?? [];
+    let link: ConfigElement[] = links.flatMap((l) => {
+      if (l.rel !== "down") return [];
+      const a = parseAttrs(l.attributes);
+      const type = a["type"] ?? a["@type"] ?? a["@fullType"];
+      if (type !== "ConfigurationElement") return [];
+      return [{
+        id: a["id"] ?? a["@id"],
+        name: a["name"] ?? a["@name"],
+        description: a["description"],
+        version: a["version"],
+        categoryId,
+        href: l.href,
+      }];
+    });
+    if (filter) {
+      const lower = filter.toLowerCase();
+      link = link.filter((item) => item.name?.toLowerCase().includes(lower) ?? false);
+    }
+    return { total: link.length, link };
   }
 
   getConfiguration(id: string): Promise<ConfigElement> {

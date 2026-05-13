@@ -13,18 +13,24 @@ export function registerConfigTools(
     {
       title: "List Configuration Elements",
       description:
-        "List configuration elements from VCF Automation Orchestrator. Optionally filter by name.",
+        "List configuration elements from VCF Automation Orchestrator. Optionally filter by name or scope to a specific category.",
       inputSchema: z.object({
         filter: z
           .string()
           .optional()
           .describe("Filter configuration elements by name (substring match)"),
+        categoryId: z
+          .string()
+          .optional()
+          .describe(
+            "Filter configuration elements by ConfigurationElementCategory ID. Use list-categories with type ConfigurationElementCategory to find a category ID.",
+          ),
       }),
       annotations: { readOnlyHint: true },
     },
-    async ({ filter }): Promise<CallToolResult> => {
+    async ({ filter, categoryId }): Promise<CallToolResult> => {
       try {
-        const result = await client.listConfigurations(filter);
+        const result = await client.listConfigurations(filter, categoryId);
         const configs = result.link ?? [];
         if (configs.length === 0) {
           return {
