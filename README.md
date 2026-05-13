@@ -134,6 +134,54 @@ workflowGoal: "Expose machine inventory lookup as a workflow."
 categoryHint: "VCFA"
 ```
 
+## Common Tool Examples
+
+Collect a broader environment snapshot when the default item limit may skip relevant objects:
+
+```text
+collect-context-snapshot(fileBaseName: "vcfa-context-full", includeOptionalDomains: true, maxItemsPerDomain: 600, overwrite: true)
+```
+
+Plan an implementation from verified discovery before authoring artifacts:
+
+```text
+Use prompt vcfa-discovery-first-implementation-plan with:
+goal: "Create a workflow that lists VMs by project name."
+artifactKinds: "workflows and actions"
+```
+
+Prepare a safe workflow replacement with preflight, diff, and a live backup before importing:
+
+```text
+prepare-artifact-promotion(kind: "workflow", fileName: "echo-message.workflow", target: {
+  categoryId: "<workflow-category-id>",
+  workflowId: "<live-workflow-id>"
+}, backup: {
+  enabled: true,
+  fileName: "echo-message-backup.workflow",
+  overwrite: false
+}, overwrite: true)
+```
+
+Run a workflow with input validation, then export execution logs for troubleshooting:
+
+```text
+get-workflow(id: "<workflow-id>")
+run-workflow-and-wait(id: "<workflow-id>", inputs: [{ name: "message", value: "hello" }], timeoutSeconds: 60, pollIntervalSeconds: 2, confirm: true)
+list-workflow-executions(workflowId: "<workflow-id>", maxResults: 5)
+get-workflow-execution-logs(workflowId: "<workflow-id>", executionId: "<execution-id>", fileName: "execution-logs.json", level: "info", format: "json", maxResult: 200, overwrite: true)
+```
+
+Publish reusable project content through the stable project package:
+
+```text
+ensure-project-package(packageName: "com.example.project")
+add-workflow-to-project-package(packageName: "com.example.project", workflowId: "<workflow-id>", confirm: true)
+rebuild-project-package(packageName: "com.example.project", confirm: true)
+export-project-package(packageName: "com.example.project", fileName: "com.example.project.package", overwrite: true)
+get-project-package-import-details(packageName: "com.example.project", fileName: "com.example.project.package")
+```
+
 ## Development
 
 ```bash
