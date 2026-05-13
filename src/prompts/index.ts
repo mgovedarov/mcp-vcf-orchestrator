@@ -281,7 +281,7 @@ export function registerVcfaPrompts(server: McpServer): void {
           "Use list-templates and get-template to find reusable YAML conventions before drafting content.",
           "Use list-catalog-items or list-deployments when the template must align with catalog or deployment behavior.",
           ...discoveryGuardrails(),
-          "Call create-template only after the target projectId and YAML content are confirmed, then verify with get-template.",
+          "Call create-template with confirm set to true only after the target projectId and YAML content are confirmed, then verify with get-template.",
         ]),
       ),
   );
@@ -339,7 +339,7 @@ export function registerVcfaPrompts(server: McpServer): void {
           "Use list-workflows/get-workflow, list-templates/get-template, list-catalog-items/get-catalog-item, list-event-topics, and list-subscriptions to map current state.",
           "Use list-deployments and list-deployment-actions if day-2 behavior matters.",
           ...discoveryGuardrails(),
-          "Recommend create-subscription, update-subscription, template creation, or workflow import only as explicit next steps with required confirmations and risks.",
+          "Recommend create-subscription, update-subscription, template creation, or workflow import only as explicit next steps with required confirm arguments and risks.",
         ]),
       ),
   );

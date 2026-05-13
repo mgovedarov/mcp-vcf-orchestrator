@@ -43,5 +43,5 @@ list-categories(type: "WorkflowCategory", filter: "Development")
 import-workflow-file(categoryId: "<workflow-category-id>", fileName: "echo-message.workflow", overwrite: true, confirm: true)
 list-workflows(filter: "Echo Message")
 get-workflow(id: "<workflow-id>")
-run-workflow-and-wait(id: "<workflow-id>", inputs: [{ name: "message", value: "hello" }], timeoutSeconds: 60, pollIntervalSeconds: 2)
+run-workflow-and-wait(id: "<workflow-id>", inputs: [{ name: "message", value: "hello" }], timeoutSeconds: 60, pollIntervalSeconds: 2, confirm: true)
 ```

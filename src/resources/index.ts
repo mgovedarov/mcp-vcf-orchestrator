@@ -97,7 +97,7 @@ Use \`list-templates\` to discover existing Cloud Assembly blueprint templates b
 Template metadata handled by the current tools includes:
 
 - \`id\`, \`name\`, \`description\`, \`status\`, \`projectId\`, \`projectName\`, \`valid\`, \`createdBy\`, \`createdAt\`, \`updatedBy\`, and \`updatedAt\` when returned by the API.
-- \`create-template\` accepts \`name\`, \`projectId\`, optional \`description\`, optional YAML \`content\`, and optional \`requestScopeOrg\`.
+- \`create-template\` accepts \`name\`, \`projectId\`, optional \`description\`, optional YAML \`content\`, optional \`requestScopeOrg\`, and required \`confirm: true\`.
 
 Authoring rules:
 
@@ -183,7 +183,7 @@ Implementation shape:
 
 Validation flow:
 
-- Use \`create-template\` only after the target project and YAML content are confirmed.
+- Use \`create-template\` only after the target project and YAML content are confirmed, then pass \`confirm: true\`.
 - Verify the result with \`get-template\` and inspect \`valid\` or status fields when returned.
 `;
 

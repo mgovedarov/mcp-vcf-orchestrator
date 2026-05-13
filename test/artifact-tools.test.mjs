@@ -65,6 +65,7 @@ test("action tools format detail responses and pass create payloads", async () =
     script: "return vm.ipAddress;",
     inputParameters: [{ name: "vm", type: "VC:VirtualMachine" }],
     returnType: "string",
+    confirm: true,
   });
   assert.deepEqual(createParams, {
     moduleName: "com.example.actions",
@@ -74,6 +75,16 @@ test("action tools format detail responses and pass create payloads", async () =
     returnType: "string",
   });
   assert.match(created.content[0].text, /ID: action-1/);
+
+  createParams = undefined;
+  const refused = await handlers.get("create-action")({
+    moduleName: "com.example.actions",
+    name: "blocked",
+    script: "return null;",
+    confirm: false,
+  });
+  assert.equal(createParams, undefined);
+  assert.match(refused.content[0].text, /setting confirm to true/);
 });
 
 test("configuration tools format attributes and guard imports and deletes", async () => {
@@ -147,6 +158,7 @@ test("configuration tools format attributes and guard imports and deletes", asyn
     name: "Settings",
     description: "Runtime settings",
     attributes: [{ name: "host", type: "string", value: "vcfa.example.test" }],
+    confirm: true,
   });
   assert.deepEqual(created, {
     categoryId: "category-1",
@@ -160,6 +172,7 @@ test("configuration tools format attributes and guard imports and deletes", asyn
     id: "config-1",
     description: "Updated settings",
     attributes: [{ name: "enabled", type: "boolean", value: "true" }],
+    confirm: true,
   });
   assert.deepEqual(updated, {
     id: "config-1",

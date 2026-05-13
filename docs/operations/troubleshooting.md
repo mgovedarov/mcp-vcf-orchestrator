@@ -23,7 +23,7 @@ Use this only when you accept the TLS risk.
 
 ## Workflow Run Failures
 
-Prefer `run-workflow-and-wait` during development. It validates input names and types against `get-workflow`, waits for completion, and returns failure context when available.
+Prefer `run-workflow-and-wait` with `confirm: true` during development after the target workflow and inputs are verified. It validates input names and types against `get-workflow`, waits for completion, and returns failure context when available.
 
 If a workflow was started asynchronously, use:
 

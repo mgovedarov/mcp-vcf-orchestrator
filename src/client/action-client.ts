@@ -17,6 +17,13 @@ import {
   resolveFileInDirectory,
 } from "./files.js";
 
+function isNotFoundError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error.message.includes("404") || error.message.includes("not found"))
+  );
+}
+
 export class ActionClient {
   constructor(private http: VroHttpClient) {}
 
@@ -102,7 +109,8 @@ export class ActionClient {
         return await this.http.get<Action>(
           `/actions/${encodeURIComponent(id)}`,
         );
-      } catch {
+      } catch (error) {
+        if (!isNotFoundError(error)) throw error;
         // Older callers may pass friendly IDs that only resolve via list metadata.
       }
     }

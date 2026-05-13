@@ -85,9 +85,9 @@ async function main(): Promise<void> {
     {
       instructions: [
         "This server connects to a VCF Automation instance by default, or to vRA/vRO 8.12+ when VCFA_TARGET_PLATFORM is set to vra8.",
-        "Use list-categories before creating workflows, actions, or configuration elements to find the target category ID.",
-        "Use get-workflow to inspect a workflow's input parameters before running it with run-workflow.",
-        "Use run-workflow-and-wait for rapid development loops that validate workflow inputs, wait for completion, and return outputs or diagnostics.",
+        "Use list-categories before creating workflows, actions, or configuration elements to find the target category ID; pass confirm set to true only after the live target and impact are confirmed.",
+        "Use get-workflow to inspect a workflow's input parameters before running it with run-workflow and confirm set to true.",
+        "Use run-workflow-and-wait with confirm set to true for rapid development loops that validate workflow inputs, wait for completion, and return outputs or diagnostics.",
         "After starting a workflow execution with run-workflow, use get-workflow-execution to poll for completion and retrieve outputs; use get-workflow-execution-logs to retrieve execution logs.",
         "Use export-workflow-file to save a workflow artifact under the configured workflow artifact directory; use direct import-workflow-file only for narrow validation or explicitly requested single-artifact tests.",
         "Use scaffold-workflow-file to generate a local .workflow artifact from structured workflow metadata and linear scriptable tasks before publishing or validating it.",
@@ -100,8 +100,8 @@ async function main(): Promise<void> {
         "Use list-event-topics to discover available event topics before creating extensibility subscriptions.",
         "Use list-subscriptions to see existing event-driven triggers.",
         "Use list-catalog-items to browse the Service Broker catalog; use get-catalog-item to inspect a specific item by ID.",
-        "Use list-deployments to see existing deployments; use create-deployment to deploy a catalog item, providing the catalogItemId, deploymentName, and projectId. Use list-deployment-actions to discover available deployment day-2 actions, then run-deployment-action with confirm set to true to submit one.",
-        "Use list-templates to browse blueprint templates; use get-template to inspect a specific template by ID; use create-template to create a new template; use delete-template to remove one.",
+        "Use list-deployments to see existing deployments; use create-deployment with confirm set to true to deploy a catalog item, providing the catalogItemId, deploymentName, and projectId. Use list-deployment-actions to discover available deployment day-2 actions, then run-deployment-action with confirm set to true to submit one.",
+        "Use list-templates to browse blueprint templates; use get-template to inspect a specific template by ID; use create-template with confirm set to true to create a new template; use delete-template to remove one.",
         "Publish reusable vRO content through packages by default: use ensure-project-package, add content to the exact project package, rebuild-project-package, export-project-package, get-project-package-import-details, then import-project-package. Reuse the configured project package from VCFA_PROJECT_PACKAGE_NAME; never create one-off packages unless the user confirms the exact package name.",
         "Use list-resource-elements to browse vRO resource elements; use list-categories with type ResourceElementCategory before importing a resource element; exported and imported resource files are stored under the configured resource artifact directory.",
         "Use list-plugins to see all installed vRO plugins.",

@@ -132,6 +132,11 @@ export function registerTemplateTools(
           .describe(
             "If true, the template is available org-wide rather than project-scoped",
           ),
+        confirm: z
+          .boolean()
+          .describe(
+            "Must be set to true to confirm template creation. If false, the template will not be created.",
+          ),
       }),
       annotations: { readOnlyHint: false },
     },
@@ -141,7 +146,19 @@ export function registerTemplateTools(
       description,
       content,
       requestScopeOrg,
+      confirm,
     }): Promise<CallToolResult> => {
+      if (!confirm) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Confirm creation of template ${name} in project ${projectId} by setting confirm to true.`,
+            },
+          ],
+        };
+      }
+
       try {
         const template = await client.createTemplate({
           name,

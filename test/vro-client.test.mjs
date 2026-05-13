@@ -1918,6 +1918,30 @@ test("getAction resolves listed action ids to definition endpoint", async () => 
   assert.equal(action.script, "return vm.ipAddress;");
 });
 
+test("getAction rethrows direct lookup errors that are not not-found responses", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return new Response("boom", {
+      status: 500,
+      statusText: "Internal Server Error",
+    });
+  };
+
+  const client = new VroClient(config());
+  await assert.rejects(
+    () => client.getAction("action-1"),
+    /500 Internal Server Error/,
+  );
+
+  assert.equal(calls.length, 2);
+  assert.equal(
+    calls[1].url,
+    "https://vcfa.example.test/vco/api/actions/action-1",
+  );
+});
+
 test("getAction accepts opaque action ids directly", async () => {
   const calls = [];
   globalThis.fetch = async (url, init) => {

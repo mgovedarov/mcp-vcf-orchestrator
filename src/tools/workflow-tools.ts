@@ -534,10 +534,31 @@ export function registerWorkflowTools(
           .string()
           .optional()
           .describe("Optional description for the workflow"),
+        confirm: z
+          .boolean()
+          .describe(
+            "Must be set to true to confirm workflow creation. If false, the workflow will not be created.",
+          ),
       }),
       annotations: { readOnlyHint: false },
     },
-    async ({ categoryId, name, description }): Promise<CallToolResult> => {
+    async ({
+      categoryId,
+      name,
+      description,
+      confirm,
+    }): Promise<CallToolResult> => {
+      if (!confirm) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Confirm creation of workflow ${name} in category ${categoryId} by setting confirm to true.`,
+            },
+          ],
+        };
+      }
+
       try {
         const wf = await client.createWorkflow(categoryId, name, description);
         return {
@@ -584,10 +605,26 @@ export function registerWorkflowTools(
           )
           .optional()
           .describe("Input parameters for the workflow execution"),
+        confirm: z
+          .boolean()
+          .describe(
+            "Must be set to true to confirm workflow execution. If false, the workflow will not be run.",
+          ),
       }),
       annotations: { readOnlyHint: false },
     },
-    async ({ id, inputs }): Promise<CallToolResult> => {
+    async ({ id, inputs, confirm }): Promise<CallToolResult> => {
+      if (!confirm) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Confirm execution of workflow ${id} by setting confirm to true. Workflows may change the target environment.`,
+            },
+          ],
+        };
+      }
+
       try {
         const exec = await client.runWorkflow(id, inputs);
         return {
@@ -655,6 +692,11 @@ export function registerWorkflowTools(
           .describe(
             "Maximum execution log entries to include on failure or timeout (default: 20)",
           ),
+        confirm: z
+          .boolean()
+          .describe(
+            "Must be set to true to confirm workflow execution. If false, the workflow will not be run.",
+          ),
       }),
       annotations: { readOnlyHint: false },
     },
@@ -664,8 +706,20 @@ export function registerWorkflowTools(
       timeoutSeconds,
       pollIntervalSeconds,
       logLimit,
+      confirm,
     }): Promise<CallToolResult> => {
       let startedExecution: WorkflowExecution | undefined;
+      if (!confirm) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Confirm execution of workflow ${id} by setting confirm to true. Workflows may change the target environment.`,
+            },
+          ],
+        };
+      }
+
       try {
         const workflow = await client.getWorkflow(id);
         const validation = validateWorkflowRunInputs(workflow, inputs ?? []);

@@ -180,6 +180,7 @@ test("run-workflow-and-wait rejects strict validation errors before running", as
 
   const result = await handlers.get("run-workflow-and-wait")({
     id: "workflow-1",
+    confirm: true,
     inputs: [
       { name: "projectName", type: "string", value: 123 },
       { name: "projectName", type: "string", value: "duplicate" },
@@ -193,6 +194,30 @@ test("run-workflow-and-wait rejects strict validation errors before running", as
   assert.match(result.content[0].text, /Duplicate input: projectName/);
   assert.match(result.content[0].text, /Unknown input: extra/);
   assert.match(result.content[0].text, /Missing required input: count/);
+});
+
+test("run-workflow-and-wait requires confirmation before discovery or execution", async () => {
+  let getCalls = 0;
+  let runCalls = 0;
+  const handlers = registeredWorkflowTools({
+    getWorkflow: async () => {
+      getCalls += 1;
+      return { id: "workflow-1", name: "Workflow", inputParameters: [] };
+    },
+    runWorkflow: async () => {
+      runCalls += 1;
+      return { id: "execution-1", state: "running" };
+    },
+  });
+
+  const result = await handlers.get("run-workflow-and-wait")({
+    id: "workflow-1",
+    confirm: false,
+  });
+
+  assert.equal(getCalls, 0);
+  assert.equal(runCalls, 0);
+  assert.match(result.content[0].text, /setting confirm to true/);
 });
 
 test("run-workflow-and-wait fills omitted input types and returns outputs", async () => {
@@ -232,6 +257,7 @@ test("run-workflow-and-wait fills omitted input types and returns outputs", asyn
     inputs: [{ name: "name", value: "web-server-01" }],
     timeoutSeconds: 1,
     pollIntervalSeconds: 0,
+    confirm: true,
   });
 
   assert.equal(result.isError, undefined);
@@ -277,6 +303,7 @@ test("run-workflow-and-wait reports failure diagnostics and log excerpts", async
     id: "workflow-1",
     timeoutSeconds: 1,
     pollIntervalSeconds: 0,
+    confirm: true,
   });
 
   assert.equal(result.isError, true);
@@ -309,6 +336,7 @@ test("run-workflow-and-wait times out without canceling the workflow", async () 
     id: "workflow-1",
     timeoutSeconds: 0,
     pollIntervalSeconds: 0,
+    confirm: true,
   });
 
   assert.equal(result.isError, true);
@@ -340,6 +368,7 @@ test("run-workflow-and-wait reports log fetch warnings", async () => {
     id: "workflow-1",
     timeoutSeconds: 1,
     pollIntervalSeconds: 0,
+    confirm: true,
   });
 
   assert.equal(result.isError, true);

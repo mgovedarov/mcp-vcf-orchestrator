@@ -139,6 +139,11 @@ export function registerConfigTools(
           )
           .optional()
           .describe("Initial attributes for the configuration element"),
+        confirm: z
+          .boolean()
+          .describe(
+            "Must be set to true to confirm configuration element creation. If false, the element will not be created.",
+          ),
       }),
       annotations: { readOnlyHint: false },
     },
@@ -147,7 +152,19 @@ export function registerConfigTools(
       name,
       description,
       attributes,
+      confirm,
     }): Promise<CallToolResult> => {
+      if (!confirm) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Confirm creation of configuration element ${name} in category ${categoryId} by setting confirm to true.`,
+            },
+          ],
+        };
+      }
+
       try {
         const config = await client.createConfiguration(
           categoryId,
@@ -399,10 +416,32 @@ export function registerConfigTools(
           )
           .optional()
           .describe("New attributes (replaces existing ones)"),
+        confirm: z
+          .boolean()
+          .describe(
+            "Must be set to true to confirm configuration element update. If false, the element will not be updated.",
+          ),
       }),
       annotations: { readOnlyHint: false },
     },
-    async ({ id, name, description, attributes }): Promise<CallToolResult> => {
+    async ({
+      id,
+      name,
+      description,
+      attributes,
+      confirm,
+    }): Promise<CallToolResult> => {
+      if (!confirm) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Confirm update of configuration element ${id} by setting confirm to true.`,
+            },
+          ],
+        };
+      }
+
       try {
         await client.updateConfiguration(id, { name, description, attributes });
         return {

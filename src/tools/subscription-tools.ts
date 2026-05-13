@@ -191,6 +191,11 @@ export function registerSubscriptionTools(
           .boolean()
           .optional()
           .describe("Create the subscription in disabled state"),
+        confirm: z
+          .boolean()
+          .describe(
+            "Must be set to true to confirm subscription creation. If false, the subscription will not be created.",
+          ),
       }),
       annotations: { readOnlyHint: false },
     },
@@ -205,7 +210,19 @@ export function registerSubscriptionTools(
       priority,
       timeout,
       disabled,
+      confirm,
     }): Promise<CallToolResult> => {
+      if (!confirm) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Confirm creation of subscription ${name} for event topic ${eventTopicId} by setting confirm to true.`,
+            },
+          ],
+        };
+      }
+
       try {
         const sub = await client.createSubscription({
           name,
@@ -266,6 +283,11 @@ export function registerSubscriptionTools(
         blocking: z.boolean().optional().describe("New blocking setting"),
         priority: z.number().optional().describe("New priority"),
         timeout: z.number().optional().describe("New timeout in minutes"),
+        confirm: z
+          .boolean()
+          .describe(
+            "Must be set to true to confirm subscription update. If false, the subscription will not be updated.",
+          ),
       }),
       annotations: { readOnlyHint: false },
     },
@@ -279,7 +301,19 @@ export function registerSubscriptionTools(
       blocking,
       priority,
       timeout,
+      confirm,
     }): Promise<CallToolResult> => {
+      if (!confirm) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Confirm update of subscription ${id} by setting confirm to true.`,
+            },
+          ],
+        };
+      }
+
       try {
         const sub = await client.updateSubscription(id, {
           name,

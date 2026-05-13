@@ -343,7 +343,10 @@ test("implementation prompts include discovery-first guardrails", async () => {
     projectHint: "MainPrj",
   });
   assert.match(createTemplate.messages[0].content.text, /list-templates/);
-  assert.match(createTemplate.messages[0].content.text, /create-template only after/);
+  assert.match(
+    createTemplate.messages[0].content.text,
+    /create-template with confirm set to true only after/,
+  );
 
   const reviewTemplate = await prompts.get("vcfa-review-template").handler({
     templateId: "template-1",

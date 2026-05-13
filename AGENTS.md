@@ -154,7 +154,7 @@ Before authoring or importing workflow artifacts, read `docs/vro-artifact-author
 ## Template, Subscription, Catalog, And Deployment Rules
 
 - For Cloud Assembly templates, inspect existing templates with `list-templates` and `get-template` before drafting YAML. Reuse discovered resource types, inputs, image/flavor/network conventions, constraints, and catalog patterns. Do not invent provider-specific YAML.
-- Confirm the target `projectId` and template content before `create-template`.
+- Confirm the target `projectId` and template content before calling `create-template` with `confirm: true`.
 - For catalog work, inspect `list-catalog-items` and `get-catalog-item` before creating deployments.
 - For deployments, inspect `get-deployment` and `list-deployment-actions` before proposing remediation. Do not run `run-deployment-action` until the user confirms the action, inputs, target deployment, and expected impact.
 - For extensibility subscriptions, inspect `list-event-topics`, `list-subscriptions`, and `get-subscription` first. During testing, disabling or updating a subscription may be safer than deleting it.

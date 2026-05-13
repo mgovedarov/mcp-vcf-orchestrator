@@ -153,6 +153,11 @@ export function registerActionTools(
           .string()
           .optional()
           .describe("Return type (e.g. string, void, Array/string)"),
+        confirm: z
+          .boolean()
+          .describe(
+            "Must be set to true to confirm action creation. If false, the action will not be created.",
+          ),
       }),
       annotations: { readOnlyHint: false },
     },
@@ -162,7 +167,19 @@ export function registerActionTools(
       script,
       inputParameters,
       returnType,
+      confirm,
     }): Promise<CallToolResult> => {
+      if (!confirm) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Confirm creation of action ${moduleName}/${name} by setting confirm to true.`,
+            },
+          ],
+        };
+      }
+
       try {
         const action = await client.createAction({
           moduleName,
