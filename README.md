@@ -52,17 +52,19 @@ Required environment variables:
 | `VCFA_HOST` | VCF Automation hostname, for example `vcfa.example.com`. |
 | `VCFA_USERNAME` | Username without organization, for example `admin`. |
 | `VCFA_ORGANIZATION` | Organization or tenant, for example `System` or `vsphere.local`. |
-| `VCFA_PASSWORD` | Password for the VCF Cloud API session. |
+| `VCFA_PASSWORD` | Password for the VCF Cloud API session, or the vRO Basic-auth password when `VCFA_TARGET_PLATFORM=vra8`. |
 
 Useful optional variables:
 
 | Variable | Description |
 | --- | --- |
+| `VCFA_TARGET_PLATFORM` | Target platform mode. Defaults to `vcfa`, which uses the VCF Cloud API session flow. Set to `vra8` for vRA/vRO 8.12+ Basic-auth mode against `/vco/api`; this mode supports vRO read operations plus workflow execution/logs and does not support Automation-service APIs such as catalog, deployments, templates, or subscriptions. |
 | `VCFA_IGNORE_TLS` | Set to `true` to skip TLS certificate verification in lab environments. |
 | `VCFA_ARTIFACT_DIR` | Root directory for local artifact files. Defaults to `artifacts/` in the MCP server process working directory, typically the open project. |
 | `VCFA_PACKAGE_DIR` | Override package artifact directory. |
 | `VCFA_RESOURCE_DIR` | Override resource artifact directory. |
 | `VCFA_WORKFLOW_DIR` | Override workflow artifact directory. |
+| `VCFA_EXECUTION_LOG_DIR` | Override workflow execution log export directory. |
 | `VCFA_ACTION_DIR` | Override action artifact directory. |
 | `VCFA_CONFIGURATION_DIR` | Override configuration artifact directory. |
 | `VCFA_CONTEXT_DIR` | Override persisted context snapshot directory. If unset, context snapshots prefer the MCP client's current workspace root at `artifacts/context/`, falling back to `VCFA_ARTIFACT_DIR/context`. |
@@ -73,7 +75,7 @@ Useful optional variables:
 
 The server includes tools for:
 
-- Workflows, workflow executions, workflow artifact scaffold/preflight/diff/import/export
+- Workflows, workflow executions, inline/exported execution syslogs, workflow artifact scaffold/preflight/diff/import/export
 - Actions and action artifact import/export/preflight/diff
 - Configuration elements and resource elements
 - vRO packages and plugins, including package-first project package reuse

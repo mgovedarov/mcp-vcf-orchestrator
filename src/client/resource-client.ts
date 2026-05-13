@@ -67,8 +67,9 @@ export class ResourceClient {
         `Resource file already exists: ${fileName}. Set overwrite to true to replace it.`,
       );
     }
-    const token = await this.http.ensureAuthenticated();
     const path = `/resources/${encodeURIComponent(id)}`;
+    this.http.assertOperationSupported("GET", path);
+    const authorization = await this.http.authorizationHeader();
     const url = `${this.http.baseUrl}${path}`;
     console.error(`[vro-client] GET ${path}`);
 
@@ -79,7 +80,7 @@ export class ResourceClient {
       res = await fetch(url, {
         method: "GET",
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: authorization,
           Accept: "*/*",
         },
         signal: controller.signal,
@@ -117,12 +118,13 @@ export class ResourceClient {
     form: FormData,
     changesetSha?: string,
   ): Promise<void> {
-    const token = await this.http.ensureAuthenticated();
+    this.http.assertOperationSupported("POST", path);
+    const authorization = await this.http.authorizationHeader();
     const url = `${this.http.baseUrl}${path}`;
     console.error(`[vro-client] POST ${path}`);
 
     const headers: Record<string, string> = {
-      Authorization: `Bearer ${token}`,
+      Authorization: authorization,
       Accept: "application/json",
     };
     if (changesetSha) {
@@ -151,6 +153,7 @@ export class ResourceClient {
   }
 
   async importResource(categoryId: string, fileName: string): Promise<void> {
+    this.http.assertOperationSupported("POST", "/resources");
     const buffer = await this.readResourceFile(fileName);
     const form = new FormData();
     form.append("file", new Blob([new Uint8Array(buffer)]), fileName);
@@ -163,14 +166,12 @@ export class ResourceClient {
     fileName: string,
     changesetSha?: string,
   ): Promise<void> {
+    const path = `/resources/${encodeURIComponent(id)}`;
+    this.http.assertOperationSupported("POST", path);
     const buffer = await this.readResourceFile(fileName);
     const form = new FormData();
     form.append("file", new Blob([new Uint8Array(buffer)]), fileName);
-    await this.postResourceForm(
-      `/resources/${encodeURIComponent(id)}`,
-      form,
-      changesetSha,
-    );
+    await this.postResourceForm(path, form, changesetSha);
   }
 
   async deleteResource(id: string, force = false): Promise<void> {

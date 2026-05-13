@@ -251,6 +251,194 @@ test("run-workflow-and-wait reports log fetch warnings", async () => {
   );
 });
 
+test("get-workflow-execution-logs formats execution log entries", async () => {
+  let logRequest;
+  const handlers = registeredWorkflowTools({
+    getWorkflowExecutionLogs: async (workflowId, executionId, options) => {
+      logRequest = { workflowId, executionId, options };
+      return {
+        logs: [
+          {
+            severity: "INFO",
+            origin: "item1",
+            "time-stamp": "2026-05-12T10:00:00Z",
+            "short-description": "Started",
+          },
+        ],
+      };
+    },
+  });
+
+  const result = await handlers.get("get-workflow-execution-logs")({
+    workflowId: "workflow-1",
+    executionId: "execution-1",
+    maxResult: 5,
+  });
+
+  assert.deepEqual(logRequest, {
+    workflowId: "workflow-1",
+    executionId: "execution-1",
+    options: { maxResult: 5 },
+  });
+  assert.equal(result.isError, undefined);
+  assert.match(result.content[0].text, /Found 1 execution log/);
+  assert.match(result.content[0].text, /2026-05-12T10:00:00Z \[INFO\] item1 Started/);
+});
+
+test("get-workflow-execution-logs formats attribute-shaped log entries", async () => {
+  const handlers = registeredWorkflowTools({
+    getWorkflowExecutionLogs: async () => ({
+      logs: [
+        {
+          attributes: [
+            { name: "severity", value: "INFO" },
+            { name: "timeStamp", value: "2026-05-13T07:15:45Z" },
+            { name: "message", value: "hello from attributes" },
+          ],
+        },
+      ],
+    }),
+  });
+
+  const result = await handlers.get("get-workflow-execution-logs")({
+    workflowId: "workflow-1",
+    executionId: "execution-1",
+  });
+
+  assert.match(
+    result.content[0].text,
+    /2026-05-13T07:15:45Z \[INFO\] hello from attributes/,
+  );
+});
+
+test("get-workflow-execution-logs filters inline logs by minimum level", async () => {
+  const handlers = registeredWorkflowTools({
+    getWorkflowExecutionLogs: async () => ({
+      logs: [
+        {
+          severity: "INFO",
+          "short-description": "Started",
+        },
+        {
+          severity: "ERROR",
+          "short-description": "Failed",
+        },
+      ],
+    }),
+  });
+
+  const result = await handlers.get("get-workflow-execution-logs")({
+    workflowId: "workflow-1",
+    executionId: "execution-1",
+    level: "error",
+  });
+
+  assert.match(result.content[0].text, /Found 1 execution log/);
+  assert.doesNotMatch(result.content[0].text, /Started/);
+  assert.match(result.content[0].text, /Failed/);
+});
+
+test("get-workflow-execution-logs reports empty inline level matches", async () => {
+  const handlers = registeredWorkflowTools({
+    getWorkflowExecutionLogs: async () => ({
+      logs: [
+        {
+          severity: "INFO",
+          "short-description": "Started",
+        },
+      ],
+    }),
+  });
+
+  const result = await handlers.get("get-workflow-execution-logs")({
+    workflowId: "workflow-1",
+    executionId: "execution-1",
+    level: "error",
+  });
+
+  assert.equal(result.content[0].text, "No execution logs found.");
+});
+
+test("get-workflow-execution-logs reports empty logs", async () => {
+  const handlers = registeredWorkflowTools({
+    getWorkflowExecutionLogs: async () => ({ logs: [] }),
+  });
+
+  const result = await handlers.get("get-workflow-execution-logs")({
+    workflowId: "workflow-1",
+    executionId: "execution-1",
+  });
+
+  assert.equal(result.content[0].text, "No execution logs found.");
+});
+
+test("get-workflow-execution-logs exports when fileName is provided", async () => {
+  let exportParams;
+  const handlers = new Map();
+  const configs = new Map();
+  const server = {
+    registerTool(name, config, handler) {
+      configs.set(name, config);
+      handlers.set(name, handler);
+    },
+  };
+  registerWorkflowTools(server, {
+    exportWorkflowExecutionLogs: async (params) => {
+      exportParams = params;
+      return {
+        path: "/tmp/execution-logs/execution-1.json",
+        level: params.level,
+        format: "json",
+        fetchedCount: 3,
+        exportedCount: 2,
+      };
+    },
+  });
+
+  const result = await handlers.get("get-workflow-execution-logs")({
+    workflowId: "workflow-1",
+    executionId: "execution-1",
+    fileName: "execution-1.json",
+    maxResult: 3,
+  });
+
+  assert.equal(
+    configs.get("get-workflow-execution-logs").annotations.readOnlyHint,
+    true,
+  );
+  assert.deepEqual(exportParams, {
+    workflowId: "workflow-1",
+    executionId: "execution-1",
+    fileName: "execution-1.json",
+    maxResult: 3,
+    level: "info",
+    format: undefined,
+    overwrite: false,
+  });
+  assert.equal(result.isError, undefined);
+  assert.match(result.content[0].text, /execution-1\.json/);
+  assert.match(result.content[0].text, /Level: info/);
+  assert.match(result.content[0].text, /Format: json/);
+  assert.match(result.content[0].text, /Exported log count: 2/);
+});
+
+test("get-workflow-execution-logs surfaces export errors", async () => {
+  const handlers = registeredWorkflowTools({
+    exportWorkflowExecutionLogs: async () => {
+      throw new Error("Execution log export file already exists");
+    },
+  });
+
+  const result = await handlers.get("get-workflow-execution-logs")({
+    workflowId: "workflow-1",
+    executionId: "execution-1",
+    fileName: "execution-1.json",
+  });
+
+  assert.equal(result.isError, true);
+  assert.match(result.content[0].text, /already exists/);
+});
+
 test("scaffold-workflow-file returns saved path", async () => {
   let scaffoldParams;
   const handlers = registeredWorkflowTools({

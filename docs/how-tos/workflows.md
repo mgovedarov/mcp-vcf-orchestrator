@@ -17,6 +17,47 @@ Recommended tool sequence:
 
 `run-workflow-and-wait` validates inputs before running and polls until completion. If the workflow fails, the response includes current item details, stack information, log excerpts, and warnings when diagnostics cannot be fetched.
 
+## Show Or Export Execution Logs
+
+Use `get-workflow-execution-logs` when you need the workflow execution syslog stream, including messages written by `System.log`, `System.debug`, `System.warn`, and `System.error`.
+
+Show all fetched syslogs inline:
+
+```text
+get-workflow-execution-logs(
+  workflowId: "<workflow-id>",
+  executionId: "<execution-id>",
+  maxResult: 50
+)
+```
+
+Show only error-level logs:
+
+```text
+get-workflow-execution-logs(
+  workflowId: "<workflow-id>",
+  executionId: "<execution-id>",
+  level: "error",
+  maxResult: 50
+)
+```
+
+Export info-and-higher logs to JSON under `VCFA_EXECUTION_LOG_DIR`, or `VCFA_ARTIFACT_DIR/execution-logs` when no override is set:
+
+```text
+get-workflow-execution-logs(
+  workflowId: "<workflow-id>",
+  executionId: "<execution-id>",
+  fileName: "execution-logs.json",
+  level: "info",
+  format: "json",
+  maxResult: 200,
+  overwrite: true
+)
+```
+
+Use a `.txt` file name and `format: "text"` for a human-readable export. The `level` filter is a minimum severity filter: `debug` includes all known severities plus unknown severities, `info` includes info/warning/error, and `error` includes only error entries. Inline display is unfiltered unless `level` is provided; exports default to `level: "info"`.
+
 ## Scaffold, Publish, And Test A Workflow
 
 Use `scaffold-workflow-file` for real importable `.workflow` artifacts instead of hand-building ZIP/XML content.

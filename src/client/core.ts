@@ -1,12 +1,32 @@
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import type { VroClientConfig } from "../types.js";
+import type { VroClientConfig, VroTargetPlatform } from "../types.js";
+
+const UNSUPPORTED_AUTOMATION_SERVICES =
+  "Automation-service APIs (catalog, deployments, templates, subscriptions, and event topics) are not supported in VCFA_TARGET_PLATFORM=vra8 Basic-auth mode. This mode supports vRO /vco/api read operations plus workflow execution and execution logs.";
+
+const UNSUPPORTED_VRO_WRITE =
+  "This vRO operation is not supported in VCFA_TARGET_PLATFORM=vra8 mode. The vRA/vRO 8 compatibility phase supports read operations plus workflow execution and execution logs only.";
+
+function normalizeTargetPlatform(
+  value: VroClientConfig["targetPlatform"] | string | undefined,
+): VroTargetPlatform {
+  const normalized = value?.toLowerCase();
+  if (normalized === undefined || normalized === "" || normalized === "vcfa") {
+    return "vcfa";
+  }
+  if (normalized === "vra8") {
+    return "vra8";
+  }
+  throw new Error("targetPlatform must be one of: vcfa, vra8.");
+}
 
 /**
  * Shared HTTP/authentication layer for VCF Automation and vRO APIs.
  * Uses native fetch() (Node 18+).
  */
 export class VroHttpClient {
+  readonly targetPlatform: VroTargetPlatform;
   readonly baseUrl: string;
   readonly eventBrokerBaseUrl: string;
   readonly catalogBaseUrl: string;
@@ -17,6 +37,7 @@ export class VroHttpClient {
   readonly projectPackageDescription?: string;
   readonly resourceDir: string;
   readonly workflowDir: string;
+  readonly executionLogDir: string;
   readonly actionDir: string;
   readonly configurationDir: string;
   readonly contextDir: string;
@@ -26,6 +47,7 @@ export class VroHttpClient {
   private token: string | null = null;
 
   constructor(config: VroClientConfig) {
+    this.targetPlatform = normalizeTargetPlatform(config.targetPlatform);
     if (config.ignoreTls) {
       process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0";
     }
@@ -49,6 +71,9 @@ export class VroHttpClient {
     this.workflowDir = resolve(
       config.workflowDir ?? join(artifactDir, "workflows"),
     );
+    this.executionLogDir = resolve(
+      config.executionLogDir ?? join(artifactDir, "execution-logs"),
+    );
     this.actionDir = resolve(config.actionDir ?? join(artifactDir, "actions"));
     this.configurationDir = resolve(
       config.configurationDir ?? join(artifactDir, "configurations"),
@@ -62,6 +87,9 @@ export class VroHttpClient {
   }
 
   async ensureAuthenticated(): Promise<string> {
+    if (this.targetPlatform === "vra8") {
+      return this.loginHeader;
+    }
     if (!this.token) {
       await this.authenticate();
     }
@@ -109,18 +137,49 @@ export class VroHttpClient {
     console.error("[vro-client] Authentication successful, token acquired.");
   }
 
+  async authorizationHeader(): Promise<string> {
+    if (this.targetPlatform === "vra8") {
+      return this.loginHeader;
+    }
+    return `Bearer ${await this.ensureAuthenticated()}`;
+  }
+
+  assertOperationSupported(
+    method: string,
+    path: string,
+    overrideBaseUrl?: string,
+  ): void {
+    if (this.targetPlatform !== "vra8") return;
+
+    if (overrideBaseUrl && overrideBaseUrl !== this.baseUrl) {
+      throw new Error(UNSUPPORTED_AUTOMATION_SERVICES);
+    }
+
+    const normalizedMethod = method.toUpperCase();
+    if (normalizedMethod === "GET") return;
+    if (
+      normalizedMethod === "POST" &&
+      /^\/workflows\/[^/]+\/executions(?:$|\?)/.test(path)
+    ) {
+      return;
+    }
+
+    throw new Error(UNSUPPORTED_VRO_WRITE);
+  }
+
   async request<T>(
     method: string,
     path: string,
     body?: unknown,
     overrideBaseUrl?: string,
   ): Promise<T> {
-    const token = await this.ensureAuthenticated();
+    this.assertOperationSupported(method, path, overrideBaseUrl);
+    const authorization = await this.authorizationHeader();
     const url = `${overrideBaseUrl ?? this.baseUrl}${path}`;
     console.error(`[vro-client] ${method} ${path}`);
 
     const headers: Record<string, string> = {
-      Authorization: `Bearer ${token}`,
+      Authorization: authorization,
       Accept: "application/json",
     };
 

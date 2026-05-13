@@ -2,15 +2,20 @@ import { readFile, writeFile } from "node:fs/promises";
 import { extname } from "node:path";
 import type {
   DiffWorkflowFileParams,
+  ExportWorkflowExecutionLogsParams,
+  ExportWorkflowExecutionLogsResult,
   ScaffoldWorkflowFileParams,
   SimpleParameter,
   Workflow,
   WorkflowExecution,
+  WorkflowExecutionLog,
+  WorkflowExecutionLogExportFormat,
+  WorkflowExecutionLogLevel,
   WorkflowExecutionList,
   WorkflowExecutionLogs,
   WorkflowList,
 } from "../types.js";
-import { parseAttrs } from "./attrs.js";
+import { getLinkAttrs, parseAttrs } from "./attrs.js";
 import type { VroHttpClient } from "./core.js";
 import {
   diffWorkflowArtifacts,
@@ -26,6 +31,205 @@ import {
   resolveFileInDirectory,
 } from "./files.js";
 import { buildWorkflowArtifact } from "./workflow-artifact.js";
+
+const LOG_SEVERITY_RANK: Record<string, number> = {
+  debug: 10,
+  info: 20,
+  warn: 30,
+  warning: 30,
+  error: 40,
+};
+
+function normalizeLogLevel(level: string): WorkflowExecutionLogLevel {
+  const normalized = level.toLowerCase();
+  if (normalized === "debug" || normalized === "info" || normalized === "error") {
+    return normalized;
+  }
+  throw new Error("Execution log level must be one of: debug, info, error.");
+}
+
+function inferLogExportFormat(
+  fileName: string,
+  format?: WorkflowExecutionLogExportFormat,
+): WorkflowExecutionLogExportFormat {
+  const ext = extname(fileName).toLowerCase();
+  const inferred =
+    ext === ".json" ? "json" : ext === ".txt" ? "text" : undefined;
+  if (!inferred) {
+    throw new Error("Execution log export file name must end with .json or .txt");
+  }
+  if (format !== undefined && format !== inferred) {
+    throw new Error(
+      `Execution log export format ${format} does not match file extension ${ext}`,
+    );
+  }
+  return format ?? inferred;
+}
+
+function logSeverityRank(log: WorkflowExecutionLog): number | null {
+  const severity = log.severity?.toLowerCase();
+  if (!severity) return null;
+  return LOG_SEVERITY_RANK[severity] ?? null;
+}
+
+export function filterWorkflowExecutionLogsByMinimumLevel(
+  logs: WorkflowExecutionLog[],
+  level: WorkflowExecutionLogLevel,
+): WorkflowExecutionLog[] {
+  const threshold = LOG_SEVERITY_RANK[level];
+  return logs.filter((log) => {
+    const rank = logSeverityRank(log);
+    return rank === null ? level === "debug" : rank >= threshold;
+  });
+}
+
+function stringField(
+  source: Record<string, unknown>,
+  ...keys: string[]
+): string | undefined {
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === "string" && value.length > 0) return value;
+    if (typeof value === "number" || typeof value === "boolean") {
+      return String(value);
+    }
+  }
+  return undefined;
+}
+
+function numericField(
+  source: Record<string, unknown>,
+  ...keys: string[]
+): number | undefined {
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === "number") return value;
+    if (typeof value === "string") {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+  return undefined;
+}
+
+function objectField(
+  source: Record<string, unknown>,
+  ...keys: string[]
+): Record<string, unknown> | undefined {
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+      return value as Record<string, unknown>;
+    }
+  }
+  return undefined;
+}
+
+function scalarSummary(source: Record<string, unknown>): string | undefined {
+  const skipped = new Set(["attributes", "attribute", "log", "entry"]);
+  const parts = Object.entries(source)
+    .filter(([key, value]) => !skipped.has(key) && value !== undefined && value !== null)
+    .filter(([, value]) =>
+      ["string", "number", "boolean"].includes(typeof value),
+    )
+    .map(([key, value]) => `${key}: ${String(value)}`);
+  return parts.length > 0 ? parts.join(", ") : undefined;
+}
+
+function normalizeWorkflowExecutionLog(
+  raw: WorkflowExecutionLog,
+): WorkflowExecutionLog {
+  const direct = raw as Record<string, unknown>;
+  const nested = objectField(direct, "log", "entry") ?? {};
+  const attributes = getLinkAttrs(raw);
+  const source = { ...direct, ...nested, ...attributes };
+  const normalized: WorkflowExecutionLog = {
+    ...raw,
+    ...nested,
+    ...attributes,
+  };
+
+  normalized.severity = stringField(source, "severity", "level", "logLevel");
+  normalized.origin = stringField(source, "origin", "source");
+  normalized.userName = stringField(source, "userName", "username", "user-name");
+  normalized.user = stringField(source, "user");
+  normalized["short-description"] = stringField(
+    source,
+    "short-description",
+    "shortDescription",
+    "message",
+    "msg",
+    "description",
+    "text",
+  );
+  normalized["long-description"] = stringField(
+    source,
+    "long-description",
+    "longDescription",
+    "details",
+    "detail",
+  );
+  normalized["time-stamp"] = stringField(
+    source,
+    "time-stamp",
+    "timeStamp",
+    "timestamp",
+    "date",
+  );
+  normalized["time-stamp-val"] = numericField(
+    source,
+    "time-stamp-val",
+    "timeStampVal",
+    "timestampValue",
+  );
+
+  if (!normalized["short-description"] && !normalized["long-description"]) {
+    normalized["short-description"] = scalarSummary(source);
+  }
+
+  return normalized;
+}
+
+export function formatWorkflowExecutionLogEntry(
+  log: WorkflowExecutionLog,
+): string {
+  const normalized = normalizeWorkflowExecutionLog(log);
+  const prefix = [
+    normalized["time-stamp"],
+    normalized.severity ? `[${normalized.severity}]` : undefined,
+    normalized.origin,
+  ].filter(Boolean);
+  const shortDescription = normalized["short-description"];
+  const longDescription = normalized["long-description"];
+  const description =
+    shortDescription && longDescription && shortDescription !== longDescription
+      ? `${shortDescription} — ${longDescription}`
+      : (shortDescription ?? longDescription ?? "(no description)");
+  return `${prefix.length > 0 ? `${prefix.join(" ")} ` : ""}${description}`;
+}
+
+function renderExecutionLogsText(params: {
+  workflowId: string;
+  executionId: string;
+  level: WorkflowExecutionLogLevel;
+  exportedAt: string;
+  fetchedCount: number;
+  logs: WorkflowExecutionLog[];
+}): string {
+  const header = [
+    `Workflow ID: ${params.workflowId}`,
+    `Execution ID: ${params.executionId}`,
+    `Minimum level: ${params.level}`,
+    `Exported at: ${params.exportedAt}`,
+    `Fetched log count: ${params.fetchedCount}`,
+    `Exported log count: ${params.logs.length}`,
+  ];
+  const body =
+    params.logs.length === 0
+      ? ["No execution logs matched the export level."]
+      : params.logs.map((log) => `• ${formatWorkflowExecutionLogEntry(log)}`);
+  return [...header, "", ...body, ""].join("\n");
+}
 
 export class WorkflowClient {
   constructor(private http: VroHttpClient) {}
@@ -120,8 +324,11 @@ export class WorkflowClient {
     }
     const query = params.length > 0 ? `?${params.join("&")}` : "";
     return this.http.get<WorkflowExecutionLogs>(
-      `/workflows/${encodeURIComponent(workflowId)}/executions/${encodeURIComponent(executionId)}/logs${query}`,
-    );
+      `/workflows/${encodeURIComponent(workflowId)}/executions/${encodeURIComponent(executionId)}/syslogs${query}`,
+    ).then((result) => ({
+      ...result,
+      logs: (result.logs ?? []).map(normalizeWorkflowExecutionLog),
+    }));
   }
 
   async listWorkflowExecutions(
@@ -166,6 +373,10 @@ export class WorkflowClient {
     return this.http.workflowDir;
   }
 
+  getExecutionLogDirectory(): string {
+    return this.http.executionLogDir;
+  }
+
   preflightWorkflowFile(fileName: string): Promise<ArtifactPreflightReport> {
     return preflightWorkflowFile(this.http.workflowDir, fileName);
   }
@@ -204,9 +415,90 @@ export class WorkflowClient {
     return destPath;
   }
 
+  private async resolveExecutionLogPath(
+    fileName: string,
+    format?: WorkflowExecutionLogExportFormat,
+  ): Promise<{
+    destPath: string;
+    format: WorkflowExecutionLogExportFormat;
+  }> {
+    const resolvedFormat = inferLogExportFormat(fileName, format);
+    const destPath = await resolveFileInDirectory(
+      this.http.executionLogDir,
+      fileName,
+      "Execution log export",
+      "the configured execution log artifact directory",
+    );
+    return { destPath, format: resolvedFormat };
+  }
+
+  async exportWorkflowExecutionLogs(
+    params: ExportWorkflowExecutionLogsParams,
+  ): Promise<ExportWorkflowExecutionLogsResult> {
+    const level = normalizeLogLevel(params.level ?? "info");
+    const { destPath, format } = await this.resolveExecutionLogPath(
+      params.fileName,
+      params.format,
+    );
+    const existingFile = await getExistingFile(destPath);
+    if (existingFile?.isSymbolicLink()) {
+      throw new Error("Execution log export target must not be a symbolic link");
+    }
+    if (existingFile && !params.overwrite) {
+      throw new Error(
+        `Execution log export file already exists: ${params.fileName}. Set overwrite to true to replace it.`,
+      );
+    }
+
+    const logs =
+      (
+        await this.getWorkflowExecutionLogs(params.workflowId, params.executionId, {
+          maxResult: params.maxResult,
+        })
+      ).logs ?? [];
+    const filteredLogs = filterWorkflowExecutionLogsByMinimumLevel(logs, level);
+    const exportedAt = new Date().toISOString();
+    const content =
+      format === "json"
+        ? `${JSON.stringify(
+            {
+              metadata: {
+                workflowId: params.workflowId,
+                executionId: params.executionId,
+                level,
+                format,
+                exportedAt,
+                fetchedCount: logs.length,
+                exportedCount: filteredLogs.length,
+              },
+              logs: filteredLogs,
+            },
+            null,
+            2,
+          )}\n`
+        : renderExecutionLogsText({
+            workflowId: params.workflowId,
+            executionId: params.executionId,
+            level,
+            exportedAt,
+            fetchedCount: logs.length,
+            logs: filteredLogs,
+          });
+
+    await writeFile(destPath, content, { flag: params.overwrite ? "w" : "wx" });
+    return {
+      path: destPath,
+      level,
+      format,
+      fetchedCount: logs.length,
+      exportedCount: filteredLogs.length,
+    };
+  }
+
   async exportWorkflowBuffer(id: string): Promise<Buffer> {
-    const token = await this.http.ensureAuthenticated();
     const path = `/content/workflows/${encodeURIComponent(id)}`;
+    this.http.assertOperationSupported("GET", path);
+    const authorization = await this.http.authorizationHeader();
     const url = `${this.http.baseUrl}${path}`;
     console.error(`[vro-client] GET ${path}`);
 
@@ -217,7 +509,7 @@ export class WorkflowClient {
       res = await fetch(url, {
         method: "GET",
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: authorization,
           Accept: "application/zip",
         },
         signal: controller.signal,
@@ -290,6 +582,8 @@ export class WorkflowClient {
     fileName: string,
     overwrite = true,
   ): Promise<void> {
+    const path = `/workflows?categoryId=${encodeURIComponent(categoryId)}&overwrite=${overwrite}`;
+    this.http.assertOperationSupported("POST", path);
     ensurePreflightPassed(await this.preflightWorkflowFile(fileName));
     const srcPath = await this.resolveWorkflowPath(fileName);
     await rejectSymlink(
@@ -301,12 +595,12 @@ export class WorkflowClient {
       srcPath,
       "Workflow file path resolves outside the configured workflow artifact directory",
     );
-    const token = await this.http.ensureAuthenticated();
     const buffer = await readFile(srcPath);
     const form = new FormData();
     form.append("file", new Blob([new Uint8Array(buffer)]), fileName);
 
-    const path = `/workflows?categoryId=${encodeURIComponent(categoryId)}&overwrite=${overwrite}`;
+    this.http.assertOperationSupported("POST", path);
+    const authorization = await this.http.authorizationHeader();
     const url = `${this.http.baseUrl}${path}`;
     console.error(`[vro-client] POST ${path}`);
 
@@ -317,7 +611,7 @@ export class WorkflowClient {
       res = await fetch(url, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: authorization,
           Accept: "application/json",
         },
         body: form,

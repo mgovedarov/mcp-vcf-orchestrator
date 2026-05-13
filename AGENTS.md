@@ -6,7 +6,7 @@ trigger: "vcfa-orchestrator"
 
 # VCF Orchestrator Agent
 
-This repository builds an MCP server for VCF Automation Orchestrator (vRO), Service Broker, and Cloud Assembly. Agents working here should be discovery-first, conservative with live environments, and biased toward real importable artifacts over illustrative pseudocode.
+This repository builds an MCP server for VCF Automation Orchestrator (vRO), Service Broker, and Cloud Assembly. It also supports a vRA/vRO 8.12+ read/run mode through `VCFA_TARGET_PLATFORM=vra8`. Agents working here should be discovery-first, conservative with live environments, and biased toward real importable artifacts over illustrative pseudocode.
 
 Use these instructions for all work in this repository. If a more specific `AGENTS.md` exists in a subdirectory, apply that file for its subtree and keep compatible guidance from this file. When instructions conflict, the deeper file wins for files in its scope.
 
@@ -43,7 +43,7 @@ If the docs and source disagree, inspect the source, update the docs or examples
 Use the exact registered tool names. Start with list/get tools unless the user has already provided verified IDs and contracts.
 
 - Context and promotion: `collect-context-snapshot`, `prepare-artifact-promotion`
-- Workflows: `list-workflows`, `get-workflow`, `create-workflow`, `run-workflow`, `run-workflow-and-wait`, `list-workflow-executions`, `get-workflow-execution`, `export-workflow-file`, `scaffold-workflow-file`, `preflight-workflow-file`, `diff-workflow-file`, `import-workflow-file`, `delete-workflow`
+- Workflows: `list-workflows`, `get-workflow`, `create-workflow`, `run-workflow`, `run-workflow-and-wait`, `list-workflow-executions`, `get-workflow-execution`, `get-workflow-execution-logs`, `export-workflow-file`, `scaffold-workflow-file`, `preflight-workflow-file`, `diff-workflow-file`, `import-workflow-file`, `delete-workflow`
 - Actions: `list-actions`, `get-action`, `create-action`, `export-action-file`, `preflight-action-file`, `diff-action-file`, `import-action-file`, `delete-action`
 - Configuration elements: `list-configurations`, `get-configuration`, `create-configuration`, `update-configuration`, `export-configuration-file`, `preflight-configuration-file`, `import-configuration-file`, `delete-configuration`
 - Resource elements: `list-resource-elements`, `export-resource-element`, `import-resource-element`, `update-resource-element`, `delete-resource-element`
@@ -54,6 +54,8 @@ Use the exact registered tool names. Start with list/get tools unless the user h
 - Catalog and deployments: `list-catalog-items`, `get-catalog-item`, `list-deployments`, `get-deployment`, `create-deployment`, `delete-deployment`, `list-deployment-actions`, `run-deployment-action`
 
 Many write-capable tools require a `confirm: true` argument before they mutate state. That schema requirement does not replace user confirmation. Confirm the exact target, expected impact, and rollback or backup plan before calling live create, update, import, delete, deployment, day-2, package, or local overwrite tools.
+
+In `vra8` mode, support only vRO `/vco/api` read operations plus workflow execution and execution logs. Automation-service APIs such as catalog, deployments, templates, subscriptions, and event topics are intentionally unsupported in Basic-auth mode until token-auth support is added.
 
 ## Current MCP Prompts And Resources
 
