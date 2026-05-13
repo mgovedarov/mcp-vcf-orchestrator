@@ -17,6 +17,16 @@ Recommended tool sequence:
 
 `run-workflow-and-wait` validates inputs before running and polls until completion. If the workflow fails, the response includes current item details, stack information, log excerpts, and warnings when diagnostics cannot be fetched.
 
+## List Workflows In A Folder
+
+Use `list-workflows-by-category` when you need workflow folder membership instead of name search. The tool resolves the selected workflow category and includes workflows in nested subfolders.
+
+```text
+list-workflows-by-category(categoryName: "test")
+```
+
+For a tree such as `test > minko > sql`, the result includes workflows directly under `test`, under `test/minko`, and under `test/minko/sql`. If more than one category is named `test`, use the returned candidate IDs with `categoryId`, or use an exact `categoryPath`.
+
 ## Show Or Export Execution Logs
 
 Use `get-workflow-execution-logs` when you need the workflow execution syslog stream, including messages written by `System.log`, `System.debug`, `System.warn`, and `System.error`.

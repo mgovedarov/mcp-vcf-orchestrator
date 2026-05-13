@@ -475,3 +475,107 @@ test("workflow-scaffold schema resource contains all required contract fields", 
   assert.match(steps, /preflight-workflow-file/);
   assert.match(steps, /import/i);
 });
+
+test("dynamic configuration and subscription resources call client methods", async () => {
+  const calls = [];
+  const resources = registeredResources({
+    getWorkflow: async () => ({}),
+    getAction: async () => ({}),
+    getDeployment: async () => ({}),
+    getPackage: async () => ({}),
+    getResourceElement: async (id) => {
+      calls.push(["resource-element", id]);
+      return { id, name: "script.sql", mimeType: "text/plain" };
+    },
+    getConfiguration: async (id) => {
+      calls.push(["configuration", id]);
+      return { id, name: "DB Settings", attributes: [] };
+    },
+    getSubscription: async (id) => {
+      calls.push(["subscription", id]);
+      return { id, name: "On Compute Provision", eventTopicId: "topic-1" };
+    },
+  });
+
+  const config = await resources.get("vcfa-configuration").handler(
+    new URL("vcfa://configurations/config-1"),
+    { id: "config-1" },
+  );
+  const resEl = await resources.get("vcfa-resource-element").handler(
+    new URL("vcfa://resource-elements/res-1"),
+    { id: "res-1" },
+  );
+  const sub = await resources.get("vcfa-subscription").handler(
+    new URL("vcfa://subscriptions/sub-1"),
+    { id: "sub-1" },
+  );
+
+  assert.deepEqual(calls, [
+    ["configuration", "config-1"],
+    ["resource-element", "res-1"],
+    ["subscription", "sub-1"],
+  ]);
+  assert.equal(config.contents[0].mimeType, "application/json");
+  assert.match(config.contents[0].text, /DB Settings/);
+  assert.equal(resEl.contents[0].mimeType, "application/json");
+  assert.match(resEl.contents[0].text, /script\.sql/);
+  assert.equal(sub.contents[0].mimeType, "application/json");
+  assert.match(sub.contents[0].text, /On Compute Provision/);
+});
+
+test("subscription event-driven pattern resource contains discovery guidance", async () => {
+  const resources = registeredResources({});
+
+  const pattern = await resources
+    .get("vcfa-pattern-subscription-event-driven")
+    .handler(new URL("vcfa://patterns/subscriptions/event-driven"));
+
+  assert.equal(pattern.contents[0].mimeType, "text/markdown");
+  assert.match(pattern.contents[0].text, /list-event-topics/);
+  assert.match(pattern.contents[0].text, /list-subscriptions/);
+  assert.match(pattern.contents[0].text, /get-subscription/);
+  assert.match(pattern.contents[0].text, /list-workflows/);
+  assert.match(pattern.contents[0].text, /stop and report/);
+  assert.match(pattern.contents[0].text, /disabled state/);
+});
+
+test("vcfa-troubleshoot-deployment prompt accepts goalHint argument", async () => {
+  const prompts = registeredPrompts();
+
+  const result = await prompts
+    .get("vcfa-troubleshoot-deployment")
+    .handler({ deploymentId: "dep-99", goalHint: "VM stuck in creating state" });
+
+  const text = result.messages[0].content.text;
+  assert.match(text, /dep-99/);
+  assert.match(text, /VM stuck in creating state/);
+  assert.match(text, /get-deployment/);
+  assert.match(text, /list-deployment-actions/);
+  assert.match(text, /Do not invent IDs/);
+});
+
+test("vcfa-troubleshoot-workflow-execution prompt guides execution diagnosis", async () => {
+  const prompts = registeredPrompts();
+
+  const withExecId = await prompts
+    .get("vcfa-troubleshoot-workflow-execution")
+    .handler({ workflowHint: "Provision VM", executionId: "exec-123" });
+
+  const text = withExecId.messages[0].content.text;
+  assert.match(text, /Provision VM/);
+  assert.match(text, /exec-123/);
+  assert.match(text, /list-workflows/);
+  assert.match(text, /get-workflow-execution/);
+  assert.match(text, /get-workflow-execution-logs/);
+  assert.match(text, /export-workflow-file/);
+  assert.match(text, /Do not invent IDs/);
+
+  const withoutExecId = await prompts
+    .get("vcfa-troubleshoot-workflow-execution")
+    .handler({ workflowHint: "Tag VM" });
+
+  const text2 = withoutExecId.messages[0].content.text;
+  assert.match(text2, /Tag VM/);
+  assert.doesNotMatch(text2, /Execution ID:/);
+  assert.match(text2, /list-workflow-executions/);
+});

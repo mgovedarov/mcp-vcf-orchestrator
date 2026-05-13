@@ -1,11 +1,15 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { extname } from "node:path";
 import type {
+  Category,
   DiffWorkflowFileParams,
   ExportWorkflowExecutionLogsParams,
   ExportWorkflowExecutionLogsResult,
+  ListWorkflowsByCategoryParams,
   ScaffoldWorkflowFileParams,
   SimpleParameter,
+  WorkflowCategoryGroup,
+  WorkflowsByCategoryResult,
   Workflow,
   WorkflowExecution,
   WorkflowExecutionLog,
@@ -38,6 +42,39 @@ const LOG_SEVERITY_RANK: Record<string, number> = {
   warn: 30,
   warning: 30,
   error: 40,
+};
+
+const DEFAULT_MAX_CATEGORIES = 50;
+
+const LOG_WRAPPER_KEYS = new Set(["attributes", "attribute", "log", "entry"]);
+
+const CATEGORY_PARENT_ID_KEYS = [
+  "parentId",
+  "parent-id",
+  "parentCategoryId",
+  "parent-category-id",
+];
+const CATEGORY_PARENT_NAME_KEYS = [
+  "parentName",
+  "parent-name",
+  "parentCategoryName",
+  "parent-category-name",
+];
+const CATEGORY_PARENT_PATH_KEYS = [
+  "parentPath",
+  "parent-path",
+  "parentCategoryPath",
+  "parent-category-path",
+];
+
+type CategoryRelationLink = {
+  href?: string;
+  rel?: string;
+  attributes?: { name: string; value: string }[];
+};
+
+type WorkflowCategoryDetail = Category & {
+  relations?: { link?: CategoryRelationLink[] };
 };
 
 function normalizeLogLevel(level: string): WorkflowExecutionLogLevel {
@@ -126,9 +163,8 @@ function objectField(
 }
 
 function scalarSummary(source: Record<string, unknown>): string | undefined {
-  const skipped = new Set(["attributes", "attribute", "log", "entry"]);
   const parts = Object.entries(source)
-    .filter(([key, value]) => !skipped.has(key) && value !== undefined && value !== null)
+    .filter(([key, value]) => !LOG_WRAPPER_KEYS.has(key) && value !== undefined && value !== null)
     .filter(([, value]) =>
       ["string", "number", "boolean"].includes(typeof value),
     )
@@ -143,8 +179,14 @@ function normalizeWorkflowExecutionLog(
   const nested = objectField(direct, "log", "entry") ?? {};
   const attributes = getLinkAttrs(raw);
   const source = { ...direct, ...nested, ...attributes };
+  const base: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (!LOG_WRAPPER_KEYS.has(key) && value !== undefined) {
+      base[key] = value;
+    }
+  }
   const normalized: WorkflowExecutionLog = {
-    ...raw,
+    ...(base as WorkflowExecutionLog),
     ...nested,
     ...attributes,
   };
@@ -231,8 +273,220 @@ function renderExecutionLogsText(params: {
   return [...header, "", ...body, ""].join("\n");
 }
 
+function firstAttribute(
+  attrs: Record<string, string>,
+  keys: string[],
+): string | undefined {
+  for (const key of keys) {
+    const value = attrs[key];
+    if (value !== undefined && value !== "") return value;
+  }
+  return undefined;
+}
+
+function normalizeCategoryPath(path?: string): string {
+  const trimmed = path?.trim();
+  if (!trimmed) return "";
+  const normalized = trimmed.replace(/\\/g, "/").replace(/\/+/g, "/");
+  return normalized.startsWith("/") ? normalized : `/${normalized}`;
+}
+
+function categoryDisplayPath(category: Category): string {
+  return normalizeCategoryPath(category.path) || category.name;
+}
+
+function parseWorkflowCategory(
+  item: { href?: string; attributes?: { name: string; value: string }[] },
+): Category {
+  const attrs = parseAttrs(item.attributes);
+  const category: Category = {
+    id: attrs["id"] ?? attrs["@id"],
+    name: attrs["name"] ?? attrs["@name"],
+    description: attrs["description"],
+    type: attrs["type"] ?? "WorkflowCategory",
+    path: attrs["path"],
+    parentId: firstAttribute(attrs, CATEGORY_PARENT_ID_KEYS),
+    parentName: firstAttribute(attrs, CATEGORY_PARENT_NAME_KEYS),
+    parentPath: firstAttribute(attrs, CATEGORY_PARENT_PATH_KEYS),
+    href: item.href,
+  };
+  for (const key of ["parentId", "parentName", "parentPath"] as const) {
+    if (category[key] === undefined) delete category[key];
+  }
+  return category;
+}
+
+function parseWorkflowRelation(
+  link: CategoryRelationLink,
+  category: Category,
+): Workflow | undefined {
+  if (link.rel !== "down") return undefined;
+  const attrs = parseAttrs(link.attributes);
+  const type = attrs["type"] ?? attrs["@type"] ?? attrs["@fullType"];
+  if (type !== "Workflow") return undefined;
+  const id = attrs["id"] ?? attrs["@id"];
+  const name = attrs["name"] ?? attrs["@name"];
+  if (!id || !name) return undefined;
+  return {
+    id,
+    name,
+    description: attrs["description"],
+    version: attrs["version"],
+    categoryId: category.id,
+    categoryName: category.name,
+    href: link.href,
+  };
+}
+
+function parseChildCategoryRelation(link: CategoryRelationLink): Category | undefined {
+  if (link.rel !== "down") return undefined;
+  const attrs = parseAttrs(link.attributes);
+  const type = attrs["type"] ?? attrs["@type"] ?? attrs["@fullType"];
+  if (type !== "WorkflowCategory") return undefined;
+  const category = parseWorkflowCategory(link);
+  return category.id && category.name ? category : undefined;
+}
+
+function resolveWorkflowCategoryFromList(
+  categories: Category[],
+  params: ListWorkflowsByCategoryParams,
+): Category | undefined {
+  if (params.categoryId) {
+    const category = categories.find((candidate) => candidate.id === params.categoryId);
+    if (!category) {
+      throw new Error(`No WorkflowCategory found with id: ${params.categoryId}`);
+    }
+    return category;
+  }
+
+  if (params.categoryPath) {
+    const path = normalizeCategoryPath(params.categoryPath);
+    const category = categories.find(
+      (candidate) => normalizeCategoryPath(candidate.path) === path,
+    );
+    return category;
+  }
+
+  const matches = categories.filter(
+    (candidate) => candidate.name === params.categoryName,
+  );
+  if (matches.length === 0) {
+    throw new Error(`No WorkflowCategory found with name: ${params.categoryName}`);
+  }
+  if (matches.length > 1) {
+    const candidates = matches
+      .map(
+        (category) =>
+          `${category.name} (id: ${category.id}${category.path ? `, path: ${category.path}` : ""})`,
+      )
+      .join("; ");
+    throw new Error(
+      `Multiple WorkflowCategory entries match name '${params.categoryName}'. Use categoryId or categoryPath. Candidates: ${candidates}`,
+    );
+  }
+  return matches[0];
+}
+
 export class WorkflowClient {
   constructor(private http: VroHttpClient) {}
+
+  private async getWorkflowCategoryDetail(
+    category: Category,
+  ): Promise<WorkflowCategoryDetail> {
+    const raw = await this.http.get<{
+      id?: string;
+      name?: string;
+      description?: string;
+      type?: string;
+      path?: string;
+      href?: string;
+      relations?: { link?: CategoryRelationLink[] };
+    }>(`/categories/${encodeURIComponent(category.id)}`);
+    return {
+      ...category,
+      id: raw.id ?? category.id,
+      name: raw.name ?? category.name,
+      description: raw.description ?? category.description,
+      type: raw.type ?? category.type,
+      path: raw.path ?? category.path,
+      href: raw.href ?? category.href,
+      relations: raw.relations,
+    };
+  }
+
+  private async resolveWorkflowCategory(
+    categories: Category[],
+    params: ListWorkflowsByCategoryParams,
+  ): Promise<Category> {
+    const listMatch = resolveWorkflowCategoryFromList(categories, params);
+    if (listMatch) return listMatch;
+
+    if (!params.categoryPath) {
+      throw new Error("Workflow category selector did not resolve.");
+    }
+
+    const normalizedPath = normalizeCategoryPath(params.categoryPath);
+    const lastSegment = normalizedPath.split("/").filter(Boolean).at(-1);
+    const candidates = categories.filter(
+      (category) => category.name === lastSegment,
+    );
+    const matches: Category[] = [];
+    for (const candidate of candidates) {
+      const detail = await this.getWorkflowCategoryDetail(candidate);
+      if (normalizeCategoryPath(detail.path) === normalizedPath) {
+        matches.push(detail);
+      }
+    }
+
+    if (matches.length === 0) {
+      throw new Error(`No WorkflowCategory found with path: ${params.categoryPath}`);
+    }
+    if (matches.length > 1) {
+      const candidatesText = matches
+        .map((category) => `${category.name} (id: ${category.id}, path: ${category.path})`)
+        .join("; ");
+      throw new Error(
+        `Multiple WorkflowCategory entries match path '${params.categoryPath}'. Use categoryId. Candidates: ${candidatesText}`,
+      );
+    }
+    return matches[0];
+  }
+
+  private async collectWorkflowCategoryTree(
+    rootCategory: Category,
+    maxCategories: number,
+  ): Promise<{ groups: WorkflowCategoryGroup[]; truncated: boolean }> {
+    const groups: WorkflowCategoryGroup[] = [];
+    const stack = [rootCategory];
+    const visited = new Set<string>();
+
+    while (stack.length > 0) {
+      // Check before pop: the root is always processed (resolved externally),
+      // so truncation fires precisely at the configured boundary.
+      if (visited.size >= maxCategories) {
+        return { groups, truncated: true };
+      }
+      const current = stack.pop();
+      if (!current || visited.has(current.id)) continue;
+      visited.add(current.id);
+
+      const detail = await this.getWorkflowCategoryDetail(current);
+      const links = detail.relations?.link ?? [];
+      const workflows = links
+        .map((link) => parseWorkflowRelation(link, detail))
+        .filter((workflow): workflow is Workflow => Boolean(workflow));
+      groups.push({ category: detail, workflows });
+
+      for (const link of links) {
+        const child = parseChildCategoryRelation(link);
+        if (child && !visited.has(child.id)) {
+          stack.push(child);
+        }
+      }
+    }
+
+    return { groups, truncated: false };
+  }
 
   async listWorkflows(filter?: string): Promise<WorkflowList> {
     let path = "/workflows";
@@ -254,11 +508,55 @@ export class WorkflowClient {
         name: a["name"] ?? a["@name"],
         description: a["description"],
         version: a["version"],
-        categoryId: a["categoryId"],
-        categoryName: a["categoryName"],
+        categoryId: a["categoryId"] ?? a["category-id"],
+        categoryName: a["categoryName"] ?? a["category-name"],
       };
     });
     return { total: raw.total ?? link.length, link };
+  }
+
+  async listWorkflowsByCategory(
+    params: ListWorkflowsByCategoryParams,
+  ): Promise<WorkflowsByCategoryResult> {
+    const selectors = [
+      params.categoryId,
+      params.categoryName,
+      params.categoryPath,
+    ].filter((value) => value !== undefined && value !== "");
+    if (selectors.length !== 1) {
+      throw new Error(
+        "Provide exactly one workflow category selector: categoryId, categoryName, or categoryPath.",
+      );
+    }
+
+    const maxCategories = params.maxCategories ?? DEFAULT_MAX_CATEGORIES;
+    const rawCategories = await this.http.get<{
+      link?: { href?: string; attributes?: { name: string; value: string }[] }[];
+      total?: number;
+    }>("/categories?categoryType=WorkflowCategory");
+    const categories = (rawCategories.link ?? []).map(parseWorkflowCategory);
+    const rootCategory = await this.resolveWorkflowCategory(categories, params);
+    const { groups: rawGroups, truncated } = await this.collectWorkflowCategoryTree(
+      rootCategory,
+      maxCategories,
+    );
+    const groups = rawGroups
+      .filter(
+        (group) => params.includeEmptyCategories || group.workflows.length > 0,
+      )
+      .sort((a, b) =>
+        categoryDisplayPath(a.category).localeCompare(categoryDisplayPath(b.category)),
+      );
+
+    return {
+      rootCategory,
+      categories: groups,
+      workflowCount: groups.reduce(
+        (count, group) => count + group.workflows.length,
+        0,
+      ),
+      ...(truncated ? { truncated } : {}),
+    };
   }
 
   getWorkflow(id: string): Promise<Workflow> {

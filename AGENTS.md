@@ -43,7 +43,7 @@ If the docs and source disagree, inspect the source, update the docs or examples
 Use the exact registered tool names. Start with list/get tools unless the user has already provided verified IDs and contracts.
 
 - Context and promotion: `collect-context-snapshot`, `prepare-artifact-promotion`
-- Workflows: `list-workflows`, `get-workflow`, `create-workflow`, `run-workflow`, `run-workflow-and-wait`, `list-workflow-executions`, `get-workflow-execution`, `get-workflow-execution-logs`, `export-workflow-file`, `scaffold-workflow-file`, `preflight-workflow-file`, `diff-workflow-file`, `import-workflow-file`, `delete-workflow`
+- Workflows: `list-workflows`, `list-workflows-by-category`, `get-workflow`, `create-workflow`, `run-workflow`, `run-workflow-and-wait`, `list-workflow-executions`, `get-workflow-execution`, `get-workflow-execution-logs`, `export-workflow-file`, `scaffold-workflow-file`, `preflight-workflow-file`, `diff-workflow-file`, `import-workflow-file`, `delete-workflow`
 - Actions: `list-actions`, `get-action`, `create-action`, `export-action-file`, `preflight-action-file`, `diff-action-file`, `import-action-file`, `delete-action`
 - Configuration elements: `list-configurations`, `get-configuration`, `create-configuration`, `update-configuration`, `export-configuration-file`, `preflight-configuration-file`, `import-configuration-file`, `delete-configuration`
 - Resource elements: `list-resource-elements`, `export-resource-element`, `import-resource-element`, `update-resource-element`, `delete-resource-element`
@@ -74,6 +74,7 @@ Prompts:
 - `vcfa-review-template`: inspect an existing blueprint template for correctness, reuse, and catalog readiness.
 - `vcfa-integrate-workflow-template-subscription`: plan workflow, template, catalog, deployment, and extensibility subscription integration.
 - `vcfa-troubleshoot-deployment`: inspect deployment state and day-2 options before remediation.
+- `vcfa-troubleshoot-workflow-execution`: diagnose a failed or problematic workflow execution using logs, stack, and workflow source.
 
 Resources:
 
@@ -90,7 +91,11 @@ Resources:
 - `vcfa://workflows/{id}`
 - `vcfa://actions/{id}`
 - `vcfa://deployments/{id}`
+- `vcfa://configurations/{id}`
+- `vcfa://resource-elements/{id}`
+- `vcfa://subscriptions/{id}`
 - `vcfa://packages/{name}`
+- `vcfa://patterns/subscriptions/event-driven`
 
 Use `collect-context-snapshot` in unfamiliar or large environments. Use `profile: "vcfaBuiltIns"` when the task needs a VMware built-in baseline from Library workflows and `com.vmware` actions. Increase `maxItemsPerDomain` when the default limit would skip relevant objects.
 

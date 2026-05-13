@@ -14,6 +14,10 @@ function promptResult(description: string, text: string): GetPromptResult {
   };
 }
 
+function buildPromptText(lines: (string | undefined)[]): string {
+  return lines.filter((line): line is string => line !== undefined).join("\n");
+}
+
 function discoveryGuardrails(): string[] {
   return [
     "Discovery guardrail: if a required workflow, action, template, category, project, parameter, or return type is not found, stop and report the missing fact. Do not invent IDs, parameter names, types, schemas, or provider-specific YAML.",
@@ -44,7 +48,7 @@ export function registerVcfaPrompts(server: McpServer): void {
     ({ goal, categoryHint }) =>
       promptResult(
         "Author a vRO workflow artifact safely.",
-        [
+        buildPromptText([
           `Goal: ${goal}`,
           categoryHint ? `Category hint: ${categoryHint}` : undefined,
           "",
@@ -52,9 +56,7 @@ export function registerVcfaPrompts(server: McpServer): void {
           ...discoveryGuardrails(),
           "Prefer scaffold-workflow-file for local artifact generation, then run preflight-workflow-file and summarize any errors or warnings.",
           "For reusable workflow content, recommend adding the workflow to the project package and importing the package. Only recommend direct import-workflow-file for narrow validation or explicitly requested one-off tests after preflight passes and the user confirms the target category and import intent.",
-        ]
-          .filter((line): line is string => line !== undefined)
-          .join("\n"),
+        ]),
       ),
   );
 
@@ -74,7 +76,7 @@ export function registerVcfaPrompts(server: McpServer): void {
     ({ artifactKind, fileName }) =>
       promptResult(
         "Review a local artifact before import.",
-        [
+        buildPromptText([
           `Artifact kind: ${artifactKind}`,
           `File name: ${fileName}`,
           "",
@@ -82,7 +84,7 @@ export function registerVcfaPrompts(server: McpServer): void {
           ...discoveryGuardrails(),
           "Check the target category or package context with list-categories, list-packages, list-workflows, list-actions, or list-configurations as appropriate.",
           "For reusable project content, recommend the package import path. Recommend a direct artifact import only after explaining why it is a validation or one-off import, plus the risks and required confirmation.",
-        ].join("\n"),
+        ]),
       ),
   );
 
@@ -94,18 +96,26 @@ export function registerVcfaPrompts(server: McpServer): void {
         "Inspect a deployment and guide safe troubleshooting or remediation.",
       argsSchema: {
         deploymentId: z.string().describe("Deployment ID to troubleshoot"),
+        goalHint: z
+          .string()
+          .optional()
+          .describe("Optional troubleshooting focus or symptom description"),
       },
     },
-    ({ deploymentId }) =>
+    ({ deploymentId, goalHint }) =>
       promptResult(
         "Troubleshoot a VCFA deployment.",
-        [
+        buildPromptText([
           `Deployment ID: ${deploymentId}`,
+          goalHint ? `Troubleshooting focus: ${goalHint}` : undefined,
           "",
-          "Read the deployment details and list available day-2 actions before recommending remediation.",
-          "Use list-deployment-actions to identify safe operations and required inputs.",
-          "Do not run deployment actions until the user confirms the action, inputs, and expected impact.",
-        ].join("\n"),
+          "Use get-deployment to inspect the deployment state, status, resources, and last operation before proposing remediation.",
+          "Use list-catalog-items or get-catalog-item when the deployment origin or catalog source is unclear.",
+          "Use list-deployment-actions to identify available day-2 operations and their required inputs.",
+          ...discoveryGuardrails(),
+          "Irreversible actions such as destroy or delete require extra confirmation including the deployment name, expected data loss, and explicit user acknowledgement before execution.",
+          "Do not run deployment actions until the user confirms the action, inputs, target deployment, and expected impact.",
+        ]),
       ),
   );
 
@@ -125,14 +135,15 @@ export function registerVcfaPrompts(server: McpServer): void {
     ({ goal }) =>
       promptResult(
         "Discover available VCFA capabilities.",
-        [
+        buildPromptText([
           goal ? `Goal: ${goal}` : "Goal: discover relevant VCFA capabilities.",
           "",
           "Inspect installed plugins, relevant categories, existing workflows, reusable actions, catalog items, and templates before proposing new automation.",
+          "Use list-workflows-by-category when folder membership matters, for example to see all workflows under a specific category tree.",
           ...discoveryGuardrails(),
           "Summarize what already exists, what can be reused, and what gaps remain.",
           "Prefer concrete next tool calls and avoid creating or importing artifacts during discovery.",
-        ].join("\n"),
+        ]),
       ),
   );
 
@@ -164,7 +175,7 @@ export function registerVcfaPrompts(server: McpServer): void {
     ({ goal, includeOptionalDomains, profile }) =>
       promptResult(
         "Collect reusable VCFA/vRO context.",
-        [
+        buildPromptText([
           goal ? `Goal: ${goal}` : "Goal: create reusable VCFA/vRO context.",
           `Profile: ${profile ?? "default"}`,
           `Include optional domains: ${includeOptionalDomains === true ? "yes" : "no"}`,
@@ -176,7 +187,7 @@ export function registerVcfaPrompts(server: McpServer): void {
           ...discoveryGuardrails(),
           "Do not ask the user to provide workflow, action, parameter, category, project, or template details that can be discovered by the snapshot tool.",
           "After the snapshot is written, summarize the saved paths, collected counts, skipped counts, and any warnings.",
-        ].join("\n"),
+        ]),
       ),
   );
 
@@ -202,7 +213,7 @@ export function registerVcfaPrompts(server: McpServer): void {
     ({ actionHint, workflowGoal, categoryHint }) =>
       promptResult(
         "Build a vRO workflow wrapper from an existing action.",
-        [
+        buildPromptText([
           `Action hint: ${actionHint}`,
           `Workflow goal: ${workflowGoal}`,
           categoryHint ? `Category hint: ${categoryHint}` : undefined,
@@ -212,9 +223,7 @@ export function registerVcfaPrompts(server: McpServer): void {
           "Use list-categories for WorkflowCategory if the category is not already known.",
           ...discoveryGuardrails(),
           "For a single-action wrapper, prefer a native vRO action workflow item in a horizontally arranged workflow. Use scaffold-workflow-file only when a scriptable task is appropriate, such as multiple action calls or additional orchestration logic. Publish reusable wrappers through the project package path.",
-        ]
-          .filter((line): line is string => line !== undefined)
-          .join("\n"),
+        ]),
       ),
   );
 
@@ -234,7 +243,7 @@ export function registerVcfaPrompts(server: McpServer): void {
     ({ workflowHint, refactorGoal }) =>
       promptResult(
         "Refactor a vRO workflow safely.",
-        [
+        buildPromptText([
           `Workflow hint: ${workflowHint}`,
           `Refactor goal: ${refactorGoal}`,
           "",
@@ -243,7 +252,7 @@ export function registerVcfaPrompts(server: McpServer): void {
           "Read vcfa://docs/artifact-authoring and vcfa://patterns/workflows/basic-scriptable-task for scaffold and validation constraints.",
           ...discoveryGuardrails(),
           "Use preflight-workflow-file and diff-workflow-file before recommending import. Do not import until the user confirms target, overwrite intent, and risk.",
-        ].join("\n"),
+        ]),
       ),
   );
 
@@ -264,7 +273,7 @@ export function registerVcfaPrompts(server: McpServer): void {
     ({ templateGoal, projectHint }) =>
       promptResult(
         "Create a VCFA blueprint template safely.",
-        [
+        buildPromptText([
           `Template goal: ${templateGoal}`,
           projectHint ? `Project hint: ${projectHint}` : undefined,
           "",
@@ -273,9 +282,7 @@ export function registerVcfaPrompts(server: McpServer): void {
           "Use list-catalog-items or list-deployments when the template must align with catalog or deployment behavior.",
           ...discoveryGuardrails(),
           "Call create-template only after the target projectId and YAML content are confirmed, then verify with get-template.",
-        ]
-          .filter((line): line is string => line !== undefined)
-          .join("\n"),
+        ]),
       ),
   );
 
@@ -296,7 +303,7 @@ export function registerVcfaPrompts(server: McpServer): void {
     ({ templateId, reviewGoal }) =>
       promptResult(
         "Review a VCFA blueprint template.",
-        [
+        buildPromptText([
           `Template ID: ${templateId}`,
           reviewGoal ? `Review focus: ${reviewGoal}` : undefined,
           "",
@@ -305,9 +312,7 @@ export function registerVcfaPrompts(server: McpServer): void {
           "Use list-catalog-items or get-catalog-item when reviewing catalog-facing behavior.",
           ...discoveryGuardrails(),
           "Summarize concrete findings, missing facts, and any safe follow-up tool calls. Do not modify or delete templates during review.",
-        ]
-          .filter((line): line is string => line !== undefined)
-          .join("\n"),
+        ]),
       ),
   );
 
@@ -326,7 +331,7 @@ export function registerVcfaPrompts(server: McpServer): void {
     ({ integrationGoal, workflowHint, templateHint }) =>
       promptResult(
         "Plan VCFA workflow/template/subscription integration.",
-        [
+        buildPromptText([
           `Integration goal: ${integrationGoal}`,
           workflowHint ? `Workflow hint: ${workflowHint}` : undefined,
           templateHint ? `Template hint: ${templateHint}` : undefined,
@@ -335,9 +340,7 @@ export function registerVcfaPrompts(server: McpServer): void {
           "Use list-deployments and list-deployment-actions if day-2 behavior matters.",
           ...discoveryGuardrails(),
           "Recommend create-subscription, update-subscription, template creation, or workflow import only as explicit next steps with required confirmations and risks.",
-        ]
-          .filter((line): line is string => line !== undefined)
-          .join("\n"),
+        ]),
       ),
   );
 
@@ -358,17 +361,49 @@ export function registerVcfaPrompts(server: McpServer): void {
     ({ goal, artifactKinds }) =>
       promptResult(
         "Produce a discovery-first VCFA implementation plan.",
-        [
+        buildPromptText([
           `Goal: ${goal}`,
           artifactKinds ? `Artifact focus: ${artifactKinds}` : undefined,
           "",
-          "Start with read-only discovery calls relevant to the artifact focus: list-workflows, list-actions, list-configurations, list-resource-elements, list-templates, list-catalog-items, list-deployments, list-event-topics, list-subscriptions, list-categories, list-packages, and list-plugins.",
+          "Start with read-only discovery calls relevant to the artifact focus: list-workflows, list-workflows-by-category, list-actions, list-configurations, list-resource-elements, list-templates, list-catalog-items, list-deployments, list-event-topics, list-subscriptions, list-categories, list-packages, and list-plugins.",
           "Read relevant vcfa://docs, vcfa://schemas, and vcfa://patterns resources before recommending artifact creation.",
           ...discoveryGuardrails(),
           "Return a phased plan with discovery, local artifact generation, preflight/diff, confirmation points, import or create calls, and post-change verification.",
-        ]
-          .filter((line): line is string => line !== undefined)
-          .join("\n"),
+        ]),
+      ),
+  );
+
+  server.registerPrompt(
+    "vcfa-troubleshoot-workflow-execution",
+    {
+      title: "Troubleshoot Workflow Execution",
+      description:
+        "Diagnose a failed or problematic workflow execution using logs, stack, and workflow source.",
+      argsSchema: {
+        workflowHint: z
+          .string()
+          .describe("Workflow ID, name, or search hint"),
+        executionId: z
+          .string()
+          .optional()
+          .describe("Optional execution ID to inspect directly"),
+      },
+    },
+    ({ workflowHint, executionId }) =>
+      promptResult(
+        "Troubleshoot a vRO workflow execution.",
+        buildPromptText([
+          `Workflow hint: ${workflowHint}`,
+          executionId ? `Execution ID: ${executionId}` : undefined,
+          "",
+          "Use list-workflows to identify the workflow, then get-workflow to inspect its parameters and structure.",
+          "Use list-workflow-executions to find recent runs, or inspect the provided execution ID directly with get-workflow-execution.",
+          "Check execution state and stack trace. For failed or cancelled executions, identify the failing workflow item and current-item details.",
+          "Use get-workflow-execution-logs with error level focus to surface error messages, then broaden to info or debug if needed.",
+          "If the failure is in a scriptable task, use export-workflow-file to inspect the workflow source script at the reported line numbers.",
+          ...discoveryGuardrails(),
+          "Summarize the root cause, affected workflow item, relevant log entries, and suggest concrete fixes or next diagnostic steps.",
+        ]),
       ),
   );
 }

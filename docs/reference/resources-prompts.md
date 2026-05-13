@@ -19,7 +19,11 @@ The server exposes MCP resources for documentation, artifact patterns, and live 
 | `vcfa://workflows/{id}` | Workflow metadata as JSON. |
 | `vcfa://actions/{id}` | Action metadata and script details as JSON. |
 | `vcfa://deployments/{id}` | Deployment details as JSON. |
+| `vcfa://configurations/{id}` | Configuration element details as JSON. |
+| `vcfa://resource-elements/{id}` | Resource element metadata as JSON. |
+| `vcfa://subscriptions/{id}` | Extensibility subscription details as JSON. |
 | `vcfa://packages/{name}` | vRO package metadata as JSON. |
+| `vcfa://patterns/subscriptions/event-driven` | Discovery-first guidance for creating extensibility subscriptions wired to vRO workflows. |
 
 ## Prompts
 
@@ -57,6 +61,18 @@ Inspect a deployment and guide safe troubleshooting or remediation.
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `deploymentId` | string | Yes | - | Deployment ID to troubleshoot. |
+| `goalHint` | string | No | - | Optional troubleshooting focus or symptom description. |
+:::
+
+### `vcfa-troubleshoot-workflow-execution`
+
+Diagnose a failed or problematic workflow execution using logs, stack, and workflow source.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `workflowHint` | string | Yes | - | Workflow ID, name, or search hint. |
+| `executionId` | string | No | - | Optional execution ID to inspect directly. |
 :::
 
 ### `vcfa-discover-capabilities`
@@ -234,6 +250,14 @@ Use prompt vcfa-integrate-workflow-template-subscription with:
 integrationGoal: "Run a tagging workflow after deployment creation."
 workflowHint: "Tag VM"
 templateHint: "Ubuntu"
+```
+
+Troubleshoot a failed workflow execution:
+
+```text
+Use prompt vcfa-troubleshoot-workflow-execution with:
+workflowHint: "Provision VM"
+executionId: "abc12345-def6-7890-abcd-ef1234567890"
 ```
 
 ## Discovery Guardrail

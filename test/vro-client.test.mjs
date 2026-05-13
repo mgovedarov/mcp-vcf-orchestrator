@@ -441,6 +441,51 @@ test("exportWorkflowExecutionLogs writes JSON with info minimum level by default
   }
 });
 
+test("exportWorkflowExecutionLogs writes normalized JSON without raw wrapper fields", async () => {
+  const executionLogDir = await mkdtemp(join(tmpdir(), "vcfa-execution-logs-"));
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return Response.json({
+      logs: [
+        {
+          entry: {
+            origin: "system",
+            "short-description": "nested info",
+            "time-stamp": "2026-04-21T10:48:52.172+00:00",
+            "time-stamp-val": 1776768532172,
+            severity: "info",
+          },
+        },
+      ],
+    });
+  };
+
+  try {
+    const client = new VroClient(config({ executionLogDir }));
+    const result = await client.exportWorkflowExecutionLogs({
+      workflowId: "workflow-1",
+      executionId: "execution-1",
+      fileName: "execution-1.json",
+      level: "debug",
+    });
+    const exported = JSON.parse(await readFile(result.path, "utf8"));
+
+    assert.deepEqual(exported.logs, [
+      {
+        origin: "system",
+        "short-description": "nested info",
+        "time-stamp": "2026-04-21T10:48:52.172+00:00",
+        "time-stamp-val": 1776768532172,
+        severity: "info",
+      },
+    ]);
+  } finally {
+    await rm(executionLogDir, { recursive: true, force: true });
+  }
+});
+
 test("exportWorkflowExecutionLogs writes text with debug minimum level", async () => {
   const executionLogDir = await mkdtemp(join(tmpdir(), "vcfa-execution-logs-"));
   const calls = [];
@@ -908,6 +953,253 @@ test("category and plugin clients parse attribute links", async () => {
     calls[2].url,
     "https://vcfa.example.test/vco/api/plugins?conditions=name~library",
   );
+});
+
+test("listWorkflowsByCategory resolves paths from category details and relations", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+
+    const href = String(url);
+    if (href.endsWith("/categories?categoryType=WorkflowCategory")) {
+      return Response.json({
+        link: [
+          {
+            attributes: [
+              { name: "id", value: "test-root" },
+              { name: "name", value: "test" },
+            ],
+          },
+          {
+            attributes: [
+              { name: "id", value: "minko" },
+              { name: "name", value: "minko" },
+            ],
+          },
+          {
+            attributes: [
+              { name: "id", value: "sql" },
+              { name: "name", value: "sql" },
+            ],
+          },
+          {
+            attributes: [
+              { name: "id", value: "other" },
+              { name: "name", value: "sql" },
+              { name: "path", value: "/other/sql" },
+            ],
+          },
+        ],
+      });
+    }
+
+    if (href.endsWith("/categories/minko")) {
+      return Response.json({
+        id: "minko",
+        name: "minko",
+        type: "WorkflowCategory",
+        path: "test/minko",
+        relations: {
+          link: [
+            {
+              rel: "down",
+              attributes: [
+                { name: "id", value: "sql" },
+                { name: "name", value: "sql" },
+                { name: "type", value: "WorkflowCategory" },
+              ],
+            },
+            {
+              rel: "down",
+              attributes: [
+                { name: "id", value: "wf-simple" },
+                { name: "name", value: "simple test" },
+                { name: "type", value: "Workflow" },
+              ],
+            },
+          ],
+        },
+      });
+    }
+
+    if (href.endsWith("/categories/sql")) {
+      return Response.json({
+        id: "sql",
+        name: "sql",
+        type: "WorkflowCategory",
+        path: "test/minko/sql",
+        relations: {
+          link: [
+            {
+              rel: "down",
+              attributes: [
+                { name: "id", value: "wf-read" },
+                { name: "name", value: "Read active record for 'entity'" },
+                { name: "type", value: "Workflow" },
+              ],
+            },
+          ],
+        },
+      });
+    }
+
+    return Response.json({ link: [] });
+  };
+
+  const client = new VroClient(config());
+  const result = await client.listWorkflowsByCategory({
+    categoryPath: "test/minko",
+  });
+
+  assert.equal(result.rootCategory.id, "minko");
+  assert.equal(result.workflowCount, 2);
+  assert.deepEqual(
+    result.categories.map((group) => group.category.path),
+    ["test/minko", "test/minko/sql"],
+  );
+  assert.deepEqual(
+    result.categories.flatMap((group) =>
+      group.workflows.map((workflow) => workflow.name),
+    ),
+    ["simple test", "Read active record for 'entity'"],
+  );
+  assert.equal(
+    calls[1].url,
+    "https://vcfa.example.test/vco/api/categories?categoryType=WorkflowCategory",
+  );
+  assert.equal(
+    calls[2].url,
+    "https://vcfa.example.test/vco/api/categories/minko",
+  );
+});
+
+test("listWorkflowsByCategory includes empty categories when requested", async () => {
+  globalThis.fetch = async (url) => {
+    if (String(url).endsWith("/sessions")) return authResponse();
+
+    const href = String(url);
+    if (href.endsWith("/categories?categoryType=WorkflowCategory")) {
+      return Response.json({
+        link: [
+          {
+            attributes: [
+              { name: "id", value: "root" },
+              { name: "name", value: "test" },
+            ],
+          },
+        ],
+      });
+    }
+
+    if (href.endsWith("/categories/root")) {
+      return Response.json({
+        id: "root",
+        name: "test",
+        type: "WorkflowCategory",
+        relations: {
+          link: [
+            {
+              rel: "down",
+              attributes: [
+                { name: "id", value: "child" },
+                { name: "name", value: "minko" },
+                { name: "type", value: "WorkflowCategory" },
+              ],
+            },
+          ],
+        },
+      });
+    }
+
+    if (href.endsWith("/categories/child")) {
+      return Response.json({
+        id: "child",
+        name: "minko",
+        type: "WorkflowCategory",
+        relations: { link: [] },
+      });
+    }
+
+    return Response.json({ link: [] });
+  };
+
+  const client = new VroClient(config());
+  const result = await client.listWorkflowsByCategory({
+    categoryId: "root",
+    includeEmptyCategories: true,
+  });
+
+  assert.equal(result.workflowCount, 0);
+  assert.deepEqual(
+    result.categories.map((group) => [group.category.id, group.workflows.length]),
+    [
+      ["child", 0],
+      ["root", 0],
+    ],
+  );
+});
+
+test("listWorkflowsByCategory reports ambiguity", async () => {
+  globalThis.fetch = async (url) => {
+    if (String(url).endsWith("/sessions")) return authResponse();
+    if (String(url).includes("/categories")) {
+      return Response.json({
+        link: [
+          {
+            attributes: [
+              { name: "id", value: "test-1" },
+              { name: "name", value: "test" },
+            ],
+          },
+          {
+            attributes: [
+              { name: "id", value: "test-2" },
+              { name: "name", value: "test" },
+            ],
+          },
+        ],
+      });
+    }
+    return Response.json({ link: [] });
+  };
+
+  const client = new VroClient(config());
+  await assert.rejects(
+    () => client.listWorkflowsByCategory({ categoryName: "test" }),
+    /Multiple WorkflowCategory entries match name 'test'/,
+  );
+});
+
+test("listWorkflowsByCategory uses vRA8 read-only requests", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (String(url).includes("/categories")) {
+      return Response.json({
+        link: [
+          {
+            attributes: [
+              { name: "id", value: "test-root" },
+              { name: "name", value: "test" },
+              { name: "path", value: "/test" },
+            ],
+          },
+        ],
+      });
+    }
+    return Response.json({ link: [] });
+  };
+
+  const client = new VroClient(config({ targetPlatform: "vra8" }));
+  const result = await client.listWorkflowsByCategory({
+    categoryPath: "/test",
+  });
+
+  assert.equal(result.workflowCount, 0);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].init.method, "GET");
+  assert.equal(calls[1].init.method, "GET");
 });
 
 test("package import rejects path traversal before network calls", async () => {
