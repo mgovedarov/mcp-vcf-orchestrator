@@ -61,3 +61,35 @@ This release expands the MCP server from a VCFA-only operations helper into a br
 - `VCFA_TARGET_PLATFORM=vra8` is intentionally limited to vRO `/vco/api` read operations plus workflow execution and execution logs. Automation-service APIs remain unsupported in this mode until token-auth support is added.
 - Live create, update, import, delete, deployment, day-2, package, template, and subscription operations still require explicit confirmation in their tool inputs and should be preceded by read-only discovery.
 
+## 1.0.1 - 2026-05-04
+
+This patch release focused on improving reusable discovery context, tightening documentation accuracy, and making local artifact defaults clearer after the initial `1.0.0` release.
+
+### Added
+
+- Added richer context snapshot handling for reusable environment discovery.
+  - Added persisted context snapshot resources, including latest snapshot lookup and named snapshot access.
+  - Added safer context directory resolution so snapshots default to the MCP client's workspace when available.
+  - Added tests covering default context locations, persisted snapshot reads, missing snapshot behavior, and unsafe snapshot file names.
+- Added the `vcfaBuiltIns` context snapshot profile.
+  - Filters VMware built-in workflows and actions for baseline discovery.
+  - Helps agents distinguish reusable platform content from project-specific custom content.
+  - Expanded prompt guidance to use the profile when VMware built-in context is useful.
+- Added prompt examples for reusable workflow discovery and context persistence.
+- Added more detailed tool and prompt parameter documentation in the reference pages.
+
+### Changed
+
+- Clarified default artifact directory behavior across README, configuration docs, and reference docs.
+  - `VCFA_ARTIFACT_DIR` defaults are described as `artifacts/` under the MCP server process working directory.
+  - Context snapshots document their preference for the MCP client's current workspace root.
+- Improved action discovery metadata parsing by accepting additional action ID attribute shapes.
+- Collapsed and clarified long tool and prompt parameter sections in the documentation.
+- Removed obsolete standalone prompt files now covered by registered MCP prompts.
+- Added package overrides for `esbuild` and `vite`.
+
+### Fixed
+
+- Fixed context snapshot redaction and resource handling edge cases.
+- Fixed documentation drift around `collect-context-snapshot` parameters and usage.
+- Fixed stale artifact directory references that still pointed at older default paths.
