@@ -6,6 +6,8 @@ The server includes read-only discovery tools and write-capable tools. Treat eve
 
 These operations should be performed only after explicit user confirmation:
 
+- creating or updating live workflows, actions, configurations, templates, subscriptions, deployments, or packages
+- running workflows, because workflow execution may change the target environment
 - importing workflows, actions, configurations, packages, or resource elements
 - deleting workflows, actions, configurations, resource elements, packages, templates, deployments, or subscriptions
 - running deployment day-2 actions

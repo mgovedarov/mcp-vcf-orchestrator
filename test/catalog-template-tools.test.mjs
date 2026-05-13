@@ -145,6 +145,7 @@ test("template tools create and delete with confirmation", async () => {
     description: "Demo",
     content: "formatVersion: 1",
     requestScopeOrg: true,
+    confirm: true,
   });
   assert.deepEqual(createParams, {
     name: "New VM",

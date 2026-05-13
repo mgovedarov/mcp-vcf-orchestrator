@@ -78,6 +78,7 @@ test("deployment tools list, get, create, and delete with confirmation", async (
     version: "1.0.0",
     reason: "Test deployment",
     inputs: { size: "small" },
+    confirm: true,
   });
   assert.deepEqual(createParams, {
     catalogItemId: "catalog-1",

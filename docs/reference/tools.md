@@ -111,6 +111,7 @@ Create a new empty workflow in VCF Automation Orchestrator. Use `list-categories
 | `categoryId` | string | Yes | - | Workflow category ID where the empty workflow is created. |
 | `name` | string | Yes | - | Name for the new workflow. |
 | `description` | string | No | - | Optional workflow description. |
+| `confirm` | boolean | Yes | - | Must be `true` to confirm creation. If `false`, the workflow is not created. |
 :::
 
 ### `delete-workflow`
@@ -133,6 +134,7 @@ Execute a workflow with optional input parameters. Returns the execution ID; use
 | --- | --- | --- | --- | --- |
 | `id` | string | Yes | - | Workflow ID to execute. |
 | `inputs` | array | No | `[]` | Input parameters for the workflow execution. Inspect the workflow with `get-workflow` before running. |
+| `confirm` | boolean | Yes | - | Must be `true` to confirm execution. If `false`, the workflow is not run. |
 
 `inputs` array item:
 
@@ -155,6 +157,7 @@ Validate inputs, execute a workflow, poll until completion, failure, or timeout,
 | `timeoutSeconds` | integer | No | `300` | Maximum time to wait for completion before returning a timeout result. |
 | `pollIntervalSeconds` | integer | No | `2` | Seconds between execution status polls. |
 | `logLimit` | integer | No | `20` | Maximum execution log entries to include on failure or timeout. Set to `0` to suppress log excerpts. |
+| `confirm` | boolean | Yes | - | Must be `true` to confirm execution. If `false`, the workflow is not run. |
 
 `inputs` array item:
 
@@ -347,6 +350,7 @@ Create a new action in VCF Automation Orchestrator.
 | `script` | string | Yes | - | JavaScript or TypeScript script content for the action. |
 | `inputParameters` | array | No | `[]` | Input parameter definitions for the action. |
 | `returnType` | string | No | - | Return type, for example `string`, `void`, or `Array/string`. |
+| `confirm` | boolean | Yes | - | Must be `true` to confirm creation. If `false`, the action is not created. |
 
 `inputParameters` array item:
 
@@ -454,6 +458,7 @@ Create a new configuration element in VCF Automation Orchestrator. Use `list-cat
 | `name` | string | Yes | - | Name for the new configuration element. |
 | `description` | string | No | - | Optional description. |
 | `attributes` | array | No | `[]` | Initial attributes for the configuration element. |
+| `confirm` | boolean | Yes | - | Must be `true` to confirm creation. If `false`, the configuration element is not created. |
 
 `attributes` array item:
 
@@ -475,6 +480,7 @@ Update a configuration element name, description, or attributes. Supplied attrib
 | `name` | string | No | current name | New name for the configuration element. |
 | `description` | string | No | current description | New description. |
 | `attributes` | array | No | current attributes | New attributes to replace the existing set. |
+| `confirm` | boolean | Yes | - | Must be `true` to confirm update. If `false`, the configuration element is not updated. |
 
 `attributes` array item:
 
@@ -662,6 +668,7 @@ Create a new deployment from a catalog item. Use `list-catalog-items` to find th
 | `version` | string | No | latest | Catalog item version to deploy. |
 | `reason` | string | No | - | Reason or comment for the deployment request. |
 | `inputs` | object | No | `{}` | Catalog item input parameters as a key/value object. Use `get-catalog-item` or catalog documentation to verify the expected shape before deploying. |
+| `confirm` | boolean | Yes | - | Must be `true` to confirm deployment creation. If `false`, the deployment request is not submitted. |
 :::
 
 ### `delete-deployment`
@@ -734,6 +741,7 @@ Create a new blueprint template in VCF Automation Cloud Assembly. Use `list-temp
 | `description` | string | No | - | Optional template description. |
 | `content` | string | No | empty template | YAML blueprint content for the template. Treat this as Cloud Assembly blueprint content and verify conventions from existing templates or docs before authoring. |
 | `requestScopeOrg` | boolean | No | `false` | If `true`, the template is available org-wide rather than project-scoped. |
+| `confirm` | boolean | Yes | - | Must be `true` to confirm creation. If `false`, the template is not created. |
 :::
 
 ### `delete-template`
@@ -1019,6 +1027,7 @@ Create a subscription linking an Event Broker topic to a vRO workflow or ABX act
 | `priority` | number | No | - | Subscription priority. Lower number means higher priority. |
 | `timeout` | number | No | - | Timeout in minutes for runnable execution. |
 | `disabled` | boolean | No | `false` | Create the subscription in a disabled state. |
+| `confirm` | boolean | Yes | - | Must be `true` to confirm creation. If `false`, the subscription is not created. |
 :::
 
 ### `update-subscription`
@@ -1037,6 +1046,7 @@ Update a subscription. All fields except `id` are optional; only supplied fields
 | `blocking` | boolean | No | current setting | New blocking setting. |
 | `priority` | number | No | current priority | New subscription priority. Lower number means higher priority. |
 | `timeout` | number | No | current timeout | New timeout in minutes. |
+| `confirm` | boolean | Yes | - | Must be `true` to confirm update. If `false`, the subscription is not updated. |
 :::
 
 ### `delete-subscription`

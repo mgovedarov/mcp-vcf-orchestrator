@@ -241,7 +241,7 @@ Useful live MCP sequence:
 2. `import-workflow-file` with `categoryId`, `fileName`, `overwrite: true`, `confirm: true`.
 3. `list-workflows` filtered by workflow name.
 4. `get-workflow` to verify inputs/outputs.
-5. `run-workflow` with inputs.
+5. `run-workflow` with inputs and `confirm: true`.
 6. `get-workflow-execution` to poll status and inspect outputs/errors.
 
 Workflow files are read from the `workflows` subdirectory of `VCFA_ARTIFACT_DIR` (defaults to `artifacts/workflows/` in the MCP server process working directory, typically the open project) unless `VCFA_WORKFLOW_DIR` overrides it.

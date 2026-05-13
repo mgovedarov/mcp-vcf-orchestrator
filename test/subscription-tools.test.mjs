@@ -98,6 +98,7 @@ test("subscription tools pass create and update payloads through", async () => {
     priority: 10,
     timeout: 30,
     disabled: true,
+    confirm: true,
   });
   assert.deepEqual(createdParams, {
     name: "Provisioning approval",
@@ -122,6 +123,7 @@ test("subscription tools pass create and update payloads through", async () => {
     blocking: false,
     priority: 20,
     timeout: 45,
+    confirm: true,
   });
   assert.deepEqual(updatedCall, {
     id: "sub-1",

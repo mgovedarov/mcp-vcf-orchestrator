@@ -24,7 +24,7 @@ Only after reviewing the promotion output and confirming the target:
 ```text
 import-workflow-file(categoryId: "<workflow-category-id>", fileName: "echo-message.workflow", overwrite: true, confirm: true)
 get-workflow(id: "<workflow-id>")
-run-workflow-and-wait(id: "<workflow-id>", inputs: [{ name: "message", value: "post-import check" }], timeoutSeconds: 60)
+run-workflow-and-wait(id: "<workflow-id>", inputs: [{ name: "message", value: "post-import check" }], timeoutSeconds: 60, confirm: true)
 ```
 
 For action replacements, use `preflight-action-file(fileName: "example.action")` and `diff-action-file(base: { source: "live", actionId: "<action-id>" }, compare: { source: "file", fileName: "example.action" })` before importing.

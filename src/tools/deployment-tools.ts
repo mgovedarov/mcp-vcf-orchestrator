@@ -263,6 +263,11 @@ export function registerDeploymentTools(
           .record(z.string(), z.unknown())
           .optional()
           .describe("Catalog item input parameters as a key/value object"),
+        confirm: z
+          .boolean()
+          .describe(
+            "Must be set to true to confirm deployment creation. If false, the deployment request will not be submitted.",
+          ),
       }),
       annotations: { readOnlyHint: false },
     },
@@ -273,7 +278,19 @@ export function registerDeploymentTools(
       version,
       reason,
       inputs,
+      confirm,
     }): Promise<CallToolResult> => {
+      if (!confirm) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Confirm deployment of catalog item ${catalogItemId} as ${deploymentName} in project ${projectId} by setting confirm to true.`,
+            },
+          ],
+        };
+      }
+
       try {
         const deployment = await client.createDeploymentFromCatalogItem({
           catalogItemId,

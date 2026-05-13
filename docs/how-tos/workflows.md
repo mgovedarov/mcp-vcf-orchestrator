@@ -13,7 +13,7 @@ Recommended tool sequence:
 
 1. `list-workflows(filter: "resize")`
 2. `get-workflow(id: "...")`
-3. `run-workflow-and-wait(...)`
+3. `run-workflow-and-wait(..., confirm: true)`
 
 `run-workflow-and-wait` validates inputs before running and polls until completion. If the workflow fails, the response includes current item details, stack information, log excerpts, and warnings when diagnostics cannot be fetched.
 
@@ -86,7 +86,7 @@ Recommended tool sequence:
 1. `scaffold-workflow-file` with workflow inputs, outputs, tasks, and bindings.
 2. `preflight-workflow-file(fileName: "echo-message.workflow")`.
 3. For a narrow validation run only, `list-categories(type: "WorkflowCategory", filter: "Dev")` and `import-workflow-file(..., confirm: true)`.
-4. Verify the workflow with `list-workflows(filter: "Echo Message")`, `get-workflow`, and `run-workflow-and-wait(...)`.
+4. Verify the workflow with `list-workflows(filter: "Echo Message")`, `get-workflow`, and `run-workflow-and-wait(..., confirm: true)`.
 5. Publish reusable project content through the project package:
    - `ensure-project-package(packageName: "com.example.project")`
    - `add-workflow-to-project-package(packageName: "com.example.project", workflowId: "<workflow-id>", confirm: true)`

@@ -40,6 +40,6 @@ list-subscriptions(projectId: "<project-id>")
 Create the subscription only after the topic, workflow ID, blocking behavior, and timeout are confirmed:
 
 ```text
-create-subscription(name: "Tag Ubuntu deployments", eventTopicId: "<event-topic-id>", runnableType: "extensibility.vro", runnableId: "<workflow-id>", projectId: "<project-id>", blocking: false, priority: 100, timeout: 10, disabled: true)
+create-subscription(name: "Tag Ubuntu deployments", eventTopicId: "<event-topic-id>", runnableType: "extensibility.vro", runnableId: "<workflow-id>", projectId: "<project-id>", blocking: false, priority: 100, timeout: 10, disabled: true, confirm: true)
 get-subscription(id: "<subscription-id>")
 ```

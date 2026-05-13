@@ -7,7 +7,7 @@ Use configuration elements for runtime data that workflows should read without h
 Recommended sequence:
 
 1. `list-categories(type: "ConfigurationElementCategory", filter: "Integrations")`
-2. `create-configuration(...)`
+2. `create-configuration(..., confirm: true)`
 3. `list-configurations(categoryId: "...", filter: "...")`
 4. `get-configuration(id: "...")`
 
@@ -29,5 +29,5 @@ Recommended sequence:
 To rotate a value or replace a shared binary resource:
 
 1. `list-configurations(categoryId: "...", filter: "...")` or `list-resource-elements(filter: "...")`
-2. `update-configuration(...)` or `update-resource-element(..., confirm: true)`
+2. `update-configuration(..., confirm: true)` or `update-resource-element(..., confirm: true)`
 3. Re-read the object to verify the change.
