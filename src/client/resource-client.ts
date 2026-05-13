@@ -39,6 +39,15 @@ export class ResourceClient {
     return { total: raw.total ?? link.length, start: raw.start, link };
   }
 
+  async getResourceElement(id: string): Promise<ResourceElement> {
+    const result = await this.listResources();
+    const element = result.link.find((item) => item.id === id);
+    if (!element) {
+      throw new Error(`Resource element not found: ${id}`);
+    }
+    return element;
+  }
+
   getResourceDirectory(): string {
     return this.http.resourceDir;
   }

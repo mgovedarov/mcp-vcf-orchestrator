@@ -23,13 +23,32 @@ export class CategoryClient {
     }>(path);
     const link: Category[] = (raw.link ?? []).map((item) => {
       const a = parseAttrs(item.attributes);
-      return {
+      const category: Category = {
         id: a["id"] ?? a["@id"],
         name: a["name"] ?? a["@name"],
         description: a["description"],
         type: a["type"] ?? categoryType,
         path: a["path"],
+        parentId:
+          a["parentId"] ??
+          a["parent-id"] ??
+          a["parentCategoryId"] ??
+          a["parent-category-id"],
+        parentName:
+          a["parentName"] ??
+          a["parent-name"] ??
+          a["parentCategoryName"] ??
+          a["parent-category-name"],
+        parentPath:
+          a["parentPath"] ??
+          a["parent-path"] ??
+          a["parentCategoryPath"] ??
+          a["parent-category-path"],
       };
+      for (const key of ["parentId", "parentName", "parentPath"] as const) {
+        if (category[key] === undefined) delete category[key];
+      }
+      return category;
     });
     return { total: raw.total ?? link.length, link };
   }

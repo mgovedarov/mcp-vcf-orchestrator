@@ -51,6 +51,26 @@ export interface WorkflowList {
   link: Workflow[];
 }
 
+export interface ListWorkflowsByCategoryParams {
+  categoryId?: string;
+  categoryName?: string;
+  categoryPath?: string;
+  includeEmptyCategories?: boolean;
+  maxCategories?: number;
+}
+
+export interface WorkflowCategoryGroup {
+  category: Category;
+  workflows: Workflow[];
+}
+
+export interface WorkflowsByCategoryResult {
+  rootCategory: Category;
+  categories: WorkflowCategoryGroup[];
+  workflowCount: number;
+  truncated?: boolean;
+}
+
 export interface WorkflowArtifactParameter {
   name: string;
   type: string;
@@ -287,6 +307,9 @@ export interface Category {
   description?: string;
   type: string;
   path?: string;
+  parentId?: string;
+  parentName?: string;
+  parentPath?: string;
   href?: string;
 }
 

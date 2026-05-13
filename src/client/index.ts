@@ -21,7 +21,9 @@ import type {
   PrepareArtifactPromotionParams,
   ProjectPackageResult,
   EventTopicList,
+  ResourceElement,
   ResourceElementList,
+  ListWorkflowsByCategoryParams,
   ScaffoldWorkflowFileParams,
   SimpleParameter,
   Subscription,
@@ -37,6 +39,7 @@ import type {
   WorkflowExecutionList,
   WorkflowExecutionLogs,
   WorkflowList,
+  WorkflowsByCategoryResult,
 } from "../types.js";
 import {
   formatPreflightReport,
@@ -98,6 +101,12 @@ export class VroClient {
 
   listWorkflows(filter?: string): Promise<WorkflowList> {
     return this.workflows.listWorkflows(filter);
+  }
+
+  listWorkflowsByCategory(
+    params: ListWorkflowsByCategoryParams,
+  ): Promise<WorkflowsByCategoryResult> {
+    return this.workflows.listWorkflowsByCategory(params);
   }
 
   getWorkflow(id: string): Promise<Workflow> {
@@ -696,6 +705,10 @@ export class VroClient {
 
   listResources(filter?: string): Promise<ResourceElementList> {
     return this.resources.listResources(filter);
+  }
+
+  getResourceElement(id: string): Promise<ResourceElement> {
+    return this.resources.getResourceElement(id);
   }
 
   getResourceDirectory(): string {

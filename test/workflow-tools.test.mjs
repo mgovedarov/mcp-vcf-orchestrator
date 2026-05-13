@@ -63,6 +63,104 @@ test("workflow parameter helpers fall back to kebab-case response fields", () =>
   );
 });
 
+test("list-workflows-by-category is read-only and formats grouped workflows", async () => {
+  let paramsSeen;
+  const handlers = new Map();
+  const configs = new Map();
+  const server = {
+    registerTool(name, config, handler) {
+      configs.set(name, config);
+      handlers.set(name, handler);
+    },
+  };
+  registerWorkflowTools(server, {
+    listWorkflowsByCategory: async (params) => {
+      paramsSeen = params;
+      return {
+        rootCategory: { id: "test-root", name: "test", path: "/test" },
+        workflowCount: 2,
+        categories: [
+          {
+            category: { id: "minko", name: "minko", path: "/test/minko" },
+            workflows: [{ id: "wf-simple", name: "simple test" }],
+          },
+          {
+            category: { id: "sql", name: "sql", path: "/test/minko/sql" },
+            workflows: [
+              {
+                id: "wf-read",
+                name: "Read active record for 'entity'",
+                description: "Reads records",
+              },
+            ],
+          },
+        ],
+      };
+    },
+  });
+
+  const result = await handlers.get("list-workflows-by-category")({
+    categoryName: "test",
+  });
+
+  assert.equal(
+    configs.get("list-workflows-by-category").annotations.readOnlyHint,
+    true,
+  );
+  assert.deepEqual(paramsSeen, { categoryName: "test" });
+  assert.match(result.content[0].text, /Found 2 workflow\(s\) under \/test/);
+  assert.match(result.content[0].text, /Category: \/test\/minko/);
+  assert.match(result.content[0].text, /simple test \(id: wf-simple\)/);
+  assert.match(result.content[0].text, /Read active record for 'entity'/);
+});
+
+test("list-workflows-by-category reports empty and error responses", async () => {
+  const emptyHandlers = registeredWorkflowTools({
+    listWorkflowsByCategory: async () => ({
+      rootCategory: { id: "test-root", name: "test", path: "/test" },
+      workflowCount: 0,
+      categories: [],
+    }),
+  });
+  const empty = await emptyHandlers.get("list-workflows-by-category")({
+    categoryId: "test-root",
+  });
+  assert.match(empty.content[0].text, /No workflows found/);
+
+  const errorHandlers = registeredWorkflowTools({
+    listWorkflowsByCategory: async () => {
+      throw new Error("Multiple WorkflowCategory entries match name 'test'");
+    },
+  });
+  const error = await errorHandlers.get("list-workflows-by-category")({
+    categoryName: "test",
+  });
+  assert.equal(error.isError, true);
+  assert.match(error.content[0].text, /Multiple WorkflowCategory/);
+});
+
+test("list-workflows-by-category shows truncation warning", async () => {
+  const handlers = registeredWorkflowTools({
+    listWorkflowsByCategory: async () => ({
+      rootCategory: { id: "root", name: "Library", path: "/Library" },
+      workflowCount: 3,
+      truncated: true,
+      categories: [
+        {
+          category: { id: "a", name: "a", path: "/Library/a" },
+          workflows: [{ id: "wf-1", name: "wf1" }],
+        },
+      ],
+    }),
+  });
+  const result = await handlers.get("list-workflows-by-category")({
+    categoryName: "Library",
+    maxCategories: 2,
+  });
+  assert.match(result.content[0].text, /Traversal was truncated/);
+  assert.match(result.content[0].text, /maxCategories/);
+});
+
 test("run-workflow-and-wait rejects strict validation errors before running", async () => {
   let runCalls = 0;
   const handlers = registeredWorkflowTools({

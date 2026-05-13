@@ -77,6 +77,20 @@ List workflows from VCF Automation Orchestrator. Optionally filter by name subst
 | `filter` | string | No | - | Filter workflows by name using a substring match. |
 :::
 
+### `list-workflows-by-category`
+
+List workflows assigned to a workflow category/folder and all descendant subfolders. Recursively fetches each subcategory; may be slow for large trees. Paths are normalized (leading slash is optional). Use this when you need folder membership, for example workflows under `test`, `test/minko`, and `test/minko/sql`.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `categoryId` | string | No | - | Exact WorkflowCategory ID to list recursively. Provide exactly one selector. |
+| `categoryName` | string | No | - | Exact WorkflowCategory name to list recursively. If multiple categories match, use `categoryId` or `categoryPath`. |
+| `categoryPath` | string | No | - | Exact WorkflowCategory path to list recursively, for example `/test/minko`. Leading slash is optional. |
+| `includeEmptyCategories` | boolean | No | `false` | Include descendant categories that contain no workflows. |
+| `maxCategories` | number | No | `50` | Maximum number of categories to traverse. Use a lower value to avoid slow traversals on large trees (1–500). |
+:::
+
 ### `get-workflow`
 
 Get detailed information about a specific workflow including its input and output parameters.

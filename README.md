@@ -75,7 +75,7 @@ Useful optional variables:
 
 The server includes tools for:
 
-- Workflows, workflow executions, inline/exported execution syslogs, workflow artifact scaffold/preflight/diff/import/export
+- Workflows, recursive workflow category/folder listing, workflow executions, inline/exported execution syslogs, workflow artifact scaffold/preflight/diff/import/export
 - Actions and action artifact import/export/preflight/diff
 - Configuration elements and resource elements
 - vRO packages and plugins, including package-first project package reuse

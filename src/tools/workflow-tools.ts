@@ -8,6 +8,7 @@ import type {
   WorkflowExecution,
   WorkflowExecutionLog,
   WorkflowExecutionStackItem,
+  WorkflowsByCategoryResult,
 } from "../types.js";
 import { formatPreflightReport } from "../client/artifact-preflight.js";
 import {
@@ -78,6 +79,31 @@ export function unwrapVroParameterValue(parameter: VroParameter): unknown {
 
 function hasValueProperty(value: unknown): value is { value: unknown } {
   return typeof value === "object" && value !== null && "value" in value;
+}
+
+function formatWorkflowsByCategory(result: WorkflowsByCategoryResult): string {
+  const root = result.rootCategory.path ?? result.rootCategory.name;
+  const header = `Found ${result.workflowCount} workflow(s) under ${root} (id: ${result.rootCategory.id})`;
+  const truncationNote = result.truncated
+    ? "\n\n⚠️ Traversal was truncated because the category limit was reached. Use maxCategories to increase the limit or narrow the search with a deeper categoryPath."
+    : "";
+  if (result.categories.length === 0) {
+    return `${header}.\n\nNo workflows found in the selected category or descendant categories.${truncationNote}`;
+  }
+
+  const sections = result.categories.map((group) => {
+    const categoryLabel = group.category.path ?? group.category.name;
+    const workflows =
+      group.workflows.length === 0
+        ? ["  (no workflows)"]
+        : group.workflows.map(
+            (workflow) =>
+              `  • ${workflow.name} (id: ${workflow.id})${workflow.description ? ` — ${workflow.description}` : ""}`,
+          );
+    return `Category: ${categoryLabel} (id: ${group.category.id})\n${workflows.join("\n")}`;
+  });
+
+  return `${header}.\n\n${sections.join("\n\n")}${truncationNote}`;
 }
 
 function getWorkflowExecutionStackItems(
@@ -378,6 +404,64 @@ export function registerWorkflowTools(
             {
               type: "text",
               text: `Failed to list workflows: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  server.registerTool(
+    "list-workflows-by-category",
+    {
+      title: "List Workflows By Category",
+      description:
+        "List workflows assigned to a workflow folder/category and all descendant subfolders. Recursively fetches each subcategory; may be slow for large trees. Paths are normalized (leading slash is optional, e.g. 'test/minko' and '/test/minko' resolve identically).",
+      inputSchema: z.object({
+        categoryId: z
+          .string()
+          .optional()
+          .describe("Exact WorkflowCategory ID to list recursively"),
+        categoryName: z
+          .string()
+          .optional()
+          .describe("Exact WorkflowCategory name to resolve and list recursively"),
+        categoryPath: z
+          .string()
+          .optional()
+          .describe(
+            "Exact WorkflowCategory path to list recursively (leading slash is optional)",
+          ),
+        includeEmptyCategories: z
+          .boolean()
+          .optional()
+          .default(false)
+          .describe("Include descendant categories that contain no workflows"),
+        maxCategories: z
+          .number()
+          .int()
+          .min(1)
+          .max(500)
+          .optional()
+          .describe(
+            "Maximum number of categories to traverse (default 50). Use a lower value to avoid slow traversals on large trees.",
+          ),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async (params): Promise<CallToolResult> => {
+      try {
+        const result = await client.listWorkflowsByCategory(params);
+        return {
+          content: [{ type: "text", text: formatWorkflowsByCategory(result) }],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to list workflows by category: ${error instanceof Error ? error.message : String(error)}`,
             },
           ],
           isError: true,

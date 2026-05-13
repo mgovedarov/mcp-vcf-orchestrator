@@ -210,6 +210,34 @@ Validation flow:
 - After catalog publication outside this toolset, use catalog and deployment tools to verify request shape before creating deployments.
 `;
 
+const SUBSCRIPTION_EVENT_DRIVEN_PATTERN = `# Subscription Pattern: event-driven
+
+Use this pattern when creating extensibility subscriptions that wire VCF Automation event topics to vRO workflows.
+
+Discovery first:
+
+- Run \`list-event-topics\` to discover available event topics and their IDs before creating subscriptions.
+- Run \`list-subscriptions\` and \`get-subscription\` to inspect existing subscriptions for naming conventions, event filters, and workflow bindings.
+- Run \`list-workflows\` and \`get-workflow\` to verify the target workflow exists, has the expected inputs, and can accept event payload data.
+- If a required event topic, workflow, or project cannot be found, stop and report the gap.
+
+Implementation shape:
+
+- Use a descriptive subscription name that reflects the event topic and intended behavior.
+- Set the event topic ID from the discovered list; do not guess topic IDs.
+- Wire the subscription to a verified workflow ID. Confirm the workflow accepts the payload shape the event topic provides.
+- Use event filters or conditions to narrow the trigger scope when appropriate. Prefer specific filters over catch-all subscriptions.
+- Consider whether the subscription should be created in a disabled state for testing before enabling it in production.
+
+Safety considerations:
+
+- Creating or enabling a subscription is a live environment change that triggers on real events.
+- During development, prefer creating subscriptions in a disabled state and enabling only after verification.
+- Updating or disabling a subscription is often safer than deleting it during iterative testing.
+- Confirm the subscription name, event topic, workflow target, and enabled state with the user before creation.
+- After creation, verify with \`list-subscriptions\` or \`get-subscription\`.
+`;
+
 function textResource(
   uri: string,
   mimeType: string,
@@ -443,6 +471,64 @@ export function registerVcfaResources(
         uri.href,
         await client.getPackage(singleVariable(variables, "name")),
       ),
+  );
+
+  server.registerResource(
+    "vcfa-configuration",
+    new ResourceTemplate("vcfa://configurations/{id}", { list: undefined }),
+    {
+      title: "VCFA Configuration Element",
+      description: "Read a configuration element by ID.",
+      mimeType: "application/json",
+    },
+    async (uri, variables) =>
+      jsonResource(
+        uri.href,
+        await client.getConfiguration(singleVariable(variables, "id")),
+      ),
+  );
+
+  server.registerResource(
+    "vcfa-resource-element",
+    new ResourceTemplate("vcfa://resource-elements/{id}", { list: undefined }),
+    {
+      title: "VCFA Resource Element",
+      description: "Read resource element metadata by ID.",
+      mimeType: "application/json",
+    },
+    async (uri, variables) =>
+      jsonResource(
+        uri.href,
+        await client.getResourceElement(singleVariable(variables, "id")),
+      ),
+  );
+
+  server.registerResource(
+    "vcfa-subscription",
+    new ResourceTemplate("vcfa://subscriptions/{id}", { list: undefined }),
+    {
+      title: "VCFA Subscription",
+      description: "Read an extensibility subscription by ID.",
+      mimeType: "application/json",
+    },
+    async (uri, variables) =>
+      jsonResource(
+        uri.href,
+        await client.getSubscription(singleVariable(variables, "id")),
+      ),
+  );
+
+  server.registerResource(
+    "vcfa-pattern-subscription-event-driven",
+    "vcfa://patterns/subscriptions/event-driven",
+    {
+      title: "Subscription Pattern: event-driven",
+      description:
+        "Discovery-first guidance for creating extensibility subscriptions wired to vRO workflows.",
+      mimeType: "text/markdown",
+    },
+    (uri) =>
+      textResource(uri.href, "text/markdown", SUBSCRIPTION_EVENT_DRIVEN_PATTERN),
   );
 }
 
