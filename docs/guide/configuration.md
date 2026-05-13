@@ -31,6 +31,7 @@ For vRA/vRO 8.12+ read/run compatibility, set `VCFA_TARGET_PLATFORM=vra8`. In th
 | `VCFA_PACKAGE_DIR` | Override the package artifact directory. |
 | `VCFA_RESOURCE_DIR` | Override the resource element artifact directory. |
 | `VCFA_WORKFLOW_DIR` | Override the workflow artifact directory. |
+| `VCFA_EXECUTION_LOG_DIR` | Override the workflow execution log export directory. |
 | `VCFA_ACTION_DIR` | Override the action artifact directory. |
 | `VCFA_CONFIGURATION_DIR` | Override the configuration artifact directory. |
 | `VCFA_CONTEXT_DIR` | Override the persisted context snapshot directory. If unset, context snapshots prefer the MCP client's current workspace root at `artifacts/context/`, falling back to `VCFA_ARTIFACT_DIR/context`. |
@@ -46,6 +47,7 @@ VCFA_ARTIFACT_DIR/
   actions/
   configurations/
   context/
+  execution-logs/
   packages/
   resources/
   workflows/

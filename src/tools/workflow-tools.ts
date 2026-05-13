@@ -10,6 +10,10 @@ import type {
   WorkflowExecutionStackItem,
 } from "../types.js";
 import { formatPreflightReport } from "../client/artifact-preflight.js";
+import {
+  filterWorkflowExecutionLogsByMinimumLevel,
+  formatWorkflowExecutionLogEntry,
+} from "../client/workflow-client.js";
 import type { VroClient } from "../vro-client.js";
 
 const DEFAULT_WORKFLOW_WAIT_TIMEOUT_SECONDS = 300;
@@ -245,21 +249,6 @@ function formatStackItem(item: WorkflowExecutionStackItem): string {
   return details.length > 0 ? `${label} (${details.join(", ")})` : label;
 }
 
-function formatLogEntry(log: WorkflowExecutionLog): string {
-  const prefix = [
-    log["time-stamp"],
-    log.severity ? `[${log.severity}]` : undefined,
-    log.origin,
-  ].filter(Boolean);
-  const shortDescription = log["short-description"];
-  const longDescription = log["long-description"];
-  const description =
-    shortDescription && longDescription && shortDescription !== longDescription
-      ? `${shortDescription} — ${longDescription}`
-      : (shortDescription ?? longDescription ?? "(no description)");
-  return `${prefix.length > 0 ? `${prefix.join(" ")} ` : ""}${description}`;
-}
-
 function appendDiagnostics(
   text: string,
   execution: WorkflowExecution,
@@ -289,7 +278,7 @@ function appendDiagnostics(
 
   if (logs.length > 0) {
     result += `\n\nLog Excerpts:\n${logs
-      .map((log) => `  • ${formatLogEntry(log)}`)
+      .map((log) => `  • ${formatWorkflowExecutionLogEntry(log)}`)
       .join("\n")}`;
   }
 
@@ -763,7 +752,7 @@ export function registerWorkflowTools(
     {
       title: "Get Workflow Execution Logs",
       description:
-        "Retrieve log entries for a workflow execution. Use after run-workflow or list-workflow-executions when detailed execution logs are needed.",
+        "Retrieve workflow execution system/event logs, including System.log, System.debug, System.warn, and System.error output. Use after run-workflow or list-workflow-executions when detailed execution logs are needed.",
       inputSchema: z.object({
         workflowId: z.string().describe("The workflow ID"),
         executionId: z.string().describe("The execution ID"),
@@ -772,18 +761,70 @@ export function registerWorkflowTools(
           .int()
           .positive()
           .optional()
-          .describe("Maximum number of log entries to return"),
+          .describe("Maximum number of log entries to fetch"),
+        fileName: z
+          .string()
+          .optional()
+          .describe("Optional plain .json or .txt file name to export under the configured execution log artifact directory"),
+        level: z
+          .enum(["debug", "info", "error"])
+          .optional()
+          .describe("Minimum log level to display or export"),
+        format: z
+          .enum(["json", "text"])
+          .optional()
+          .describe("Export format when fileName is provided. If omitted, inferred from fileName extension."),
+        overwrite: z
+          .boolean()
+          .optional()
+          .describe("Overwrite the export file if it already exists (default: false)"),
       }),
       annotations: { readOnlyHint: true },
     },
-    async ({ workflowId, executionId, maxResult }): Promise<CallToolResult> => {
+    async ({
+      workflowId,
+      executionId,
+      maxResult,
+      fileName,
+      level,
+      format,
+      overwrite,
+    }): Promise<CallToolResult> => {
       try {
+        if (fileName) {
+          const result = await client.exportWorkflowExecutionLogs({
+            workflowId,
+            executionId,
+            fileName,
+            level: level ?? "info",
+            format,
+            maxResult,
+            overwrite: overwrite ?? false,
+          });
+          return {
+            content: [
+              {
+                type: "text",
+                text:
+                  `Workflow execution logs exported successfully to: ${result.path}\n` +
+                  `Level: ${result.level}\n` +
+                  `Format: ${result.format}\n` +
+                  `Fetched log count: ${result.fetchedCount}\n` +
+                  `Exported log count: ${result.exportedCount}`,
+              },
+            ],
+          };
+        }
+
         const result = await client.getWorkflowExecutionLogs(
           workflowId,
           executionId,
           { maxResult },
         );
-        const logs = result.logs ?? [];
+        const logs =
+          level === undefined
+            ? (result.logs ?? [])
+            : filterWorkflowExecutionLogsByMinimumLevel(result.logs ?? [], level);
         if (logs.length === 0) {
           return {
             content: [{ type: "text", text: "No execution logs found." }],
@@ -794,7 +835,7 @@ export function registerWorkflowTools(
             {
               type: "text",
               text: `Found ${logs.length} execution log(s):\n\n${logs
-                .map((log) => `• ${formatLogEntry(log)}`)
+                .map((log) => `• ${formatWorkflowExecutionLogEntry(log)}`)
                 .join("\n")}`,
             },
           ],

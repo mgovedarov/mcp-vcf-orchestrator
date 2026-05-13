@@ -64,6 +64,7 @@ Useful optional variables:
 | `VCFA_PACKAGE_DIR` | Override package artifact directory. |
 | `VCFA_RESOURCE_DIR` | Override resource artifact directory. |
 | `VCFA_WORKFLOW_DIR` | Override workflow artifact directory. |
+| `VCFA_EXECUTION_LOG_DIR` | Override workflow execution log export directory. |
 | `VCFA_ACTION_DIR` | Override action artifact directory. |
 | `VCFA_CONFIGURATION_DIR` | Override configuration artifact directory. |
 | `VCFA_CONTEXT_DIR` | Override persisted context snapshot directory. If unset, context snapshots prefer the MCP client's current workspace root at `artifacts/context/`, falling back to `VCFA_ARTIFACT_DIR/context`. |
@@ -74,7 +75,7 @@ Useful optional variables:
 
 The server includes tools for:
 
-- Workflows, workflow executions, standalone execution logs, workflow artifact scaffold/preflight/diff/import/export
+- Workflows, workflow executions, inline/exported execution syslogs, workflow artifact scaffold/preflight/diff/import/export
 - Actions and action artifact import/export/preflight/diff
 - Configuration elements and resource elements
 - vRO packages and plugins, including package-first project package reuse

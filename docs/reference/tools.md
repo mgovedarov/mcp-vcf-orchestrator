@@ -176,14 +176,18 @@ Check the status and outputs of a workflow execution.
 
 ### `get-workflow-execution-logs`
 
-Retrieve log entries for a workflow execution. Use this after `run-workflow`, `list-workflow-executions`, or `get-workflow-execution` when detailed execution logs are needed.
+Retrieve system/event log entries for a workflow execution, including workflow token messages such as `System.log`, `System.debug`, `System.warn`, and `System.error`. Use this after `run-workflow`, `list-workflow-executions`, or `get-workflow-execution` when detailed execution logs are needed. To save logs instead of returning them inline, provide `fileName`; exports are written under `VCFA_EXECUTION_LOG_DIR` or `VCFA_ARTIFACT_DIR/execution-logs`. The `level` parameter is a minimum severity filter for inline display and export: `debug` includes debug and all higher known severities plus unknown severities, `info` includes info, warning, and error logs, and `error` includes only error logs.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `workflowId` | string | Yes | - | Workflow ID associated with the execution. |
 | `executionId` | string | Yes | - | Execution ID returned by `run-workflow`, `run-workflow-and-wait`, or `list-workflow-executions`. |
-| `maxResult` | integer | No | - | Maximum number of execution log entries to return. |
+| `maxResult` | integer | No | - | Maximum number of execution log entries to fetch before filtering. |
+| `fileName` | string | No | - | Plain `.json` or `.txt` file name to export under the configured execution log artifact directory. Do not pass a path. |
+| `level` | `debug` \| `info` \| `error` | No | inline: none; export: `info` | Minimum log severity to display or export. |
+| `format` | `json` \| `text` | No | inferred from extension | Export format when `fileName` is provided. Must match the file extension when set. |
+| `overwrite` | boolean | No | `false` | Overwrite the export file if it already exists. |
 :::
 
 ### `export-workflow-file`

@@ -7,8 +7,9 @@ These examples are current, import-safe patterns for using the MCP tools. They a
 - [Workflow Artifact](./workflow-artifact.md): collect context, scaffold a workflow, preflight, import, and test it.
 - [Project Package](./project-package.md): reuse one project package, add content, rebuild, export, and inspect before import.
 - [Artifact Promotion](./artifact-promotion.md): preflight, diff, optional backup, and import recommendation.
+- [Workflow Execution Logs](./workflow-execution-logs.md): show, filter, and export execution syslogs from workflow runs.
 - [Template, Catalog, And Subscription](./template-catalog-subscription.md): review templates, inspect catalog/deployment behavior, and plan subscriptions.
-- vRA/vRO 8.12+ read/run mode: set `VCFA_TARGET_PLATFORM=vra8`, use vRO list/get tools, run workflows with `run-workflow` or `run-workflow-and-wait`, and inspect logs with `get-workflow-execution-logs`.
+- vRA/vRO 8.12+ read/run mode: set `VCFA_TARGET_PLATFORM=vra8`, use vRO list/get tools, run workflows with `run-workflow` or `run-workflow-and-wait`, and inspect/export syslogs with `get-workflow-execution-logs`.
 
 ## Safety Defaults
 

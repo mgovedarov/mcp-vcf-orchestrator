@@ -31,6 +31,8 @@ If a workflow was started asynchronously, use:
 2. `get-workflow-execution`
 3. `get-workflow-execution-logs`
 
+`get-workflow-execution-logs` reads the execution `syslogs` stream, which is where vRO exposes workflow token messages such as `System.log`, `System.debug`, `System.warn`, and `System.error`. Use `level: "error"` to show only error entries, or provide `fileName` to export the filtered logs as `.json` or `.txt`.
+
 ## vRA/vRO 8 Mode
 
 Set `VCFA_TARGET_PLATFORM=vra8` for vRA/vRO 8.12+ Basic-auth mode. This mode supports vRO `/vco/api` read operations, workflow execution, and execution logs. Catalog, deployment, template, subscription, and event-topic tools require Automation-service token auth and return an unsupported-mode message in this phase.

@@ -47,6 +47,7 @@ async function main(): Promise<void> {
     process.env["VCFA_PROJECT_PACKAGE_DESCRIPTION"];
   const resourceDir = process.env["VCFA_RESOURCE_DIR"];
   const workflowDir = process.env["VCFA_WORKFLOW_DIR"];
+  const executionLogDir = process.env["VCFA_EXECUTION_LOG_DIR"];
   const actionDir = process.env["VCFA_ACTION_DIR"];
   const configurationDir = process.env["VCFA_CONFIGURATION_DIR"];
   const contextDir = process.env["VCFA_CONTEXT_DIR"];
@@ -72,6 +73,7 @@ async function main(): Promise<void> {
     projectPackageDescription,
     resourceDir,
     workflowDir,
+    executionLogDir,
     actionDir,
     configurationDir,
     contextDir,

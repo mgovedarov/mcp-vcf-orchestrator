@@ -1,6 +1,13 @@
 import { zipSync } from "fflate";
 import assert from "node:assert/strict";
-import { mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -29,6 +36,10 @@ test("artifact directories default to temp subdirectories", () => {
   assert.equal(client.getPackageDirectory(), join(root, "packages"));
   assert.equal(client.getResourceDirectory(), join(root, "resources"));
   assert.equal(client.getWorkflowDirectory(), join(root, "workflows"));
+  assert.equal(
+    client.getExecutionLogDirectory(),
+    join(root, "execution-logs"),
+  );
   assert.equal(client.getActionDirectory(), join(root, "actions"));
   assert.equal(
     client.getConfigurationDirectory(),
@@ -46,6 +57,10 @@ test("artifactDir config derives artifact type subdirectories", async () => {
     assert.equal(client.getPackageDirectory(), join(artifactDir, "packages"));
     assert.equal(client.getResourceDirectory(), join(artifactDir, "resources"));
     assert.equal(client.getWorkflowDirectory(), join(artifactDir, "workflows"));
+    assert.equal(
+      client.getExecutionLogDirectory(),
+      join(artifactDir, "execution-logs"),
+    );
     assert.equal(client.getActionDirectory(), join(artifactDir, "actions"));
     assert.equal(
       client.getConfigurationDirectory(),
@@ -60,12 +75,16 @@ test("artifactDir config derives artifact type subdirectories", async () => {
 test("specific artifact directories override artifactDir", async () => {
   const artifactDir = await mkdtemp(join(tmpdir(), "vcfa-artifacts-"));
   const workflowDir = await mkdtemp(join(tmpdir(), "vcfa-workflows-"));
+  const executionLogDir = await mkdtemp(join(tmpdir(), "vcfa-execution-logs-"));
   const contextDir = await mkdtemp(join(tmpdir(), "vcfa-context-"));
 
   try {
-    const client = new VroClient(config({ artifactDir, workflowDir, contextDir }));
+    const client = new VroClient(
+      config({ artifactDir, workflowDir, executionLogDir, contextDir }),
+    );
 
     assert.equal(client.getWorkflowDirectory(), workflowDir);
+    assert.equal(client.getExecutionLogDirectory(), executionLogDir);
     assert.equal(client.getContextDirectory(), contextDir);
     assert.equal(client.getPackageDirectory(), join(artifactDir, "packages"));
     assert.equal(client.getResourceDirectory(), join(artifactDir, "resources"));
@@ -77,6 +96,7 @@ test("specific artifact directories override artifactDir", async () => {
   } finally {
     await rm(artifactDir, { recursive: true, force: true });
     await rm(workflowDir, { recursive: true, force: true });
+    await rm(executionLogDir, { recursive: true, force: true });
     await rm(contextDir, { recursive: true, force: true });
   }
 });
@@ -298,7 +318,7 @@ test("getWorkflowExecution can request detailed execution data", async () => {
   assert.equal(calls[1].init.method, "GET");
 });
 
-test("getWorkflowExecutionLogs calls workflow execution logs endpoint", async () => {
+test("getWorkflowExecutionLogs calls workflow execution syslogs endpoint", async () => {
   const calls = [];
   globalThis.fetch = async (url, init) => {
     calls.push({ url: String(url), init });
@@ -318,9 +338,252 @@ test("getWorkflowExecutionLogs calls workflow execution logs endpoint", async ()
   assert.equal(logs.logs[0]["short-description"], "hello");
   assert.equal(
     calls[1].url,
-    "https://vcfa.example.test/vco/api/workflows/workflow-1/executions/execution-1/logs?maxResult=3",
+    "https://vcfa.example.test/vco/api/workflows/workflow-1/executions/execution-1/syslogs?maxResult=3",
   );
   assert.equal(calls[1].init.method, "GET");
+});
+
+test("getWorkflowExecutionLogs normalizes alternate vRO log entry shapes", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return Response.json({
+      logs: [
+        {
+          attributes: [
+            { name: "severity", value: "INFO" },
+            { name: "timeStamp", value: "2026-05-13T07:15:45Z" },
+            { name: "message", value: "hello from attributes" },
+          ],
+        },
+        {
+          log: {
+            level: "ERROR",
+            timestamp: "2026-05-13T07:15:46Z",
+            msg: "nested failure",
+          },
+        },
+      ],
+    });
+  };
+
+  const client = new VroClient(config());
+  const result = await client.getWorkflowExecutionLogs(
+    "workflow-1",
+    "execution-1",
+  );
+
+  assert.deepEqual(
+    result.logs.map((log) => ({
+      severity: log.severity,
+      timestamp: log["time-stamp"],
+      description: log["short-description"],
+    })),
+    [
+      {
+        severity: "INFO",
+        timestamp: "2026-05-13T07:15:45Z",
+        description: "hello from attributes",
+      },
+      {
+        severity: "ERROR",
+        timestamp: "2026-05-13T07:15:46Z",
+        description: "nested failure",
+      },
+    ],
+  );
+});
+
+test("exportWorkflowExecutionLogs writes JSON with info minimum level by default", async () => {
+  const executionLogDir = await mkdtemp(join(tmpdir(), "vcfa-execution-logs-"));
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return Response.json({
+      logs: [
+        { severity: "DEBUG", "short-description": "debug detail" },
+        { severity: "INFO", "short-description": "started" },
+        { severity: "WARNING", "short-description": "careful" },
+        { severity: "ERROR", "short-description": "failed" },
+        { severity: "TRACE", "short-description": "unknown" },
+      ],
+    });
+  };
+
+  try {
+    const client = new VroClient(config({ executionLogDir }));
+    const result = await client.exportWorkflowExecutionLogs({
+      workflowId: "workflow-1",
+      executionId: "execution-1",
+      fileName: "execution-1.json",
+      maxResult: 5,
+    });
+    const exported = JSON.parse(await readFile(result.path, "utf8"));
+
+    assert.equal(result.level, "info");
+    assert.equal(result.format, "json");
+    assert.equal(result.fetchedCount, 5);
+    assert.equal(result.exportedCount, 3);
+    assert.equal(exported.metadata.workflowId, "workflow-1");
+    assert.equal(exported.metadata.executionId, "execution-1");
+    assert.deepEqual(
+      exported.logs.map((log) => log["short-description"]),
+      ["started", "careful", "failed"],
+    );
+    assert.equal(
+      calls[1].url,
+      "https://vcfa.example.test/vco/api/workflows/workflow-1/executions/execution-1/syslogs?maxResult=5",
+    );
+  } finally {
+    await rm(executionLogDir, { recursive: true, force: true });
+  }
+});
+
+test("exportWorkflowExecutionLogs writes text with debug minimum level", async () => {
+  const executionLogDir = await mkdtemp(join(tmpdir(), "vcfa-execution-logs-"));
+  const calls = [];
+  globalThis.fetch = async (_url, _init) => {
+    calls.push({});
+    if (calls.length === 1) return authResponse();
+    return Response.json({
+      logs: [
+        {
+          severity: "DEBUG",
+          origin: "item1",
+          "time-stamp": "2026-05-12T10:00:00Z",
+          "short-description": "debug detail",
+        },
+        { severity: "TRACE", "short-description": "unknown detail" },
+      ],
+    });
+  };
+
+  try {
+    const client = new VroClient(config({ executionLogDir }));
+    const result = await client.exportWorkflowExecutionLogs({
+      workflowId: "workflow-1",
+      executionId: "execution-1",
+      fileName: "execution-1.txt",
+      level: "debug",
+      format: "text",
+    });
+    const text = await readFile(result.path, "utf8");
+
+    assert.equal(result.exportedCount, 2);
+    assert.match(text, /Minimum level: debug/);
+    assert.match(
+      text,
+      /2026-05-12T10:00:00Z \[DEBUG\] item1 debug detail/,
+    );
+    assert.match(text, /unknown detail/);
+  } finally {
+    await rm(executionLogDir, { recursive: true, force: true });
+  }
+});
+
+test("exportWorkflowExecutionLogs filters error minimum level", async () => {
+  const executionLogDir = await mkdtemp(join(tmpdir(), "vcfa-execution-logs-"));
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return Response.json({
+      logs: [
+        { severity: "INFO", "short-description": "started" },
+        { severity: "WARN", "short-description": "warning" },
+        { severity: "ERROR", "short-description": "failed" },
+      ],
+    });
+  };
+
+  try {
+    const client = new VroClient(config({ executionLogDir }));
+    const result = await client.exportWorkflowExecutionLogs({
+      workflowId: "workflow-1",
+      executionId: "execution-1",
+      fileName: "errors.json",
+      level: "error",
+      format: "json",
+    });
+    const exported = JSON.parse(await readFile(result.path, "utf8"));
+
+    assert.equal(result.exportedCount, 1);
+    assert.deepEqual(
+      exported.logs.map((log) => log["short-description"]),
+      ["failed"],
+    );
+  } finally {
+    await rm(executionLogDir, { recursive: true, force: true });
+  }
+});
+
+test("exportWorkflowExecutionLogs validates level, file names, and existing targets before network calls", async () => {
+  const executionLogDir = await mkdtemp(join(tmpdir(), "vcfa-execution-logs-"));
+  await writeFile(join(executionLogDir, "existing.json"), "{}");
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    return authResponse();
+  };
+
+  try {
+    const client = new VroClient(config({ executionLogDir }));
+    const base = {
+      workflowId: "workflow-1",
+      executionId: "execution-1",
+      fileName: "logs.json",
+    };
+
+    await assert.rejects(
+      () => client.exportWorkflowExecutionLogs({ ...base, level: "trace" }),
+      /level must be one of/,
+    );
+    await assert.rejects(
+      () => client.exportWorkflowExecutionLogs({ ...base, fileName: "logs.csv" }),
+      /must end with \.json or \.txt/,
+    );
+    await assert.rejects(
+      () => client.exportWorkflowExecutionLogs({ ...base, fileName: "../logs.json" }),
+      /must not contain path separators/,
+    );
+    await assert.rejects(
+      () =>
+        client.exportWorkflowExecutionLogs({
+          ...base,
+          fileName: "existing.json",
+        }),
+      /already exists/,
+    );
+    assert.equal(calls.length, 0);
+  } finally {
+    await rm(executionLogDir, { recursive: true, force: true });
+  }
+});
+
+test("exportWorkflowExecutionLogs rejects symbolic link targets", async () => {
+  const executionLogDir = await mkdtemp(join(tmpdir(), "vcfa-execution-logs-"));
+  const outsideFile = join(tmpdir(), `execution-logs-${Date.now()}.json`);
+  await writeFile(outsideFile, "{}");
+  await symlink(outsideFile, join(executionLogDir, "linked.json"));
+
+  try {
+    const client = new VroClient(config({ executionLogDir }));
+    await assert.rejects(
+      () =>
+        client.exportWorkflowExecutionLogs({
+          workflowId: "workflow-1",
+          executionId: "execution-1",
+          fileName: "linked.json",
+          overwrite: true,
+        }),
+      /must not be a symbolic link/,
+    );
+  } finally {
+    await rm(executionLogDir, { recursive: true, force: true });
+    await rm(outsideFile, { force: true });
+  }
 });
 
 test("diffActionFile compares live export to local action artifact as zip", async () => {

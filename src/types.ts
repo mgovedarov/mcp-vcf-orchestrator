@@ -142,18 +142,50 @@ export interface WorkflowExecutionList {
 }
 
 export interface WorkflowExecutionLog {
+  [key: string]: unknown;
   severity?: string;
   userName?: string;
   user?: string;
   origin?: string;
+  message?: string;
+  msg?: string;
+  description?: string;
+  shortDescription?: string;
+  longDescription?: string;
+  timeStamp?: string;
+  timeStampVal?: number;
   "short-description"?: string;
   "long-description"?: string;
   "time-stamp"?: string;
   "time-stamp-val"?: number;
+  attributes?: { name: string; value: string }[];
+  attribute?: { name: string; value: string }[];
 }
 
 export interface WorkflowExecutionLogs {
   logs?: WorkflowExecutionLog[];
+}
+
+export type WorkflowExecutionLogLevel = "debug" | "info" | "error";
+
+export type WorkflowExecutionLogExportFormat = "json" | "text";
+
+export interface ExportWorkflowExecutionLogsParams {
+  workflowId: string;
+  executionId: string;
+  fileName: string;
+  level?: WorkflowExecutionLogLevel;
+  format?: WorkflowExecutionLogExportFormat;
+  maxResult?: number;
+  overwrite?: boolean;
+}
+
+export interface ExportWorkflowExecutionLogsResult {
+  path: string;
+  level: WorkflowExecutionLogLevel;
+  format: WorkflowExecutionLogExportFormat;
+  fetchedCount: number;
+  exportedCount: number;
 }
 
 // --- Actions ---
@@ -547,6 +579,7 @@ export interface VroClientConfig {
   projectPackageDescription?: string;
   resourceDir?: string;
   workflowDir?: string;
+  executionLogDir?: string;
   actionDir?: string;
   configurationDir?: string;
   contextDir?: string;

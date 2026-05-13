@@ -13,6 +13,8 @@ import type {
   DeploymentRequest,
   DiffActionFileParams,
   DiffWorkflowFileParams,
+  ExportWorkflowExecutionLogsParams,
+  ExportWorkflowExecutionLogsResult,
   PackageExportOptions,
   PackageImportDetails,
   PackageImportOptions,
@@ -156,12 +158,22 @@ export class VroClient {
     return this.workflows.getWorkflowDirectory();
   }
 
+  getExecutionLogDirectory(): string {
+    return this.workflows.getExecutionLogDirectory();
+  }
+
   exportWorkflowFile(
     id: string,
     fileName: string,
     overwrite = false,
   ): Promise<string> {
     return this.workflows.exportWorkflowFile(id, fileName, overwrite);
+  }
+
+  exportWorkflowExecutionLogs(
+    params: ExportWorkflowExecutionLogsParams,
+  ): Promise<ExportWorkflowExecutionLogsResult> {
+    return this.workflows.exportWorkflowExecutionLogs(params);
   }
 
   exportWorkflowBuffer(id: string): Promise<Buffer> {

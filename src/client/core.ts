@@ -37,6 +37,7 @@ export class VroHttpClient {
   readonly projectPackageDescription?: string;
   readonly resourceDir: string;
   readonly workflowDir: string;
+  readonly executionLogDir: string;
   readonly actionDir: string;
   readonly configurationDir: string;
   readonly contextDir: string;
@@ -69,6 +70,9 @@ export class VroHttpClient {
     );
     this.workflowDir = resolve(
       config.workflowDir ?? join(artifactDir, "workflows"),
+    );
+    this.executionLogDir = resolve(
+      config.executionLogDir ?? join(artifactDir, "execution-logs"),
     );
     this.actionDir = resolve(config.actionDir ?? join(artifactDir, "actions"));
     this.configurationDir = resolve(
