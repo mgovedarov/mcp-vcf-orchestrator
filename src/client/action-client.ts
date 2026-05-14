@@ -235,7 +235,6 @@ export class ActionClient {
     form.append("file", new Blob([new Uint8Array(buffer)]), fileName);
     form.append("categoryName", categoryName);
 
-    this.http.assertOperationSupported("POST", path);
     const url = `${this.http.baseUrl}${path}`;
     console.error(`[vro-client] POST ${path}`);
 

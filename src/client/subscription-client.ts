@@ -11,7 +11,9 @@ export class SubscriptionClient {
   listSubscriptions(projectId?: string): Promise<SubscriptionList> {
     let path = "/subscriptions";
     if (projectId) {
-      path += `?$filter=projectId eq '${encodeURIComponent(projectId)}'`;
+      // Escape single quotes for OData string literal ('' is the OData escape for ').
+      const safeProjectId = encodeURIComponent(projectId.replace(/'/g, "''"));
+      path += `?$filter=projectId eq '${safeProjectId}'`;
     }
     return this.http.get<SubscriptionList>(path, this.http.eventBrokerBaseUrl);
   }

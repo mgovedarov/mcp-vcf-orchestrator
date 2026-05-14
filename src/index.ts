@@ -18,6 +18,7 @@ import { registerSubscriptionTools } from "./tools/subscription-tools.js";
 import { registerTemplateTools } from "./tools/template-tools.js";
 import { registerWorkflowTools } from "./tools/workflow-tools.js";
 import { VroClient } from "./vro-client.js";
+import { normalizeTargetPlatform as parseTargetPlatform } from "./client/core.js";
 import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
 
@@ -146,17 +147,14 @@ async function main(): Promise<void> {
 }
 
 function normalizeTargetPlatform(value: string | undefined): "vcfa" | "vra8" {
-  const normalized = value?.toLowerCase();
-  if (normalized === undefined || normalized === "" || normalized === "vcfa") {
-    return "vcfa";
+  try {
+    return parseTargetPlatform(value);
+  } catch {
+    console.error(
+      `ERROR: ${TARGET_PLATFORM_ENV} must be one of: vcfa, vra8.`,
+    );
+    process.exit(1);
   }
-  if (normalized === "vra8") {
-    return "vra8";
-  }
-  console.error(
-    `ERROR: ${TARGET_PLATFORM_ENV} must be one of: vcfa, vra8.`,
-  );
-  process.exit(1);
 }
 
 main().catch((error) => {

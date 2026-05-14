@@ -73,7 +73,7 @@ export function sanitizeErrorBody(rawText: string, res?: Response): string {
   return parts.join("\n");
 }
 
-function normalizeTargetPlatform(
+export function normalizeTargetPlatform(
   value: VroClientConfig["targetPlatform"] | string | undefined,
 ): VroTargetPlatform {
   const normalized = value?.toLowerCase();
