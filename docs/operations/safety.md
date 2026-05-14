@@ -39,6 +39,10 @@ Configuration values and workflow/action scripts may contain sensitive informati
 
 API error messages are sanitized before being surfaced to MCP callers. Only safe diagnostic fields — HTTP status, endpoint, `message`, `statusCode`, `code`, `error`, and `errors` — are included. Raw response bodies are never passed through verbatim, which prevents vRO error responses from echoing sensitive request content such as credentials or tokens.
 
+## Token Refresh
+
+On the default VCFA platform, if a request receives a `401` or `403` response the server automatically clears the cached bearer token, re-authenticates, and retries the request exactly once. This covers JSON API calls, binary exports, and multipart uploads. A second consecutive failure after re-authentication is surfaced as an error without further retry. The `vra8` Basic-auth platform does not retry because a `401` means the credentials are wrong.
+
 ## Destructive Operations
 
 Before deletion, confirm:

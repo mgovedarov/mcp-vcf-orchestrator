@@ -209,6 +209,54 @@ export class VroHttpClient {
     return `Bearer ${await this.ensureAuthenticated()}`;
   }
 
+  /**
+   * Perform an authenticated fetch with automatic token refresh on 401/403.
+   * On the default `vcfa` platform, if the response status is 401 or 403 the
+   * cached bearer token is cleared, a fresh token is obtained, and the request
+   * is retried exactly once.  The `vra8` Basic-auth platform never retries
+   * because a 401 means the credentials are wrong.
+   *
+   * Callers receive the raw `Response` and are responsible for checking
+   * `res.ok` and reading the body.
+   */
+  async authenticatedFetch(
+    url: string,
+    init: RequestInit & { headers: Record<string, string> },
+    options?: { timeout?: number },
+  ): Promise<Response> {
+    const timeout = options?.timeout ?? 30_000;
+    const authorization = await this.authorizationHeader();
+    init.headers["Authorization"] = authorization;
+
+    const doFetch = async (): Promise<Response> => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+      try {
+        return await fetch(url, { ...init, signal: controller.signal });
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    };
+
+    const res = await doFetch();
+
+    if (
+      (res.status === 401 || res.status === 403) &&
+      this.targetPlatform !== "vra8"
+    ) {
+      console.error(
+        "[vro-client] Received %d, clearing cached token and re-authenticating…",
+        res.status,
+      );
+      this.token = null;
+      await this.authenticate();
+      init.headers["Authorization"] = await this.authorizationHeader();
+      return doFetch();
+    }
+
+    return res;
+  }
+
   assertOperationSupported(
     method: string,
     path: string,
@@ -239,12 +287,10 @@ export class VroHttpClient {
     overrideBaseUrl?: string,
   ): Promise<T> {
     this.assertOperationSupported(method, path, overrideBaseUrl);
-    const authorization = await this.authorizationHeader();
     const url = `${overrideBaseUrl ?? this.baseUrl}${path}`;
     console.error(`[vro-client] ${method} ${path}`);
 
     const headers: Record<string, string> = {
-      Authorization: authorization,
       Accept: "application/json",
     };
 
@@ -252,20 +298,14 @@ export class VroHttpClient {
       headers["Content-Type"] = "application/json";
     }
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30_000);
-
-    let res: Response;
-    try {
-      res = await fetch(url, {
+    const res = await this.authenticatedFetch(
+      url,
+      {
         method,
         headers,
         body: body !== undefined ? JSON.stringify(body) : undefined,
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timeoutId);
-    }
+      },
+    );
 
     if (!res.ok) {
       const text = await res.text().catch(() => "");

@@ -135,25 +135,14 @@ export class ConfigurationClient {
 
     const path = `/configurations/${encodeURIComponent(id)}`;
     this.http.assertOperationSupported("GET", path);
-    const authorization = await this.http.authorizationHeader();
     const url = `${this.http.baseUrl}${path}`;
     console.error(`[vro-client] GET ${path}`);
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60_000);
-    let res: Response;
-    try {
-      res = await fetch(url, {
-        method: "GET",
-        headers: {
-          Authorization: authorization,
-          Accept: "application/zip",
-        },
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timeoutId);
-    }
+    const res = await this.http.authenticatedFetch(
+      url,
+      { method: "GET", headers: { Accept: "application/zip" } },
+      { timeout: 60_000 },
+    );
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(
@@ -188,26 +177,14 @@ export class ConfigurationClient {
     form.append("categoryId", categoryId);
 
     this.http.assertOperationSupported("POST", path);
-    const authorization = await this.http.authorizationHeader();
     const url = `${this.http.baseUrl}${path}`;
     console.error(`[vro-client] POST ${path}`);
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60_000);
-    let res: Response;
-    try {
-      res = await fetch(url, {
-        method: "POST",
-        headers: {
-          Authorization: authorization,
-          Accept: "application/json",
-        },
-        body: form,
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timeoutId);
-    }
+    const res = await this.http.authenticatedFetch(
+      url,
+      { method: "POST", headers: { Accept: "application/json" }, body: form },
+      { timeout: 60_000 },
+    );
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(

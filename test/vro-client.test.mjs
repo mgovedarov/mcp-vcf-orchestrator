@@ -2469,3 +2469,158 @@ test("sanitizeErrorBody via auth failure path does not expose sensitive body con
     },
   );
 });
+
+// ─── Token refresh tests (VCFO-038) ──────────────────────────────────────────
+
+test("401 after cached token triggers one re-auth and retry then succeeds", async () => {
+  const calls = [];
+  let authCount = 0;
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    // Auth calls → always succeed
+    if (String(url).includes("/cloudapi/1.0.0/sessions")) {
+      authCount++;
+      return new Response("", {
+        status: 200,
+        headers: { "x-vmware-vcloud-access-token": `token-${authCount}` },
+      });
+    }
+    // First API call → 401 (stale token)
+    if (calls.filter((c) => !c.url.includes("/sessions")).length === 1) {
+      return new Response("", { status: 401, statusText: "Unauthorized" });
+    }
+    // Retry → success
+    return Response.json({ link: [], total: 0 });
+  };
+
+  const client = new VroClient(config());
+  const result = await client.listWorkflows();
+
+  assert.equal(result.total, 0);
+  // 1st auth + 1st API call (401) + 2nd auth (refresh) + retry = 4
+  assert.equal(calls.length, 4);
+  assert.equal(authCount, 2, "should have authenticated twice");
+  // The retry should use the refreshed token
+  const retryCall = calls[3];
+  assert.equal(retryCall.init.headers.Authorization, "Bearer token-2");
+});
+
+test("second consecutive 401 after re-auth is surfaced without infinite loop", async () => {
+  let authCount = 0;
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/cloudapi/1.0.0/sessions")) {
+      authCount++;
+      return new Response("", {
+        status: 200,
+        headers: { "x-vmware-vcloud-access-token": `token-${authCount}` },
+      });
+    }
+    // Always return 401
+    return new Response(JSON.stringify({ message: "Token rejected" }), {
+      status: 401,
+      statusText: "Unauthorized",
+    });
+  };
+
+  const client = new VroClient(config());
+  await assert.rejects(() => client.listWorkflows(), /401 Unauthorized/);
+  assert.equal(authCount, 2, "should authenticate exactly twice (initial + refresh)");
+});
+
+test("403 triggers the same token refresh as 401", async () => {
+  const calls = [];
+  let authCount = 0;
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url) });
+    if (String(url).includes("/cloudapi/1.0.0/sessions")) {
+      authCount++;
+      return new Response("", {
+        status: 200,
+        headers: { "x-vmware-vcloud-access-token": `token-${authCount}` },
+      });
+    }
+    if (calls.filter((c) => !c.url.includes("/sessions")).length === 1) {
+      return new Response("", { status: 403, statusText: "Forbidden" });
+    }
+    return Response.json({ link: [], total: 0 });
+  };
+
+  const client = new VroClient(config());
+  const result = await client.listWorkflows();
+  assert.equal(result.total, 0);
+  assert.equal(authCount, 2, "should re-authenticate on 403");
+});
+
+test("vra8 mode does NOT retry on 401 (Basic auth failure is terminal)", async () => {
+  const calls = [];
+  globalThis.fetch = async (url) => {
+    calls.push({ url: String(url) });
+    return new Response(JSON.stringify({ message: "Bad credentials" }), {
+      status: 401,
+      statusText: "Unauthorized",
+    });
+  };
+
+  const client = new VroClient(config({ targetPlatform: "vra8" }));
+  await assert.rejects(() => client.listWorkflows(), /401 Unauthorized/);
+  // Only one call — no re-auth attempt for vra8
+  assert.equal(calls.length, 1, "vra8 should not retry on 401");
+});
+
+test("manual binary export path retries on 401 with refreshed token", async () => {
+  let authCount = 0;
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (String(url).includes("/cloudapi/1.0.0/sessions")) {
+      authCount++;
+      return new Response("", {
+        status: 200,
+        headers: { "x-vmware-vcloud-access-token": `token-${authCount}` },
+      });
+    }
+    // First content call → 401
+    if (calls.filter((c) => c.url.includes("/content/workflows/")).length === 1) {
+      return new Response("", { status: 401, statusText: "Unauthorized" });
+    }
+    // Retry → return a minimal zip buffer
+    return new Response(new Uint8Array([0x50, 0x4b, 0x03, 0x04]), {
+      status: 200,
+      headers: { "Content-Type": "application/zip" },
+    });
+  };
+
+  const client = new VroClient(config());
+  // exportWorkflowBuffer is the manual-fetch binary path
+  const buffer = await client.exportWorkflowBuffer("wf-1");
+  assert.ok(Buffer.isBuffer(buffer), "should return a Buffer");
+  assert.equal(authCount, 2, "should have re-authenticated for binary export");
+});
+
+test("token refresh does not re-authenticate when authenticate() itself fails", async () => {
+  let authCount = 0;
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/cloudapi/1.0.0/sessions")) {
+      authCount++;
+      if (authCount === 1) {
+        return new Response("", {
+          status: 200,
+          headers: { "x-vmware-vcloud-access-token": "token-1" },
+        });
+      }
+      // Second auth attempt fails
+      return new Response(JSON.stringify({ message: "Service unavailable" }), {
+        status: 503,
+        statusText: "Service Unavailable",
+      });
+    }
+    return new Response("", { status: 401, statusText: "Unauthorized" });
+  };
+
+  const client = new VroClient(config());
+  await assert.rejects(
+    () => client.listWorkflows(),
+    /VCF authentication failed: 503/,
+  );
+  assert.equal(authCount, 2, "should attempt re-auth once then surface the auth failure");
+});
