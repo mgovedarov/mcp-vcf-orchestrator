@@ -37,6 +37,8 @@ Configuration values and workflow/action scripts may contain sensitive informati
 - redact sensitive configuration attribute values
 - prefer names, types, IDs, and descriptions over raw values
 
+API error messages are sanitized before being surfaced to MCP callers. Only safe diagnostic fields — HTTP status, endpoint, `message`, `statusCode`, `code`, `error`, and `errors` — are included. Raw response bodies are never passed through verbatim, which prevents vRO error responses from echoing sensitive request content such as credentials or tokens.
+
 ## Destructive Operations
 
 Before deletion, confirm:

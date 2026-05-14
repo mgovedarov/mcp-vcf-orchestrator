@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import type { ResourceElement, ResourceElementList } from "../types.js";
 import { getLinkAttrs, type AttributeLink } from "./attrs.js";
-import type { VroHttpClient } from "./core.js";
+import { sanitizeErrorBody, type VroHttpClient } from "./core.js";
 import {
   assertRealPathInside,
   getExistingFile,
@@ -100,7 +100,7 @@ export class ResourceClient {
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(
-        `vRO API error: ${res.status} ${res.statusText} — export resource\n${text}`,
+        `vRO API error: ${res.status} ${res.statusText} — export resource\n${sanitizeErrorBody(text, res)}`,
       );
     }
     const buffer = Buffer.from(await res.arrayBuffer());
@@ -156,7 +156,7 @@ export class ResourceClient {
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(
-        `vRO API error: ${res.status} ${res.statusText} — POST ${path}\n${text}`,
+        `vRO API error: ${res.status} ${res.statusText} — POST ${path}\n${sanitizeErrorBody(text, res)}`,
       );
     }
   }

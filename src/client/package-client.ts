@@ -14,7 +14,7 @@ import {
   preflightPackageFile,
   type ArtifactPreflightReport,
 } from "./artifact-preflight.js";
-import type { VroHttpClient } from "./core.js";
+import { sanitizeErrorBody, type VroHttpClient } from "./core.js";
 import {
   assertRealPathInside,
   getExistingFile,
@@ -242,7 +242,7 @@ export class PackageClient {
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(
-        `vRO API error: ${res.status} ${res.statusText} — export package\n${text}`,
+        `vRO API error: ${res.status} ${res.statusText} — export package\n${sanitizeErrorBody(text, res)}`,
       );
     }
     const buffer = Buffer.from(await res.arrayBuffer());
@@ -299,7 +299,7 @@ export class PackageClient {
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(
-        `vRO API error: ${res.status} ${res.statusText} — import package\n${text}`,
+        `vRO API error: ${res.status} ${res.statusText} — import package\n${sanitizeErrorBody(text, res)}`,
       );
     }
   }
@@ -345,7 +345,7 @@ export class PackageClient {
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(
-        `vRO API error: ${res.status} ${res.statusText} — package import details\n${text}`,
+        `vRO API error: ${res.status} ${res.statusText} — package import details\n${sanitizeErrorBody(text, res)}`,
       );
     }
     return (await res.json()) as PackageImportDetails;

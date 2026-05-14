@@ -8,6 +8,71 @@ const UNSUPPORTED_AUTOMATION_SERVICES =
 const UNSUPPORTED_VRO_WRITE =
   "This vRO operation is not supported in VCFA_TARGET_PLATFORM=vra8 mode. The vRA/vRO 8 compatibility phase supports read operations plus workflow execution and execution logs only.";
 
+const SAFE_ERROR_BODY_KEYS = new Set(["message", "statusCode", "code", "error", "errors"]);
+const NON_JSON_BODY_LIMIT = 200;
+const ERRORS_ARRAY_LIMIT = 5;
+
+/**
+ * Sanitize a raw HTTP response body before including it in a thrown error.
+ * Extracts only known-safe diagnostic fields from JSON bodies; truncates
+ * non-JSON bodies. Never surfaces unbounded raw response content.
+ * Optionally prepends a correlation ID header when res is provided.
+ */
+export function sanitizeErrorBody(rawText: string, res?: Response): string {
+  const parts: string[] = [];
+
+  if (res) {
+    for (const header of ["x-request-id", "x-correlation-id", "x-vcf-requestid"]) {
+      const val = res.headers.get(header);
+      if (val) {
+        parts.push(`${header}: ${val}`);
+        break;
+      }
+    }
+  }
+
+  if (!rawText) return parts.join("\n");
+
+  try {
+    const parsed: unknown = JSON.parse(rawText);
+    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+      const obj = parsed as Record<string, unknown>;
+      const safe: Record<string, unknown> = {};
+      for (const key of SAFE_ERROR_BODY_KEYS) {
+        if (!(key in obj)) continue;
+        const val = obj[key];
+        if (key === "errors" && Array.isArray(val)) {
+          safe.errors = val.slice(0, ERRORS_ARRAY_LIMIT).map((e: unknown) => {
+            if (typeof e === "string") return e;
+            if (typeof e === "object" && e !== null) {
+              const msg = (e as Record<string, unknown>).message;
+              if (typeof msg === "string") return msg;
+            }
+            return "[error]";
+          });
+        } else if (typeof val === "string" || typeof val === "number") {
+          safe[key] = val;
+        }
+      }
+      if (Object.keys(safe).length > 0) {
+        parts.push(JSON.stringify(safe));
+        return parts.join("\n");
+      }
+      parts.push("[no diagnostic fields in response]");
+      return parts.join("\n");
+    }
+  } catch {
+    // not valid JSON
+  }
+
+  // Non-JSON: truncate to limit exposure
+  const excerpt = rawText.length <= NON_JSON_BODY_LIMIT
+    ? rawText
+    : `${rawText.slice(0, NON_JSON_BODY_LIMIT)}…`;
+  parts.push(`[non-JSON body: ${excerpt}]`);
+  return parts.join("\n");
+}
+
 function normalizeTargetPlatform(
   value: VroClientConfig["targetPlatform"] | string | undefined,
 ): VroTargetPlatform {
@@ -122,7 +187,7 @@ export class VroHttpClient {
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(
-        `VCF authentication failed: ${res.status} ${res.statusText}\n${text}`,
+        `VCF authentication failed: ${res.status} ${res.statusText}\n${sanitizeErrorBody(text, res)}`,
       );
     }
 
@@ -205,7 +270,7 @@ export class VroHttpClient {
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(
-        `vRO API error: ${res.status} ${res.statusText} — ${method} ${path}\n${text}`,
+        `vRO API error: ${res.status} ${res.statusText} — ${method} ${path}\n${sanitizeErrorBody(text, res)}`,
       );
     }
 
