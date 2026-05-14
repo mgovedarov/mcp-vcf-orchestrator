@@ -529,6 +529,8 @@ test("get-workflow-execution-logs exports when fileName is provided", async () =
     maxResult: 3,
   });
 
+  // readOnlyHint stays true: file write is conditional on the optional fileName
+  // param; the primary function is read-only log retrieval. See VCFO-040.
   assert.equal(
     configs.get("get-workflow-execution-logs").annotations.readOnlyHint,
     true,
@@ -697,4 +699,16 @@ test("diff-workflow-file is read-only and delegates to client", async () => {
   assert.deepEqual(diffParams, input);
   assert.equal(result.isError, undefined);
   assert.match(result.content[0].text, /No meaningful workflow changes/);
+});
+
+test("export-workflow-file is not read-only", () => {
+  const configs = new Map();
+  const server = {
+    registerTool(name, config, _handler) {
+      configs.set(name, config);
+    },
+  };
+  registerWorkflowTools(server, {});
+
+  assert.equal(configs.get("export-workflow-file").annotations.readOnlyHint, false);
 });
