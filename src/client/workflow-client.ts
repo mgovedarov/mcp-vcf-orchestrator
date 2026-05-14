@@ -21,6 +21,7 @@ import type {
 } from "../types.js";
 import { getLinkAttrs, parseAttrs } from "./attrs.js";
 import type { VroHttpClient } from "./core.js";
+import { sanitizeErrorBody } from "./core.js";
 import {
   diffWorkflowArtifacts,
   ensurePreflightPassed,
@@ -818,7 +819,7 @@ export class WorkflowClient {
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(
-        `vRO API error: ${res.status} ${res.statusText} — export workflow\n${text}`,
+        `vRO API error: ${res.status} ${res.statusText} — export workflow\n${sanitizeErrorBody(text, res)}`,
       );
     }
     return Buffer.from(await res.arrayBuffer());
@@ -921,7 +922,7 @@ export class WorkflowClient {
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(
-        `vRO API error: ${res.status} ${res.statusText} — import workflow\n${text}`,
+        `vRO API error: ${res.status} ${res.statusText} — import workflow\n${sanitizeErrorBody(text, res)}`,
       );
     }
   }

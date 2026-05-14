@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { buildWorkflowArtifact } from "../dist/client/workflow-artifact.js";
+import { sanitizeErrorBody } from "../dist/client/core.js";
 import { VroClient } from "../dist/vro-client.js";
 
 const config = (overrides = {}) => ({
@@ -2391,4 +2392,80 @@ test("runDeploymentAction omits absent optional fields", async () => {
   assert.deepEqual(JSON.parse(calls[1].init.body), {
     actionId: "Deployment.Reboot",
   });
+});
+
+// ─── sanitizeErrorBody unit tests ─────────────────────────────────────────────
+
+test("sanitizeErrorBody includes safe JSON fields", () => {
+  const body = JSON.stringify({ message: "Not found", statusCode: 404 });
+  const result = sanitizeErrorBody(body);
+  assert.ok(result.includes("Not found"), "should include message");
+  assert.ok(result.includes("404"), "should include statusCode");
+});
+
+test("sanitizeErrorBody strips sensitive fields from JSON", () => {
+  const body = JSON.stringify({
+    message: "Auth failed",
+    password: "s3cr3t",
+    token: "tok123",
+    secret: "mysecret",
+  });
+  const result = sanitizeErrorBody(body);
+  assert.ok(result.includes("Auth failed"), "should include message");
+  assert.ok(!result.includes("s3cr3t"), "should not include password value");
+  assert.ok(!result.includes("tok123"), "should not include token value");
+  assert.ok(!result.includes("mysecret"), "should not include secret value");
+});
+
+test("sanitizeErrorBody truncates non-JSON body", () => {
+  const longHtml = "<html>" + "x".repeat(500) + "</html>";
+  const result = sanitizeErrorBody(longHtml);
+  assert.ok(result.includes("[non-JSON body:"), "should flag non-JSON");
+  assert.ok(result.length < longHtml.length, "should be shorter than input");
+});
+
+test("sanitizeErrorBody handles empty body", () => {
+  const result = sanitizeErrorBody("");
+  assert.equal(result, "", "empty body should produce empty string");
+});
+
+test("sanitizeErrorBody surfaces nested errors array messages", () => {
+  const body = JSON.stringify({
+    errors: [{ message: "Workflow not found" }, { message: "Permission denied" }],
+  });
+  const result = sanitizeErrorBody(body);
+  assert.ok(result.includes("Workflow not found"), "should include first error message");
+  assert.ok(result.includes("Permission denied"), "should include second error message");
+});
+
+test("sanitizeErrorBody includes correlation ID header when present", () => {
+  const body = JSON.stringify({ message: "Bad request" });
+  const res = new Response(body, {
+    status: 400,
+    headers: { "x-request-id": "req-abc-123" },
+  });
+  const result = sanitizeErrorBody(body, res);
+  assert.ok(result.includes("req-abc-123"), "should include correlation ID");
+  assert.ok(result.includes("Bad request"), "should include message");
+});
+
+test("sanitizeErrorBody via auth failure path does not expose sensitive body content", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url) });
+    return new Response(
+      JSON.stringify({ message: "Unauthorized", internalToken: "leaked-token" }),
+      { status: 401, statusText: "Unauthorized" },
+    );
+  };
+
+  const client = new VroClient(config());
+  const err = await assert.rejects(
+    () => client.listWorkflows(),
+    (e) => {
+      assert.ok(!e.message.includes("leaked-token"), "should not expose internalToken value");
+      assert.ok(e.message.includes("Unauthorized"), "should include message field");
+      return true;
+    },
+  );
 });

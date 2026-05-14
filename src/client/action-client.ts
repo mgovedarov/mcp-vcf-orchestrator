@@ -10,6 +10,7 @@ import {
   type ArtifactPreflightReport,
 } from "./artifact-preflight.js";
 import type { VroHttpClient } from "./core.js";
+import { sanitizeErrorBody } from "./core.js";
 import {
   assertRealPathInside,
   getExistingFile,
@@ -188,7 +189,7 @@ export class ActionClient {
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(
-        `vRO API error: ${res.status} ${res.statusText} — export action\n${text}`,
+        `vRO API error: ${res.status} ${res.statusText} — export action\n${sanitizeErrorBody(text, res)}`,
       );
     }
     return Buffer.from(await res.arrayBuffer());
@@ -270,7 +271,7 @@ export class ActionClient {
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(
-        `vRO API error: ${res.status} ${res.statusText} — import action\n${text}`,
+        `vRO API error: ${res.status} ${res.statusText} — import action\n${sanitizeErrorBody(text, res)}`,
       );
     }
   }
