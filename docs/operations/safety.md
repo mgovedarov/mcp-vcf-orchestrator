@@ -27,6 +27,8 @@ Artifact file tools require plain file names under configured artifact directori
 - unsafe symlink export targets
 - existing export targets unless `overwrite: true`
 
+Export and snapshot tools default `overwrite` to `false`. Pass `overwrite: true` explicitly when replacing an existing local artifact.
+
 ## Secrets
 
 Configuration values and workflow/action scripts may contain sensitive information. When summarizing output:

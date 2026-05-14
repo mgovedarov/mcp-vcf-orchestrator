@@ -529,6 +529,8 @@ test("get-workflow-execution-logs exports when fileName is provided", async () =
     maxResult: 3,
   });
 
+  // readOnlyHint stays true: file write is conditional on the optional fileName
+  // param; the primary function is read-only log retrieval. See VCFO-040.
   assert.equal(
     configs.get("get-workflow-execution-logs").annotations.readOnlyHint,
     true,
