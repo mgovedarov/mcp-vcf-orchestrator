@@ -18,7 +18,13 @@ import { registerSubscriptionTools } from "./tools/subscription-tools.js";
 import { registerTemplateTools } from "./tools/template-tools.js";
 import { registerWorkflowTools } from "./tools/workflow-tools.js";
 import { VroClient } from "./vro-client.js";
+import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
+
+const require = createRequire(import.meta.url);
+const { version: SERVER_VERSION } = require("../package.json") as {
+  version: string;
+};
 
 const DEFAULT_ARTIFACT_DIR = join(process.cwd(), "artifacts");
 const TARGET_PLATFORM_ENV = "VCFA_TARGET_PLATFORM";
@@ -81,7 +87,7 @@ async function main(): Promise<void> {
 
   // Create MCP server
   const server = new McpServer(
-    { name: "vcfa-server", version: "1.0.0" },
+    { name: "vcfa-server", version: SERVER_VERSION },
     {
       instructions: [
         "This server connects to a VCF Automation instance by default, or to vRA/vRO 8.12+ when VCFA_TARGET_PLATFORM is set to vra8.",
