@@ -2460,7 +2460,7 @@ test("sanitizeErrorBody via auth failure path does not expose sensitive body con
   };
 
   const client = new VroClient(config());
-  const err = await assert.rejects(
+  await assert.rejects(
     () => client.listWorkflows(),
     (e) => {
       assert.ok(!e.message.includes("leaked-token"), "should not expose internalToken value");

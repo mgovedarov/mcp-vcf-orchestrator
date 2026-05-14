@@ -1,8 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import type { ResourceElement, ResourceElementList } from "../types.js";
 import { getLinkAttrs, type AttributeLink } from "./attrs.js";
-import type { VroHttpClient } from "./core.js";
-import { sanitizeErrorBody } from "./core.js";
+import { sanitizeErrorBody, type VroHttpClient } from "./core.js";
 import {
   assertRealPathInside,
   getExistingFile,

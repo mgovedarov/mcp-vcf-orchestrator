@@ -7,8 +7,7 @@ import {
   preflightConfigurationFile,
   type ArtifactPreflightReport,
 } from "./artifact-preflight.js";
-import type { VroHttpClient } from "./core.js";
-import { sanitizeErrorBody } from "./core.js";
+import { sanitizeErrorBody, type VroHttpClient } from "./core.js";
 import {
   assertRealPathInside,
   getExistingFile,

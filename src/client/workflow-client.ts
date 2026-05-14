@@ -20,8 +20,7 @@ import type {
   WorkflowList,
 } from "../types.js";
 import { getLinkAttrs, parseAttrs } from "./attrs.js";
-import type { VroHttpClient } from "./core.js";
-import { sanitizeErrorBody } from "./core.js";
+import { sanitizeErrorBody, type VroHttpClient } from "./core.js";
 import {
   diffWorkflowArtifacts,
   ensurePreflightPassed,
