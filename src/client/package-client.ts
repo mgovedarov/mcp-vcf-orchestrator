@@ -264,7 +264,6 @@ export class PackageClient {
     const buffer = await readFile(srcPath);
     const form = new FormData();
     form.append("file", new Blob([new Uint8Array(buffer)]), fileName);
-    this.http.assertOperationSupported("POST", path);
     const url = `${this.http.baseUrl}${path}`;
     console.error(`[vro-client] POST ${path}`);
 
@@ -298,7 +297,6 @@ export class PackageClient {
     const buffer = await readFile(srcPath);
     const form = new FormData();
     form.append("file", new Blob([new Uint8Array(buffer)]), fileName);
-    this.http.assertOperationSupported("POST", path);
     const url = `${this.http.baseUrl}${path}`;
     console.error(`[vro-client] POST ${path}`);
 
