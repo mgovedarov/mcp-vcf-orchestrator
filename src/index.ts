@@ -17,8 +17,8 @@ import { registerResourceTools } from "./tools/resource-tools.js";
 import { registerSubscriptionTools } from "./tools/subscription-tools.js";
 import { registerTemplateTools } from "./tools/template-tools.js";
 import { registerWorkflowTools } from "./tools/workflow-tools.js";
-import { VroClient } from "./vro-client.js";
 import { normalizeTargetPlatform as parseTargetPlatform } from "./client/core.js";
+import { VroClient } from "./vro-client.js";
 import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
 
