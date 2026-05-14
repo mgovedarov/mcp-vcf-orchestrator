@@ -1,6 +1,10 @@
 # Safety
 
-The server includes read-only discovery tools and write-capable tools. Treat every live write operation as an environment change.
+Tools fall into three categories:
+
+- **Read-only discovery** (`readOnlyHint: true`): list, get, preflight, and diff tools. They do not write local files or mutate live VCFA/vRO state. `get-workflow-execution-logs` is also read-only by default; it only writes a local file when the optional `fileName` parameter is provided.
+- **Local artifact writes** (`readOnlyHint: false`, no `confirm` required): export, scaffold, and snapshot tools — for example `export-workflow-file`, `export-action-file`, `export-configuration-file`, `export-resource-element`, `export-package`, `export-project-package`, `scaffold-workflow-file`, `collect-context-snapshot`, and `prepare-artifact-promotion`. These write files under configured artifact directories and default `overwrite` to `false`. They do not mutate live VCFA/vRO state.
+- **Live VCFA/vRO mutations** (`readOnlyHint: false`, `confirm: true` required): create, update, import, delete, run, and deployment day-2 action tools. Treat every live write operation as an environment change.
 
 ## Confirmation Required
 
@@ -11,7 +15,6 @@ These operations should be performed only after explicit user confirmation:
 - importing workflows, actions, configurations, packages, or resource elements
 - deleting workflows, actions, configurations, resource elements, packages, templates, deployments, or subscriptions
 - running deployment day-2 actions
-- overwriting local artifact export targets
 
 ## Artifact Path Safety
 

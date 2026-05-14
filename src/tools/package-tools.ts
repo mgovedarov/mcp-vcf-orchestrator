@@ -188,7 +188,7 @@ export function registerPackageTools(
           .describe("Overwrite the file if it already exists (default: false)"),
         ...packageExportOptionsSchema,
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: false },
     },
     async ({
       name,
@@ -747,7 +747,7 @@ export function registerPackageTools(
         overwrite: z.boolean().optional(),
         ...packageExportOptionsSchema,
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: false },
     },
     async ({
       packageName,

@@ -549,7 +549,7 @@ test("collect-context-snapshot tool delegates and reports saved paths", async ()
     },
   });
 
-  assert.equal(configs.get("collect-context-snapshot").annotations.readOnlyHint, true);
+  assert.equal(configs.get("collect-context-snapshot").annotations.readOnlyHint, false);
   assert.ok(configs.get("collect-context-snapshot").inputSchema.shape.profile);
   const result = await handlers.get("collect-context-snapshot")({
     domains: ["workflows"],

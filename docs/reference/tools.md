@@ -1,6 +1,10 @@
 # Tool Reference
 
-Tools are grouped by operating domain. Read-only tools are safe for discovery; write and delete tools can modify live VCFA/vRO state or local artifact files.
+Tools are grouped by operating domain and carry MCP annotation hints:
+
+- **`readOnlyHint: true`** — list, get, preflight, and diff tools. Safe for discovery; do not write local files or mutate live state. (`get-workflow-execution-logs` is read-only by default; it writes a local file only when `fileName` is provided.)
+- **`readOnlyHint: false` (no `confirm`)** — export, scaffold, and snapshot tools. Write files under configured artifact directories; `overwrite` defaults to `false`. Do not mutate live VCFA/vRO state.
+- **`readOnlyHint: false` with `confirm: true`** — create, update, import, run, and delete tools. Mutate live VCFA/vRO state and require explicit confirmation.
 
 Each tool lists its input schema in a collapsible parameters section. Required confirmation fields such as `confirm` must be set to `true` before the tool performs the write or destructive operation.
 

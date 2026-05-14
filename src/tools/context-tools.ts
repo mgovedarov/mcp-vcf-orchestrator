@@ -65,7 +65,7 @@ export function registerContextTools(
             "Snapshot profile. Use vcfaBuiltIns to collect workflows in subfolders below Library and actions in com.vmware modules.",
           ),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: false },
     },
     async (params): Promise<CallToolResult> => {
       try {

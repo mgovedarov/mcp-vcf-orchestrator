@@ -211,6 +211,6 @@ npm run docs:dev
 
 ## Safety
 
-Use read-only discovery tools before live writes. Import, delete, deployment action, and overwrite operations require explicit confirmation. Local artifact tools only read or write under configured artifact directories and reject unsafe paths.
+Use read-only discovery tools before live writes. Import, delete, deployment action, and run operations require explicit confirmation (`confirm: true`). Local artifact export and snapshot tools write files under configured artifact directories, are not advertised as read-only, and reject unsafe paths. They do not require confirmation; `overwrite` defaults to `false`.
 
 Live VCFA validation should be run separately from local validation. Read-only list/get smoke checks are appropriate for sandbox environments; write, import, delete, and day-2 action tests should use disposable assets and explicit confirmation.

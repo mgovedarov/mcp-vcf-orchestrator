@@ -412,3 +412,13 @@ test("resource tools format lists and guard updates and deletes", async () => {
   });
   assert.deepEqual(deleted, { id: "resource-1", force: true });
 });
+
+test("export-action-file, export-configuration-file, and export-resource-element are not read-only", () => {
+  const { configs: actionConfigs } = registeredToolsWithConfigs(registerActionTools, {});
+  const { configs: configConfigs } = registeredToolsWithConfigs(registerConfigTools, {});
+  const { configs: resourceConfigs } = registeredToolsWithConfigs(registerResourceTools, {});
+
+  assert.equal(actionConfigs.get("export-action-file").annotations.readOnlyHint, false);
+  assert.equal(configConfigs.get("export-configuration-file").annotations.readOnlyHint, false);
+  assert.equal(resourceConfigs.get("export-resource-element").annotations.readOnlyHint, false);
+});

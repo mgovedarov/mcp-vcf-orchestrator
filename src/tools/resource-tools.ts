@@ -76,7 +76,7 @@ export function registerResourceTools(
           .optional()
           .describe("Overwrite the file if it already exists (default: false)"),
       }),
-      annotations: { readOnlyHint: true },
+      annotations: { readOnlyHint: false },
     },
     async ({ id, fileName, overwrite }): Promise<CallToolResult> => {
       try {

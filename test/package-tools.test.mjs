@@ -679,3 +679,10 @@ test("preflight-package formats reports and is read-only", async () => {
   assert.match(result.content[0].text, /preflight passed/);
   assert.match(result.content[0].text, /workflowArtifacts: 0/);
 });
+
+test("export-package and export-project-package are not read-only", () => {
+  const { configs } = registeredPackageToolsWithConfigs({});
+
+  assert.equal(configs.get("export-package").annotations.readOnlyHint, false);
+  assert.equal(configs.get("export-project-package").annotations.readOnlyHint, false);
+});
