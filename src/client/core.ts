@@ -244,6 +244,8 @@ export class VroHttpClient {
       (res.status === 401 || res.status === 403) &&
       this.targetPlatform !== "vra8"
     ) {
+      // Drain the rejected response body to release the socket promptly.
+      res.body?.cancel().catch(() => {});
       console.error(
         "[vro-client] Received %d, clearing cached token and re-authenticating…",
         res.status,
