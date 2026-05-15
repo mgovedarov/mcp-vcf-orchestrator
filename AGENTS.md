@@ -173,15 +173,23 @@ Before authoring or importing workflow artifacts, read `docs/vro-artifact-author
 
 Use the smallest meaningful validation for the change, and run the full gate for broad behavior, docs, or release-facing changes.
 
+- Dev server: `npm start`
 - Build: `npm run build`
 - Unit tests: `npm test`
 - Coverage gate: `npm run test:coverage:check`
 - Docs/examples drift: `npm run validate:docs`
+- Docs dev server: `npm run docs:dev`
 - Docs build: `npm run docs:build`
+- Docs preview: `npm run docs:preview`
 - Package contents: `npm run validate:package`
 - Full local gate: `npm run validate`
+- MCP inspector after build: `npm run inspect`
 
 `npm run validate` should not contact a live VCFA environment. Keep live smoke checks separate. Read-only list/get checks are appropriate in sandbox environments; imports, deletes, template creation, subscription changes, deployment actions, and package imports require explicit confirmation and disposable test assets.
+
+## GitHub Actions
+
+Current repository workflows run CI on pull requests and pushes to `main`, validate package contents when package-relevant files change, deploy docs to GitHub Pages from `main` or manual dispatch, run CodeQL on PRs, `main`, and a weekly schedule, review dependency changes on PRs, and publish to npm only for published GitHub releases.
 
 ## GitHub Issue Convention
 
