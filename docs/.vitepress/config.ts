@@ -50,6 +50,7 @@ export default defineConfig({
         text: "Operations",
         items: [
           { text: "Safety", link: "/operations/safety" },
+          { text: "Live Smoke Tests", link: "/operations/live-smoke-tests" },
           { text: "Troubleshooting", link: "/operations/troubleshooting" },
           { text: "Contributing", link: "/operations/contributing" },
         ],

@@ -61,4 +61,6 @@ Do not invent environment-specific values. If discovery does not return a requir
 
 ## Live Validation
 
-Keep local repository validation separate from live VCFA validation. `npm run validate` should not contact VCFA. Live smoke checks may use read-only list/get tools against a sandbox environment, but imports, deletes, deployment day-2 actions, subscription changes, and template creation require explicit confirmation and disposable test assets.
+Keep local repository validation separate from live VCFA validation. `npm run validate` should not contact VCFA.
+
+Use the [live smoke-test checklist](./live-smoke-tests.md) when validating the MCP server against a real sandbox or disposable environment. Live smoke checks may use read-only list/get tools, harmless workflow execution, local artifact exports, and controlled package-first validation. Imports, deletes, deployment day-2 actions, subscription changes, template creation, and package promotion require explicit confirmation and disposable test assets.
