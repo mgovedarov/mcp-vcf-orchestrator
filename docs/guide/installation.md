@@ -10,6 +10,8 @@
 
 Use the package directly:
 
+The package is published on npm as [`@mgovedarov/mcp-vcf-orchestrator`](https://www.npmjs.com/package/@mgovedarov/mcp-vcf-orchestrator).
+
 ```bash
 npx @mgovedarov/mcp-vcf-orchestrator
 ```

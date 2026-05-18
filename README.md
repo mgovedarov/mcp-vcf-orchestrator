@@ -23,6 +23,8 @@ Checked examples for common workflows are available in [examples/README.md](exam
 
 Run directly from npm:
 
+The package is published on npm as [`@mgovedarov/mcp-vcf-orchestrator`](https://www.npmjs.com/package/@mgovedarov/mcp-vcf-orchestrator).
+
 ```bash
 npx @mgovedarov/mcp-vcf-orchestrator
 ```
