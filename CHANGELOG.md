@@ -1,10 +1,35 @@
 # Changelog
 
-## Unreleased
+## 2.0.0 - 2026-05-18
+
+This release tightens live-operation safety, improves authentication and error handling, refreshes dependencies and documentation, and adopts Apache License 2.0 with NOTICE attribution.
+
+### Breaking Changes
+
+- Existing live mutation and workflow execution tool calls now require `confirm: true`.
+  - Affected tools include workflow creation/execution, action creation, configuration creation/update, deployment creation, template creation, subscription creation/update, and other live import/delete operations that mutate VCFA/vRO state.
+  - Calls without `confirm: true` now return a confirmation message instead of changing live state.
+
+### Added
+
+- Added automatic VCFA bearer-token refresh on 401/403 responses so expired sessions can recover without restarting the MCP server.
+- Added redaction and truncation for surfaced VCFA/vRO error response bodies, while preserving safe diagnostic fields and correlation IDs.
+- Added package validation coverage for published `LICENSE` and `NOTICE` files.
 
 ### Changed
 
 - Adopted Apache License 2.0 for future releases, added NOTICE attribution, and clarified official package and repository branding.
+- Changed local artifact export/snapshot/scaffold tools to advertise write-capable MCP annotations instead of read-only annotations.
+- Synced the advertised MCP server version with the package version.
+- Updated npm and GitHub Actions Dependabot checks to run monthly.
+- Added npm package references to the README and installation guide.
+- Refreshed production and development dependencies through Dependabot.
+
+### Fixed
+
+- Fixed action lookup fallback behavior so non-404 API failures are not silently ignored.
+- Fixed duplicate vRA8 compatibility guard calls in artifact import/export paths.
+- Fixed OData filter escaping in subscription lookups.
 
 ## 1.1.0 - 2026-05-13
 
