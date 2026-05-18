@@ -12,7 +12,9 @@
     "docs/**/*.md",
     "examples/**/*.md",
     "README.md",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "LICENSE",
+    "NOTICE"
   ],
   "scripts": {
     "start": "tsx src/index.ts",
@@ -39,7 +41,7 @@
     "aria",
     "extensibility"
   ],
-  "license": "MIT",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/mgovedarov/mcp-vcf-orchestrator.git"

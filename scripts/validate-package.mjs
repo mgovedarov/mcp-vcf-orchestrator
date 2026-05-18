@@ -29,6 +29,8 @@ try {
 
   const requiredFiles = [
     "README.md",
+    "LICENSE",
+    "NOTICE",
     "package.json",
     "dist/index.js",
     "dist/client/index.js",

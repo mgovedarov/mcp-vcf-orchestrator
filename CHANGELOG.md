@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Adopted Apache License 2.0 for future releases, added NOTICE attribution, and clarified official package and repository branding.
+
 ## 1.1.0 - 2026-05-13
 
 This release expands the MCP server from a VCFA-only operations helper into a broader vRO automation toolkit, including vRA/vRO 8 read/run compatibility, package-first publishing workflows, richer artifact validation, and more discovery-oriented prompts and resources.

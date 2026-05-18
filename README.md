@@ -1,7 +1,7 @@
 # MCP Server for VCF Automation Orchestrator
 
 [![npm version](https://img.shields.io/npm/v/@mgovedarov/mcp-vcf-orchestrator)](https://www.npmjs.com/package/@mgovedarov/mcp-vcf-orchestrator)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 
 An [MCP](https://modelcontextprotocol.io/) server that exposes VCF Automation Orchestrator (vRO), Service Broker, and Cloud Assembly REST API operations as tools. It helps AI assistants list, inspect, run, create, export, preflight, diff, import, and delete VCFA/vRO automation assets through discovery-first workflows.
 
@@ -44,6 +44,12 @@ cd mcp-vcf-orchestrator
 npm install
 npm run build
 ```
+
+## License And Branding
+
+This project is licensed under the [Apache License 2.0](LICENSE). Attribution notices are provided in [NOTICE](NOTICE).
+
+Forks and derivatives should preserve the required license and attribution notices. Redistributed packages must not use the `@mgovedarov` npm scope or imply that they are the official `@mgovedarov/mcp-vcf-orchestrator` package or repository.
 
 ## Configuration
 
