@@ -422,3 +422,88 @@ test("export-action-file, export-configuration-file, and export-resource-element
   assert.equal(configConfigs.get("export-configuration-file").annotations.readOnlyHint, false);
   assert.equal(resourceConfigs.get("export-resource-element").annotations.readOnlyHint, false);
 });
+
+test("action import and delete expected guards stop mismatched mutations", async () => {
+  let imported;
+  let deletedId;
+  const handlers = registeredTools(registerActionTools, {
+    getAction: async (id) => ({
+      id,
+      name: "getVmIp",
+      module: "com.example.actions",
+    }),
+    listCategories: async () => ({
+      link: [{ id: "category-1", name: "com.example.actions" }],
+    }),
+    getActionDirectory: () => "/tmp/actions",
+    importActionFile: async (categoryName, fileName) => {
+      imported = { categoryName, fileName };
+    },
+    deleteAction: async (id) => {
+      deletedId = id;
+    },
+  });
+
+  const importMismatch = await handlers.get("import-action-file")({
+    categoryName: "com.example.actions",
+    fileName: "getVmIp.action",
+    expectedCategoryId: "category-2",
+    confirm: true,
+  });
+  assert.equal(importMismatch.isError, true);
+  assert.equal(imported, undefined);
+
+  const deleteMismatch = await handlers.get("delete-action")({
+    id: "action-1",
+    expectedName: "deleteVm",
+    expectedModule: "com.example.actions",
+    confirm: true,
+  });
+  assert.equal(deleteMismatch.isError, true);
+  assert.equal(deletedId, undefined);
+});
+
+test("configuration update and resource delete expected guards verify live targets", async () => {
+  let updated;
+  let deleted;
+  const configHandlers = registeredTools(registerConfigTools, {
+    getConfiguration: async (id) => ({ id, name: "Settings" }),
+    updateConfiguration: async (id, patch) => {
+      updated = { id, patch };
+    },
+  });
+  const resourceHandlers = registeredTools(registerResourceTools, {
+    getResourceElement: async (id) => ({
+      id,
+      name: "Logo",
+      categoryName: "Branding",
+    }),
+    deleteResource: async (id, force) => {
+      deleted = { id, force };
+    },
+  });
+
+  await configHandlers.get("update-configuration")({
+    id: "config-1",
+    expectedName: "Settings",
+    description: "Updated",
+    confirm: true,
+  });
+  assert.deepEqual(updated, {
+    id: "config-1",
+    patch: {
+      name: undefined,
+      description: "Updated",
+      attributes: undefined,
+    },
+  });
+
+  const mismatch = await resourceHandlers.get("delete-resource-element")({
+    id: "resource-1",
+    expectedName: "Other Logo",
+    expectedCategoryName: "Branding",
+    confirm: true,
+  });
+  assert.equal(mismatch.isError, true);
+  assert.equal(deleted, undefined);
+});

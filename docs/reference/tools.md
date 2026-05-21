@@ -10,6 +10,24 @@ Each tool lists its input schema in a collapsible parameters section. Required c
 
 Discovery list tools automatically follow server-side pagination for both vRO `/vco/api` list responses and VCF Automation service pages. Tool inputs stay focused on filters and selectors; callers do not need to provide page cursors for normal discovery.
 
+## Two-Phase Confirmation Fields
+
+High-risk live mutation tools support optional expected target fields. These fields are backward-compatible: omitted fields do not change existing `confirm: true` behavior. When supplied, the handler performs read-only discovery first and refuses before mutation if the live target does not match.
+
+Common expected fields:
+
+| Field | Used by | Purpose |
+| --- | --- | --- |
+| `expectedName` | delete/update tools for workflows, actions, configurations, resources, packages, templates, deployments, and subscriptions | Verify the live display name or package name before mutation. |
+| `expectedWorkflowName`, `expectedInputNames` | `run-workflow`, `run-workflow-and-wait` | Bind execution to a discovered workflow name and input contract. |
+| `expectedCategoryId`, `expectedCategoryName` | direct workflow, action, configuration, and resource imports | Verify the intended import category. |
+| `expectedPackageName` | `import-package`, `import-project-package` | Verify the package identity from package import details. |
+| `expectedDeploymentName`, `expectedActionName` | `run-deployment-action` | Verify the deployment and day-2 action discovered immediately before submission. |
+| `expectedProjectId`, `expectedProjectName`, `expectedStatus` | deployment and template deletes, deployment actions | Verify project/status context before the live change. |
+| `expectedEventTopicId`, `expectedRunnableId` | subscription update/delete | Verify subscription wiring before the live change. |
+
+Direct imports still preserve their existing overwrite defaults for compatibility. When `overwrite` is omitted on workflow and package imports, it resolves to `true`; pass it explicitly and prefer `prepare-artifact-promotion` for reusable content.
+
 ## Context Snapshots
 
 ### `collect-context-snapshot`
@@ -128,6 +146,7 @@ Delete a workflow from VCF Automation Orchestrator. This action is irreversible.
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `id` | string | Yes | - | Workflow ID to delete. |
+| `expectedName` | string | No | - | Expected live workflow name to verify before deletion. |
 | `confirm` | boolean | Yes | - | Must be `true` to confirm deletion. If `false`, deletion is not performed. |
 :::
 
@@ -140,6 +159,8 @@ Execute a workflow with optional input parameters. Returns the execution ID; use
 | --- | --- | --- | --- | --- |
 | `id` | string | Yes | - | Workflow ID to execute. |
 | `inputs` | array | No | `[]` | Input parameters for the workflow execution. Inspect the workflow with `get-workflow` before running. |
+| `expectedWorkflowName` | string | No | - | Expected live workflow name to verify before execution. |
+| `expectedInputNames` | string[] | No | - | Expected workflow input names, in discovered order, to verify before execution. |
 | `confirm` | boolean | Yes | - | Must be `true` to confirm execution. If `false`, the workflow is not run. |
 
 `inputs` array item:
@@ -163,6 +184,8 @@ Validate inputs, execute a workflow, poll until completion, failure, or timeout,
 | `timeoutSeconds` | integer | No | `300` | Maximum time to wait for completion before returning a timeout result. |
 | `pollIntervalSeconds` | integer | No | `2` | Seconds between execution status polls. |
 | `logLimit` | integer | No | `20` | Maximum execution log entries to include on failure or timeout. Set to `0` to suppress log excerpts. |
+| `expectedWorkflowName` | string | No | - | Expected live workflow name to verify before execution. |
+| `expectedInputNames` | string[] | No | - | Expected workflow input names, in discovered order, to verify before execution. |
 | `confirm` | boolean | Yes | - | Must be `true` to confirm execution. If `false`, the workflow is not run. |
 
 `inputs` array item:
@@ -319,6 +342,8 @@ Import a `.workflow` file from the configured workflow artifact directory into a
 | `categoryId` | string | Yes | - | Workflow category ID to import into. |
 | `fileName` | string | Yes | - | Plain `.workflow` file name under the configured workflow artifact directory to import. |
 | `overwrite` | boolean | No | `true` | Overwrite an existing workflow with the same identity. |
+| `expectedCategoryId` | string | No | - | Expected workflow category ID; must match `categoryId` before import. |
+| `expectedCategoryName` | string | No | - | Expected workflow category name to verify before import. |
 | `confirm` | boolean | Yes | - | Must be `true` to confirm import. If `false`, import is not performed. |
 :::
 
@@ -416,6 +441,8 @@ Import a `.action` file from the configured action artifact directory into an ac
 | --- | --- | --- | --- | --- |
 | `categoryName` | string | Yes | - | Action category or module name to import into. |
 | `fileName` | string | Yes | - | Plain `.action` file name under the configured action artifact directory to import. |
+| `expectedCategoryName` | string | No | - | Expected action category/module name; must match `categoryName` before import. |
+| `expectedCategoryId` | string | No | - | Expected action category ID to verify before import. |
 | `confirm` | boolean | Yes | - | Must be `true` to confirm import. If `false`, import is not performed. |
 :::
 
@@ -427,6 +454,8 @@ Delete an action from VCF Automation Orchestrator. This action is irreversible.
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `id` | string | Yes | - | Action ID to delete. |
+| `expectedName` | string | No | - | Expected live action name to verify before deletion. |
+| `expectedModule` | string | No | - | Expected live action module to verify before deletion. |
 | `confirm` | boolean | Yes | - | Must be `true` to confirm deletion. If `false`, deletion is not performed. |
 :::
 
@@ -483,6 +512,7 @@ Update a configuration element name, description, or attributes. Supplied attrib
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `id` | string | Yes | - | Configuration element ID to update. |
+| `expectedName` | string | No | - | Expected current configuration element name to verify before update. |
 | `name` | string | No | current name | New name for the configuration element. |
 | `description` | string | No | current description | New description. |
 | `attributes` | array | No | current attributes | New attributes to replace the existing set. |
@@ -505,6 +535,7 @@ Delete a configuration element from VCF Automation Orchestrator. This action is 
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `id` | string | Yes | - | Configuration element ID to delete. |
+| `expectedName` | string | No | - | Expected live configuration element name to verify before deletion. |
 | `confirm` | boolean | Yes | - | Must be `true` to confirm deletion. If `false`, deletion is not performed. |
 :::
 
@@ -539,6 +570,8 @@ Import a `.vsoconf` file from the configured configuration artifact directory in
 | --- | --- | --- | --- | --- |
 | `categoryId` | string | Yes | - | Configuration element category ID to import into. |
 | `fileName` | string | Yes | - | Plain `.vsoconf` file name under the configured configuration artifact directory to import. |
+| `expectedCategoryId` | string | No | - | Expected configuration category ID; must match `categoryId` before import. |
+| `expectedCategoryName` | string | No | - | Expected configuration category name to verify before import. |
 | `confirm` | boolean | Yes | - | Must be `true` to confirm import. If `false`, import is not performed. |
 :::
 
@@ -575,6 +608,8 @@ Import a vRO resource element from the configured resource artifact directory in
 | --- | --- | --- | --- | --- |
 | `categoryId` | string | Yes | - | Resource element category ID to import into. |
 | `fileName` | string | Yes | - | Plain file name under the configured resource artifact directory to import. |
+| `expectedCategoryId` | string | No | - | Expected resource category ID; must match `categoryId` before import. |
+| `expectedCategoryName` | string | No | - | Expected resource category name to verify before import. |
 | `confirm` | boolean | Yes | - | Must be `true` to confirm import. If `false`, import is not performed. |
 :::
 
@@ -586,6 +621,8 @@ Update an existing resource element's binary content from a file under the confi
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `id` | string | Yes | - | Resource element ID to update. |
+| `expectedName` | string | No | - | Expected live resource element name to verify before update. |
+| `expectedCategoryName` | string | No | - | Expected live resource category name to verify before update. |
 | `fileName` | string | Yes | - | Plain file name under the configured resource artifact directory containing the replacement content. |
 | `changesetSha` | string | No | - | Optional `X-VRO-Changeset-Sha` value for version-controlled content. |
 | `confirm` | boolean | Yes | - | Must be `true` to confirm update. If `false`, update is not performed. |
@@ -599,6 +636,8 @@ Delete a resource element from VCF Automation Orchestrator. This can optionally 
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `id` | string | Yes | - | Resource element ID to delete. |
+| `expectedName` | string | No | - | Expected live resource element name to verify before deletion. |
+| `expectedCategoryName` | string | No | - | Expected live resource category name to verify before deletion. |
 | `force` | boolean | No | `false` | Delete even if the resource is referenced by workflows. |
 | `confirm` | boolean | Yes | - | Must be `true` to confirm deletion. If `false`, deletion is not performed. |
 :::
@@ -685,6 +724,10 @@ Delete a deployment by its ID. This is a destructive live operation.
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `id` | string | Yes | - | Deployment ID to delete. |
+| `expectedName` | string | No | - | Expected deployment name to verify before deletion. |
+| `expectedProjectId` | string | No | - | Expected deployment project ID to verify before deletion. |
+| `expectedProjectName` | string | No | - | Expected deployment project name to verify before deletion. |
+| `expectedStatus` | string | No | - | Expected deployment status to verify before deletion. |
 | `confirm` | boolean | Yes | - | Must be `true` to confirm deletion. If `false`, deletion is not performed. |
 :::
 
@@ -709,6 +752,11 @@ Run a deployment-level day-2 action. Use `list-deployment-actions` first to find
 | `actionId` | string | Yes | - | Deployment action ID to run. |
 | `reason` | string | No | - | Reason for requesting the day-2 action. |
 | `inputs` | object | No | `{}` | Day-2 action inputs as a key/value object. Use `list-deployment-actions` to discover required inputs before running. |
+| `expectedDeploymentName` | string | No | - | Expected deployment name to verify before submitting the day-2 action. |
+| `expectedProjectId` | string | No | - | Expected deployment project ID to verify before submitting the day-2 action. |
+| `expectedProjectName` | string | No | - | Expected deployment project name to verify before submitting the day-2 action. |
+| `expectedStatus` | string | No | - | Expected deployment status to verify before submitting the day-2 action. |
+| `expectedActionName` | string | No | - | Expected deployment action name to verify against the current action list before submitting. |
 | `confirm` | boolean | Yes | - | Must be `true` to confirm the day-2 action request. If `false`, the request is not submitted. |
 :::
 
@@ -758,6 +806,10 @@ Delete a blueprint template by its ID. This action is irreversible.
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `id` | string | Yes | - | Template or blueprint ID to delete. |
+| `expectedName` | string | No | - | Expected template name to verify before deletion. |
+| `expectedProjectId` | string | No | - | Expected template project ID to verify before deletion. |
+| `expectedProjectName` | string | No | - | Expected template project name to verify before deletion. |
+| `expectedStatus` | string | No | - | Expected template status to verify before deletion. |
 | `confirm` | boolean | Yes | - | Must be `true` to confirm deletion. If `false`, deletion is not performed. |
 :::
 
@@ -931,6 +983,7 @@ Import an exported project package file.
 | `packageName` | string | No | `VCFA_PROJECT_PACKAGE_NAME` | Exact package name used for default file naming. |
 | `fileName` | string | No | `{packageName}.package` | Package file name to import. |
 | `overwrite` | boolean | No | `true` | Whether to overwrite existing package contents. |
+| `expectedPackageName` | string | No | - | Expected package name from package import details to verify before import. |
 | `confirm` | boolean | Yes | - | Must be `true` to import. |
 | `importConfigurationAttributeValues` | boolean | No | - | Import configuration attribute values when supported by vRO. |
 | `tagImportMode` | enum | No | - | Tag import mode: `DoNotImport`, `ImportAndOverwriteExistingValue`, or `ImportButPreserveExistingValue`. |
@@ -956,6 +1009,7 @@ Import a vRO package from the configured package artifact directory into the Orc
 | --- | --- | --- | --- | --- |
 | `fileName` | string | Yes | - | Plain `.package` or `.zip` file name under the configured package artifact directory to import. |
 | `overwrite` | boolean | No | `true` | Whether to overwrite existing package contents. |
+| `expectedPackageName` | string | No | - | Expected package name from package import details to verify before import. |
 | `confirm` | boolean | Yes | - | Must be `true` to confirm import. If `false`, import is not performed. |
 | `importConfigurationAttributeValues` | boolean | No | - | Import configuration attribute values when supported by vRO. |
 | `tagImportMode` | enum | No | - | Tag import mode: `DoNotImport`, `ImportAndOverwriteExistingValue`, or `ImportButPreserveExistingValue`. |
@@ -970,6 +1024,7 @@ Delete a vRO package by its fully qualified name. Optionally delete all workflow
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `name` | string | Yes | - | Fully qualified package name to delete, for example `com.example.mypackage`. |
+| `expectedName` | string | No | - | Expected live package name to verify before deletion. |
 | `deleteContents` | boolean | No | `false` | Also delete all elements inside the package. |
 | `confirm` | boolean | Yes | - | Must be `true` to confirm deletion. If `false`, deletion is not performed. |
 :::
@@ -1044,6 +1099,9 @@ Update a subscription. All fields except `id` are optional; only supplied fields
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `id` | string | Yes | - | Subscription ID to update. |
+| `expectedName` | string | No | - | Expected subscription name to verify before update. |
+| `expectedEventTopicId` | string | No | - | Expected event topic ID to verify before update. |
+| `expectedRunnableId` | string | No | - | Expected runnable ID to verify before update. |
 | `name` | string | No | current name | New subscription name. |
 | `description` | string | No | current description | New description. |
 | `disabled` | boolean | No | current state | Set to `true` to disable or `false` to enable. |
@@ -1063,5 +1121,8 @@ Delete an extensibility subscription.
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `id` | string | Yes | - | Subscription ID to delete. |
+| `expectedName` | string | No | - | Expected subscription name to verify before deletion. |
+| `expectedEventTopicId` | string | No | - | Expected event topic ID to verify before deletion. |
+| `expectedRunnableId` | string | No | - | Expected runnable ID to verify before deletion. |
 | `confirm` | boolean | Yes | - | Must be `true` to confirm deletion. If `false`, deletion is not performed. |
 :::

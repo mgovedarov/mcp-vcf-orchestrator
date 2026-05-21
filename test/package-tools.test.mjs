@@ -583,6 +583,28 @@ test("project package import tools handle confirmation and option forwarding", a
   assert.match(result.content[0].text, /imported from: project\.package/);
 });
 
+test("import-project-package expected guard fails when details omit package name", async () => {
+  let imported;
+  const handlers = registeredPackageTools({
+    resolveProjectPackageName: (packageName) => packageName ?? "com.example.project",
+    getPackageImportDetails: async () => ({}),
+    importPackageWithOptions: async (fileName, options) => {
+      imported = { fileName, options };
+    },
+  });
+
+  const result = await handlers.get("import-project-package")({
+    packageName: "com.example.project",
+    expectedPackageName: "com.example.project",
+    confirm: true,
+  });
+
+  assert.equal(result.isError, true);
+  assert.equal(imported, undefined);
+  assert.match(result.content[0].text, /package name/);
+  assert.match(result.content[0].text, /found \(missing\)/);
+});
+
 test("project package file tools report client errors", async () => {
   const handlers = registeredPackageTools({
     resolveProjectPackageName: () => "com.example.project",
@@ -645,6 +667,56 @@ test("delete-package deletes only after confirmation", async () => {
 
   assert.deepEqual(deleted, { name: "com.example", deleteContents: true });
   assert.match(result.content[0].text, /including contents/);
+});
+
+test("package import and delete expected guards verify package names", async () => {
+  let imported;
+  let deleted;
+  const handlers = registeredPackageTools({
+    getPackageDirectory: () => "/tmp/packages",
+    getPackageImportDetails: async () => ({
+      packageName: "com.example.bundle",
+    }),
+    importPackageWithOptions: async (fileName, options) => {
+      imported = { fileName, options };
+    },
+    getPackage: async (name) => ({ name }),
+    deletePackage: async (name, deleteContents) => {
+      deleted = { name, deleteContents };
+    },
+  });
+
+  const importMismatch = await handlers.get("import-package")({
+    fileName: "bundle.package",
+    expectedPackageName: "com.example.other",
+    confirm: true,
+  });
+  assert.equal(importMismatch.isError, true);
+  assert.equal(imported, undefined);
+
+  await handlers.get("import-package")({
+    fileName: "bundle.package",
+    expectedPackageName: "com.example.bundle",
+    overwrite: false,
+    confirm: true,
+  });
+  assert.deepEqual(imported, {
+    fileName: "bundle.package",
+    options: {
+      overwrite: false,
+      importConfigurationAttributeValues: undefined,
+      tagImportMode: undefined,
+      importConfigSecureStringAttributeValues: undefined,
+    },
+  });
+
+  const deleteMismatch = await handlers.get("delete-package")({
+    name: "com.example.bundle",
+    expectedName: "com.example.other",
+    confirm: true,
+  });
+  assert.equal(deleteMismatch.isError, true);
+  assert.equal(deleted, undefined);
 });
 
 test("preflight-package formats reports and is read-only", async () => {

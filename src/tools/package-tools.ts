@@ -3,6 +3,11 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { formatPreflightReport } from "../client/artifact-preflight.js";
 import type { VroClient } from "../vro-client.js";
+import {
+  appendGuardGuidance,
+  guardExpectedFields,
+  hasAnyExpectedValue,
+} from "./confirmation-guards.js";
 
 const packageExportOptionsSchema = {
   exportConfigurationAttributeValues: z.boolean().optional(),
@@ -287,6 +292,12 @@ export function registerPackageTools(
           .describe(
             "Whether to overwrite existing package contents (default: true)",
           ),
+        expectedPackageName: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected package name verified from package import details before import",
+          ),
         confirm: z
           .boolean()
           .describe(
@@ -299,6 +310,7 @@ export function registerPackageTools(
     async ({
       fileName,
       overwrite,
+      expectedPackageName,
       confirm,
       importConfigurationAttributeValues,
       tagImportMode,
@@ -315,6 +327,18 @@ export function registerPackageTools(
         };
       }
       try {
+        if (hasAnyExpectedValue({ expectedPackageName })) {
+          const details = await client.getPackageImportDetails(fileName);
+          const guard = guardExpectedFields(`package import ${fileName}`, [
+            {
+              label: "package name",
+              expected: expectedPackageName,
+              actual: details.packageName,
+            },
+          ]);
+          if (guard) return guard;
+        }
+
         await client.importPackageWithOptions(fileName, {
           overwrite: overwrite ?? true,
           importConfigurationAttributeValues,
@@ -325,7 +349,9 @@ export function registerPackageTools(
           content: [
             {
               type: "text",
-              text: `Package imported successfully from: ${fileName}`,
+              text: appendGuardGuidance(
+                `Package imported successfully from: ${fileName}${overwrite === undefined ? "\nOverwrite defaulted to true; pass overwrite explicitly when possible." : ""}`,
+              ),
             },
           ],
         };
@@ -842,6 +868,12 @@ export function registerPackageTools(
           .optional()
           .describe("Package file name. Defaults to packageName.package."),
         overwrite: z.boolean().optional(),
+        expectedPackageName: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected package name verified from package import details before import",
+          ),
         confirm: z.boolean().describe("Must be true to import the package."),
         ...packageImportOptionsSchema,
       }),
@@ -851,6 +883,7 @@ export function registerPackageTools(
       packageName,
       fileName,
       overwrite,
+      expectedPackageName,
       confirm,
       importConfigurationAttributeValues,
       tagImportMode,
@@ -871,6 +904,18 @@ export function registerPackageTools(
         const resolvedFileName = fileName ?? packageFileName(resolvedPackageName);
         const details = await client.getPackageImportDetails(resolvedFileName);
         assertProjectPackageImportMatches(details, resolvedPackageName);
+        const guard = guardExpectedFields(
+          `project package import ${resolvedFileName}`,
+          [
+            {
+              label: "package name",
+              expected: expectedPackageName,
+              actual: details.packageName,
+            },
+          ],
+        );
+        if (guard) return guard;
+
         await client.importPackageWithOptions(resolvedFileName, {
           overwrite: overwrite ?? true,
           importConfigurationAttributeValues,
@@ -912,6 +957,10 @@ export function registerPackageTools(
           .describe(
             "The fully-qualified package name to delete (e.g. com.example.mypackage)",
           ),
+        expectedName: z
+          .string()
+          .optional()
+          .describe("Optional expected live package name verified before deletion"),
         deleteContents: z
           .boolean()
           .optional()
@@ -926,7 +975,12 @@ export function registerPackageTools(
       }),
       annotations: { readOnlyHint: false, destructiveHint: true },
     },
-    async ({ name, deleteContents, confirm }): Promise<CallToolResult> => {
+    async ({
+      name,
+      expectedName,
+      deleteContents,
+      confirm,
+    }): Promise<CallToolResult> => {
       if (!confirm) {
         return {
           content: [
@@ -938,6 +992,18 @@ export function registerPackageTools(
         };
       }
       try {
+        if (hasAnyExpectedValue({ expectedName })) {
+          const pkg = await client.getPackage(name);
+          const guard = guardExpectedFields(`package ${name}`, [
+            {
+              label: "package name",
+              expected: expectedName,
+              actual: pkg.name,
+            },
+          ]);
+          if (guard) return guard;
+        }
+
         await client.deletePackage(name, deleteContents ?? false);
         return {
           content: [

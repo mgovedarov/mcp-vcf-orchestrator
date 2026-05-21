@@ -3,6 +3,11 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { formatPreflightReport } from "../client/artifact-preflight.js";
 import type { VroClient } from "../vro-client.js";
+import {
+  appendGuardGuidance,
+  guardExpectedFields,
+  hasAnyExpectedValue,
+} from "./confirmation-guards.js";
 
 const actionDiffSourceSchema = z.discriminatedUnion("source", [
   z.object({
@@ -338,6 +343,18 @@ export function registerActionTools(
         fileName: z
           .string()
           .describe("Action file name under the configured action artifact directory to import"),
+        expectedCategoryName: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected action category/module name; must match categoryName before import",
+          ),
+        expectedCategoryId: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected action category ID verified before import",
+          ),
         confirm: z
           .boolean()
           .describe(
@@ -346,7 +363,13 @@ export function registerActionTools(
       }),
       annotations: { readOnlyHint: false },
     },
-    async ({ categoryName, fileName, confirm }): Promise<CallToolResult> => {
+    async ({
+      categoryName,
+      fileName,
+      expectedCategoryName,
+      expectedCategoryId,
+      confirm,
+    }): Promise<CallToolResult> => {
       if (!confirm) {
         return {
           content: [
@@ -358,12 +381,47 @@ export function registerActionTools(
         };
       }
       try {
+        const categoryNameGuard = guardExpectedFields(
+          `action import target ${categoryName}`,
+          [
+            {
+              label: "category name",
+              expected: expectedCategoryName,
+              actual: categoryName,
+            },
+          ],
+        );
+        if (categoryNameGuard) return categoryNameGuard;
+
+        if (expectedCategoryId !== undefined) {
+          const categories = await client.listCategories(
+            "ActionCategory",
+            categoryName,
+          );
+          const category = categories.link?.find(
+            (candidate) => candidate.name === categoryName,
+          );
+          const categoryIdGuard = guardExpectedFields(
+            `action import target ${categoryName}`,
+            [
+              {
+                label: "category ID",
+                expected: expectedCategoryId,
+                actual: category?.id,
+              },
+            ],
+          );
+          if (categoryIdGuard) return categoryIdGuard;
+        }
+
         await client.importActionFile(categoryName, fileName);
         return {
           content: [
             {
               type: "text",
-              text: `Action imported successfully from: ${fileName}`,
+              text: appendGuardGuidance(
+                `Action imported successfully from: ${fileName}`,
+              ),
             },
           ],
         };
@@ -389,6 +447,18 @@ export function registerActionTools(
         "Delete an action (scriptable task) from VCF Automation Orchestrator. This action is irreversible. Set confirm to true to proceed.",
       inputSchema: z.object({
         id: z.string().describe("The action ID to delete"),
+        expectedName: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected action name verified against the live action before deletion",
+          ),
+        expectedModule: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected action module verified against the live action before deletion",
+          ),
         confirm: z
           .boolean()
           .describe(
@@ -397,7 +467,12 @@ export function registerActionTools(
       }),
       annotations: { readOnlyHint: false, destructiveHint: true },
     },
-    async ({ id, confirm }): Promise<CallToolResult> => {
+    async ({
+      id,
+      expectedName,
+      expectedModule,
+      confirm,
+    }): Promise<CallToolResult> => {
       if (!confirm) {
         return {
           content: [
@@ -409,6 +484,23 @@ export function registerActionTools(
         };
       }
       try {
+        if (hasAnyExpectedValue({ expectedName, expectedModule })) {
+          const action = await client.getAction(id);
+          const guard = guardExpectedFields(`action ${id}`, [
+            {
+              label: "action name",
+              expected: expectedName,
+              actual: action.name,
+            },
+            {
+              label: "module",
+              expected: expectedModule,
+              actual: action.module,
+            },
+          ]);
+          if (guard) return guard;
+        }
+
         await client.deleteAction(id);
         return {
           content: [

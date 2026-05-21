@@ -2,6 +2,10 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import type { VroClient } from "../vro-client.js";
+import {
+  guardExpectedFields,
+  hasAnyExpectedValue,
+} from "./confirmation-guards.js";
 
 export function registerSubscriptionTools(
   server: McpServer,
@@ -266,6 +270,22 @@ export function registerSubscriptionTools(
         "Update an existing extensibility subscription. Use this to enable/disable, re-target, or change priority of a subscription.",
       inputSchema: z.object({
         id: z.string().describe("The subscription ID to update"),
+        expectedName: z
+          .string()
+          .optional()
+          .describe("Optional expected subscription name verified before update"),
+        expectedEventTopicId: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected event topic ID verified before subscription update",
+          ),
+        expectedRunnableId: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected runnable ID verified before subscription update",
+          ),
         name: z.string().optional().describe("New name"),
         description: z.string().optional().describe("New description"),
         disabled: z
@@ -293,6 +313,9 @@ export function registerSubscriptionTools(
     },
     async ({
       id,
+      expectedName,
+      expectedEventTopicId,
+      expectedRunnableId,
       name,
       description,
       disabled,
@@ -315,6 +338,34 @@ export function registerSubscriptionTools(
       }
 
       try {
+        if (
+          hasAnyExpectedValue({
+            expectedName,
+            expectedEventTopicId,
+            expectedRunnableId,
+          })
+        ) {
+          const subscription = await client.getSubscription(id);
+          const guard = guardExpectedFields(`subscription ${id}`, [
+            {
+              label: "subscription name",
+              expected: expectedName,
+              actual: subscription.name,
+            },
+            {
+              label: "event topic ID",
+              expected: expectedEventTopicId,
+              actual: subscription.eventTopicId,
+            },
+            {
+              label: "runnable ID",
+              expected: expectedRunnableId,
+              actual: subscription.runnableId,
+            },
+          ]);
+          if (guard) return guard;
+        }
+
         const sub = await client.updateSubscription(id, {
           name,
           description,
@@ -355,6 +406,24 @@ export function registerSubscriptionTools(
         "Delete an extensibility subscription from the VCF Automation Event Broker. Set confirm to true to proceed.",
       inputSchema: z.object({
         id: z.string().describe("The subscription ID to delete"),
+        expectedName: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected subscription name verified before deletion",
+          ),
+        expectedEventTopicId: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected event topic ID verified before subscription deletion",
+          ),
+        expectedRunnableId: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected runnable ID verified before subscription deletion",
+          ),
         confirm: z
           .boolean()
           .describe(
@@ -363,7 +432,13 @@ export function registerSubscriptionTools(
       }),
       annotations: { readOnlyHint: false, destructiveHint: true },
     },
-    async ({ id, confirm }): Promise<CallToolResult> => {
+    async ({
+      id,
+      expectedName,
+      expectedEventTopicId,
+      expectedRunnableId,
+      confirm,
+    }): Promise<CallToolResult> => {
       if (!confirm) {
         return {
           content: [
@@ -375,6 +450,34 @@ export function registerSubscriptionTools(
         };
       }
       try {
+        if (
+          hasAnyExpectedValue({
+            expectedName,
+            expectedEventTopicId,
+            expectedRunnableId,
+          })
+        ) {
+          const subscription = await client.getSubscription(id);
+          const guard = guardExpectedFields(`subscription ${id}`, [
+            {
+              label: "subscription name",
+              expected: expectedName,
+              actual: subscription.name,
+            },
+            {
+              label: "event topic ID",
+              expected: expectedEventTopicId,
+              actual: subscription.eventTopicId,
+            },
+            {
+              label: "runnable ID",
+              expected: expectedRunnableId,
+              actual: subscription.runnableId,
+            },
+          ]);
+          if (guard) return guard;
+        }
+
         await client.deleteSubscription(id);
         return {
           content: [

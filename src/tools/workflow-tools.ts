@@ -15,6 +15,13 @@ import {
   filterWorkflowExecutionLogsByMinimumLevel,
   formatWorkflowExecutionLogEntry,
 } from "../client/workflow-client.js";
+import {
+  appendGuardGuidance,
+  guardExpectedCategory,
+  guardExpectedFields,
+  guardExpectedStringList,
+  hasAnyExpectedValue,
+} from "./confirmation-guards.js";
 import type { VroClient } from "../vro-client.js";
 
 const DEFAULT_WORKFLOW_WAIT_TIMEOUT_SECONDS = 300;
@@ -605,6 +612,18 @@ export function registerWorkflowTools(
           )
           .optional()
           .describe("Input parameters for the workflow execution"),
+        expectedWorkflowName: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected workflow name verified against the live workflow before execution",
+          ),
+        expectedInputNames: z
+          .array(z.string())
+          .optional()
+          .describe(
+            "Optional expected workflow input names, in discovered order, verified before execution",
+          ),
         confirm: z
           .boolean()
           .describe(
@@ -613,7 +632,13 @@ export function registerWorkflowTools(
       }),
       annotations: { readOnlyHint: false },
     },
-    async ({ id, inputs, confirm }): Promise<CallToolResult> => {
+    async ({
+      id,
+      inputs,
+      expectedWorkflowName,
+      expectedInputNames,
+      confirm,
+    }): Promise<CallToolResult> => {
       if (!confirm) {
         return {
           content: [
@@ -626,6 +651,26 @@ export function registerWorkflowTools(
       }
 
       try {
+        if (hasAnyExpectedValue({ expectedWorkflowName, expectedInputNames })) {
+          const workflow = await client.getWorkflow(id);
+          const guard = guardExpectedFields(`workflow ${id}`, [
+            {
+              label: "workflow name",
+              expected: expectedWorkflowName,
+              actual: workflow.name,
+            },
+          ]);
+          if (guard) return guard;
+
+          const inputGuard = guardExpectedStringList(
+            `workflow ${id}`,
+            "input names",
+            expectedInputNames,
+            getWorkflowInputParameters(workflow).map((input) => input.name),
+          );
+          if (inputGuard) return inputGuard;
+        }
+
         const exec = await client.runWorkflow(id, inputs);
         return {
           content: [
@@ -692,6 +737,18 @@ export function registerWorkflowTools(
           .describe(
             "Maximum execution log entries to include on failure or timeout (default: 20)",
           ),
+        expectedWorkflowName: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected workflow name verified against the live workflow before execution",
+          ),
+        expectedInputNames: z
+          .array(z.string())
+          .optional()
+          .describe(
+            "Optional expected workflow input names, in discovered order, verified before execution",
+          ),
         confirm: z
           .boolean()
           .describe(
@@ -706,6 +763,8 @@ export function registerWorkflowTools(
       timeoutSeconds,
       pollIntervalSeconds,
       logLimit,
+      expectedWorkflowName,
+      expectedInputNames,
       confirm,
     }): Promise<CallToolResult> => {
       let startedExecution: WorkflowExecution | undefined;
@@ -722,6 +781,23 @@ export function registerWorkflowTools(
 
       try {
         const workflow = await client.getWorkflow(id);
+        const guard = guardExpectedFields(`workflow ${id}`, [
+          {
+            label: "workflow name",
+            expected: expectedWorkflowName,
+            actual: workflow.name,
+          },
+        ]);
+        if (guard) return guard;
+
+        const inputGuard = guardExpectedStringList(
+          `workflow ${id}`,
+          "input names",
+          expectedInputNames,
+          getWorkflowInputParameters(workflow).map((input) => input.name),
+        );
+        if (inputGuard) return inputGuard;
+
         const validation = validateWorkflowRunInputs(workflow, inputs ?? []);
         if (validation.errors.length > 0) {
           return {
@@ -1193,6 +1269,18 @@ export function registerWorkflowTools(
           .describe(
             "Overwrite an existing workflow with the same identity (default: true)",
           ),
+        expectedCategoryId: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected workflow category ID; must match categoryId before import",
+          ),
+        expectedCategoryName: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected workflow category name verified before import",
+          ),
         confirm: z
           .boolean()
           .describe(
@@ -1205,6 +1293,8 @@ export function registerWorkflowTools(
       categoryId,
       fileName,
       overwrite,
+      expectedCategoryId,
+      expectedCategoryName,
       confirm,
     }): Promise<CallToolResult> => {
       if (!confirm) {
@@ -1218,6 +1308,29 @@ export function registerWorkflowTools(
         };
       }
       try {
+        const categoryIdGuard = guardExpectedFields(
+          `workflow import target ${categoryId}`,
+          [
+            {
+              label: "category ID",
+              expected: expectedCategoryId,
+              actual: categoryId,
+            },
+          ],
+        );
+        if (categoryIdGuard) return categoryIdGuard;
+
+        if (expectedCategoryName !== undefined) {
+          const categoryNameGuard = await guardExpectedCategory(
+            `workflow import target ${categoryId}`,
+            "WorkflowCategory",
+            categoryId,
+            expectedCategoryName,
+            client.listCategories.bind(client),
+          );
+          if (categoryNameGuard) return categoryNameGuard;
+        }
+
         await client.importWorkflowFile(
           categoryId,
           fileName,
@@ -1227,7 +1340,9 @@ export function registerWorkflowTools(
           content: [
             {
               type: "text",
-              text: `Workflow imported successfully from: ${fileName}`,
+              text: appendGuardGuidance(
+                `Workflow imported successfully from: ${fileName}${overwrite === undefined ? "\nOverwrite defaulted to true; pass overwrite explicitly when possible." : ""}`,
+              ),
             },
           ],
         };
@@ -1383,6 +1498,12 @@ export function registerWorkflowTools(
         "Delete a workflow from VCF Automation Orchestrator. This action is irreversible. Set confirm to true to proceed.",
       inputSchema: z.object({
         id: z.string().describe("The workflow ID to delete"),
+        expectedName: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected workflow name verified against the live workflow before deletion",
+          ),
         confirm: z
           .boolean()
           .describe(
@@ -1391,7 +1512,7 @@ export function registerWorkflowTools(
       }),
       annotations: { readOnlyHint: false, destructiveHint: true },
     },
-    async ({ id, confirm }): Promise<CallToolResult> => {
+    async ({ id, expectedName, confirm }): Promise<CallToolResult> => {
       if (!confirm) {
         return {
           content: [
@@ -1403,6 +1524,18 @@ export function registerWorkflowTools(
         };
       }
       try {
+        if (hasAnyExpectedValue({ expectedName })) {
+          const workflow = await client.getWorkflow(id);
+          const guard = guardExpectedFields(`workflow ${id}`, [
+            {
+              label: "workflow name",
+              expected: expectedName,
+              actual: workflow.name,
+            },
+          ]);
+          if (guard) return guard;
+        }
+
         await client.deleteWorkflow(id);
         return {
           content: [

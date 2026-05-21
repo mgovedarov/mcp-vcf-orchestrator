@@ -7,6 +7,10 @@ import type {
   DeploymentRequest,
 } from "../types.js";
 import type { VroClient } from "../vro-client.js";
+import {
+  guardExpectedFields,
+  hasAnyExpectedValue,
+} from "./confirmation-guards.js";
 
 function isInputArray(value: unknown): value is {
   name?: string;
@@ -199,6 +203,30 @@ export function registerDeploymentTools(
         "Delete a deployment by its ID. Set confirm to true to proceed.",
       inputSchema: z.object({
         id: z.string().describe("The deployment ID to delete"),
+        expectedName: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected deployment name verified before deletion",
+          ),
+        expectedProjectId: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected deployment project ID verified before deletion",
+          ),
+        expectedProjectName: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected deployment project name verified before deletion",
+          ),
+        expectedStatus: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected deployment status verified before deletion",
+          ),
         confirm: z
           .boolean()
           .describe(
@@ -207,7 +235,14 @@ export function registerDeploymentTools(
       }),
       annotations: { readOnlyHint: false, destructiveHint: true },
     },
-    async ({ id, confirm }): Promise<CallToolResult> => {
+    async ({
+      id,
+      expectedName,
+      expectedProjectId,
+      expectedProjectName,
+      expectedStatus,
+      confirm,
+    }): Promise<CallToolResult> => {
       if (!confirm) {
         return {
           content: [
@@ -219,6 +254,40 @@ export function registerDeploymentTools(
         };
       }
       try {
+        if (
+          hasAnyExpectedValue({
+            expectedName,
+            expectedProjectId,
+            expectedProjectName,
+            expectedStatus,
+          })
+        ) {
+          const deployment = await client.getDeployment(id);
+          const guard = guardExpectedFields(`deployment ${id}`, [
+            {
+              label: "deployment name",
+              expected: expectedName,
+              actual: deployment.name,
+            },
+            {
+              label: "project ID",
+              expected: expectedProjectId,
+              actual: deployment.projectId,
+            },
+            {
+              label: "project name",
+              expected: expectedProjectName,
+              actual: deployment.projectName,
+            },
+            {
+              label: "status",
+              expected: expectedStatus,
+              actual: deployment.status,
+            },
+          ]);
+          if (guard) return guard;
+        }
+
         await client.deleteDeployment(id);
         return {
           content: [
@@ -373,6 +442,36 @@ export function registerDeploymentTools(
           .record(z.string(), z.unknown())
           .optional()
           .describe("Day-2 action inputs as a key/value object"),
+        expectedDeploymentName: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected deployment name verified before submitting the day-2 action",
+          ),
+        expectedProjectId: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected deployment project ID verified before submitting the day-2 action",
+          ),
+        expectedProjectName: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected deployment project name verified before submitting the day-2 action",
+          ),
+        expectedStatus: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected deployment status verified before submitting the day-2 action",
+          ),
+        expectedActionName: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected deployment action name verified against the current action list before submitting",
+          ),
         confirm: z
           .boolean()
           .describe(
@@ -386,6 +485,11 @@ export function registerDeploymentTools(
       actionId,
       reason,
       inputs,
+      expectedDeploymentName,
+      expectedProjectId,
+      expectedProjectName,
+      expectedStatus,
+      expectedActionName,
       confirm,
     }): Promise<CallToolResult> => {
       if (!confirm) {
@@ -400,6 +504,58 @@ export function registerDeploymentTools(
       }
 
       try {
+        if (
+          hasAnyExpectedValue({
+            expectedDeploymentName,
+            expectedProjectId,
+            expectedProjectName,
+            expectedStatus,
+          })
+        ) {
+          const deployment = await client.getDeployment(deploymentId);
+          const guard = guardExpectedFields(`deployment ${deploymentId}`, [
+            {
+              label: "deployment name",
+              expected: expectedDeploymentName,
+              actual: deployment.name,
+            },
+            {
+              label: "project ID",
+              expected: expectedProjectId,
+              actual: deployment.projectId,
+            },
+            {
+              label: "project name",
+              expected: expectedProjectName,
+              actual: deployment.projectName,
+            },
+            {
+              label: "status",
+              expected: expectedStatus,
+              actual: deployment.status,
+            },
+          ]);
+          if (guard) return guard;
+        }
+
+        if (expectedActionName !== undefined) {
+          const { actions } = normalizeDeploymentActionList(
+            await client.listDeploymentActions(deploymentId),
+          );
+          const action = actions.find((candidate) => candidate.id === actionId);
+          const actionGuard = guardExpectedFields(
+            `deployment action ${actionId}`,
+            [
+              {
+                label: "action name",
+                expected: expectedActionName,
+                actual: action?.name ?? action?.displayName,
+              },
+            ],
+          );
+          if (actionGuard) return actionGuard;
+        }
+
         const request = await client.runDeploymentAction({
           deploymentId,
           actionId,

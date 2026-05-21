@@ -2,6 +2,10 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import type { VroClient } from "../vro-client.js";
+import {
+  guardExpectedFields,
+  hasAnyExpectedValue,
+} from "./confirmation-guards.js";
 
 export function registerTemplateTools(
   server: McpServer,
@@ -194,6 +198,26 @@ export function registerTemplateTools(
         "Delete a blueprint template by its ID. Set confirm to true to proceed.",
       inputSchema: z.object({
         id: z.string().describe("The template (blueprint) ID to delete"),
+        expectedName: z
+          .string()
+          .optional()
+          .describe("Optional expected template name verified before deletion"),
+        expectedProjectId: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected template project ID verified before deletion",
+          ),
+        expectedProjectName: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected template project name verified before deletion",
+          ),
+        expectedStatus: z
+          .string()
+          .optional()
+          .describe("Optional expected template status verified before deletion"),
         confirm: z
           .boolean()
           .describe(
@@ -202,7 +226,14 @@ export function registerTemplateTools(
       }),
       annotations: { readOnlyHint: false, destructiveHint: true },
     },
-    async ({ id, confirm }): Promise<CallToolResult> => {
+    async ({
+      id,
+      expectedName,
+      expectedProjectId,
+      expectedProjectName,
+      expectedStatus,
+      confirm,
+    }): Promise<CallToolResult> => {
       if (!confirm) {
         return {
           content: [
@@ -214,6 +245,40 @@ export function registerTemplateTools(
         };
       }
       try {
+        if (
+          hasAnyExpectedValue({
+            expectedName,
+            expectedProjectId,
+            expectedProjectName,
+            expectedStatus,
+          })
+        ) {
+          const template = await client.getTemplate(id);
+          const guard = guardExpectedFields(`template ${id}`, [
+            {
+              label: "template name",
+              expected: expectedName,
+              actual: template.name,
+            },
+            {
+              label: "project ID",
+              expected: expectedProjectId,
+              actual: template.projectId,
+            },
+            {
+              label: "project name",
+              expected: expectedProjectName,
+              actual: template.projectName,
+            },
+            {
+              label: "status",
+              expected: expectedStatus,
+              actual: template.status,
+            },
+          ]);
+          if (guard) return guard;
+        }
+
         await client.deleteTemplate(id);
         return {
           content: [
