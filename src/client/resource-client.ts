@@ -8,20 +8,21 @@ import {
   rejectSymlink,
   resolveFileInDirectory,
 } from "./files.js";
+import { getAllVroPages } from "./pagination.js";
 
 export class ResourceClient {
   constructor(private http: VroHttpClient) {}
 
   async listResources(filter?: string): Promise<ResourceElementList> {
-    let path = "/resources";
+    const params = new URLSearchParams();
     if (filter) {
-      path += `?conditions=name~${encodeURIComponent(filter)}`;
+      params.set("conditions", `name~${filter}`);
     }
-    const raw = await this.http.get<{
-      link?: AttributeLink[];
-      total?: number;
-      start?: number;
-    }>(path);
+    const raw = await getAllVroPages<AttributeLink>(
+      this.http,
+      "/resources",
+      params,
+    );
     const link: ResourceElement[] = (raw.link ?? []).map((item) => {
       const a = getLinkAttrs(item);
       const id = a["id"] ?? a["@id"] ?? item.href?.split("/").pop() ?? "";

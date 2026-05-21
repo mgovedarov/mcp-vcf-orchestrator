@@ -1,20 +1,24 @@
 import type { Template, TemplateList } from "../types.js";
 import type { VroHttpClient } from "./core.js";
+import { getAllAutomationPages } from "./pagination.js";
 
 export class TemplateClient {
   constructor(private http: VroHttpClient) {}
 
   listTemplates(search?: string, projectId?: string): Promise<TemplateList> {
-    const params: string[] = [];
+    const params = new URLSearchParams();
     if (search) {
-      params.push(`$search=${encodeURIComponent(search)}`);
+      params.set("$search", search);
     }
     if (projectId) {
-      params.push(`projectId=${encodeURIComponent(projectId)}`);
+      params.set("projectId", projectId);
     }
-    const path =
-      params.length > 0 ? `/blueprints?${params.join("&")}` : "/blueprints";
-    return this.http.get<TemplateList>(path, this.http.blueprintBaseUrl);
+    return getAllAutomationPages<Template>(
+      this.http,
+      "/blueprints",
+      this.http.blueprintBaseUrl,
+      params,
+    );
   }
 
   getTemplate(id: string): Promise<Template> {

@@ -110,6 +110,13 @@ interface DomainStats {
   skipped: number;
 }
 
+interface ListStatsSource<T> {
+  link?: T[];
+  content?: T[];
+  total?: number;
+  totalElements?: number;
+}
+
 type SnapshotSection = unknown[] | Record<string, unknown[]>;
 
 interface ContextSnapshot {
@@ -243,7 +250,7 @@ async function collectDomain(
       const items = sortByNameAndId(list.link ?? []).slice(0, maxItems);
       return {
         data: items.map(summarizeResource),
-        stats: boundedStats(list.link ?? [], maxItems),
+        stats: boundedStatsFromList(list, "link", maxItems),
       };
     }
     case "categories":
@@ -275,7 +282,7 @@ async function collectDomain(
       const items = sortByNameAndId(list.content ?? []).slice(0, maxItems);
       return {
         data: items.map(summarizeEventTopic),
-        stats: boundedStats(list.content ?? [], maxItems),
+        stats: boundedStatsFromList(list, "content", maxItems),
       };
     }
     case "subscriptions": {
@@ -283,7 +290,7 @@ async function collectDomain(
       const items = sortByNameAndId(list.content ?? []).slice(0, maxItems);
       return {
         data: items.map(summarizeSubscription),
-        stats: boundedStats(list.content ?? [], maxItems),
+        stats: boundedStatsFromList(list, "content", maxItems),
       };
     }
     case "packages":
@@ -301,7 +308,7 @@ async function collectDomain(
       const items = sortByNameAndId(list.link ?? []).slice(0, maxItems);
       return {
         data: items.map(summarizePlugin),
-        stats: boundedStats(list.link ?? [], maxItems),
+        stats: boundedStatsFromList(list, "link", maxItems),
       };
     }
   }
@@ -309,7 +316,7 @@ async function collectDomain(
 
 async function collectListWithDetails<TListItem, TDetail>(
   domain: string,
-  listFn: () => Promise<{ link?: TListItem[]; content?: TListItem[] }>,
+  listFn: () => Promise<ListStatsSource<TListItem>>,
   idFn: (item: TListItem) => string | undefined,
   detailFn: (id: string) => Promise<TDetail>,
   summarize: (item: TDetail | TListItem) => unknown,
@@ -337,7 +344,7 @@ async function collectListWithDetails<TListItem, TDetail>(
       data.push(summarize(item));
     }
   }
-  return { data, stats: boundedStats(rawItems, maxItems) };
+  return { data, stats: boundedStatsFromList(list, listField, maxItems) };
 }
 
 async function collectBuiltInWorkflows(
@@ -438,8 +445,10 @@ async function collectCategories(
       data[categoryType] = sortByNameAndId(raw)
         .slice(0, maxItems)
         .map(summarizeCategory);
-      count += Math.min(raw.length, maxItems);
-      skipped += Math.max(0, raw.length - maxItems);
+      const collected = Math.min(raw.length, maxItems);
+      const total = list.total ?? raw.length;
+      count += collected;
+      skipped += Math.max(0, total - collected);
     } catch (error) {
       warnings.push(
         `categories: lookup failed for ${categoryType}: ${formatError(error)}`,
@@ -880,9 +889,28 @@ function profileCriteria(
 }
 
 function boundedStats(items: unknown[], maxItems: number): DomainStats {
+  return boundedStatsFromTotal(items.length, maxItems, items.length);
+}
+
+function boundedStatsFromList<T>(
+  list: ListStatsSource<T>,
+  listField: "link" | "content",
+  maxItems: number,
+): DomainStats {
+  const items = list[listField] ?? [];
+  const total = list.total ?? list.totalElements ?? items.length;
+  return boundedStatsFromTotal(items.length, maxItems, total);
+}
+
+function boundedStatsFromTotal(
+  itemCount: number,
+  maxItems: number,
+  reportedTotal: number,
+): DomainStats {
+  const count = Math.min(itemCount, maxItems);
   return {
-    count: Math.min(items.length, maxItems),
-    skipped: Math.max(0, items.length - maxItems),
+    count,
+    skipped: Math.max(0, reportedTotal - count),
   };
 }
 

@@ -1,15 +1,21 @@
 import type { CatalogItem, CatalogItemList, Deployment } from "../types.js";
 import type { VroHttpClient } from "./core.js";
+import { getAllAutomationPages } from "./pagination.js";
 
 export class CatalogClient {
   constructor(private http: VroHttpClient) {}
 
   listCatalogItems(search?: string): Promise<CatalogItemList> {
-    let path = "/items";
+    const params = new URLSearchParams();
     if (search) {
-      path += `?$search=${encodeURIComponent(search)}`;
+      params.set("$search", search);
     }
-    return this.http.get<CatalogItemList>(path, this.http.catalogBaseUrl);
+    return getAllAutomationPages<CatalogItem>(
+      this.http,
+      "/items",
+      this.http.catalogBaseUrl,
+      params,
+    );
   }
 
   getCatalogItem(id: string): Promise<CatalogItem> {
