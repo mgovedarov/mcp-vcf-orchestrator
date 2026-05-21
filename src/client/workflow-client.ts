@@ -348,6 +348,13 @@ function parseChildCategoryRelation(link: CategoryRelationLink): Category | unde
   return category.id && category.name ? category : undefined;
 }
 
+function isWorkflowListPaginationFailure(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    error.message.includes("vRO pagination did not advance for /workflows")
+  );
+}
+
 function resolveWorkflowCategoryFromList(
   categories: Category[],
   params: ListWorkflowsByCategoryParams,
@@ -489,14 +496,58 @@ export class WorkflowClient {
     return { groups, truncated: false };
   }
 
+  private async listWorkflowsFromCategories(filter?: string): Promise<WorkflowList> {
+    const rawCategories = await getAllVroPages<{
+      href?: string;
+      attributes?: { name: string; value: string }[];
+    }>(
+      this.http,
+      "/categories",
+      new URLSearchParams([["categoryType", "WorkflowCategory"]]),
+    );
+    const categories = (rawCategories.link ?? []).map(parseWorkflowCategory);
+    const workflowsById = new Map<string, Workflow>();
+    const normalizedFilter = filter?.toLowerCase();
+
+    for (const category of categories) {
+      const detail = await this.getWorkflowCategoryDetail(category);
+      const links = detail.relations?.link ?? [];
+      for (const workflow of links
+        .map((link) => parseWorkflowRelation(link, detail))
+        .filter((workflow): workflow is Workflow => Boolean(workflow))) {
+        if (
+          normalizedFilter &&
+          !workflow.name.toLowerCase().includes(normalizedFilter)
+        ) {
+          continue;
+        }
+        workflowsById.set(workflow.id, workflow);
+      }
+    }
+
+    const link = [...workflowsById.values()].sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
+    return { total: link.length, link };
+  }
+
   async listWorkflows(filter?: string): Promise<WorkflowList> {
     const params = new URLSearchParams();
     if (filter) {
       params.set("conditions", `name~${filter}`);
     }
-    const raw = await getAllVroPages<{
-      attributes?: { name: string; value: string }[];
-    }>(this.http, "/workflows", params);
+    let raw: {
+      link: { attributes?: { name: string; value: string }[] }[];
+      total?: number;
+    };
+    try {
+      raw = await getAllVroPages<{
+        attributes?: { name: string; value: string }[];
+      }>(this.http, "/workflows", params);
+    } catch (error) {
+      if (!isWorkflowListPaginationFailure(error)) throw error;
+      return this.listWorkflowsFromCategories(filter);
+    }
     const link: Workflow[] = (raw.link ?? []).map((item) => {
       const a = parseAttrs(item.attributes);
       return {

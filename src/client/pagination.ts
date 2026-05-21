@@ -32,6 +32,13 @@ export interface AutomationPageResult<T> {
   totalElements?: number;
 }
 
+function isQueryCountUnsupported(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    error.message.includes("isQueryCount is not implemented")
+  );
+}
+
 export function formatQuery(params: URLSearchParams): string {
   return params
     .toString()
@@ -44,35 +51,47 @@ export async function getAllVroPages<T>(
   http: VroHttpClient,
   path: string,
   params: URLSearchParams = new URLSearchParams(),
-  options: { pageSize?: number } = {},
+  options: { pageSize?: number; queryCount?: boolean } = {},
 ): Promise<VroPageResult<T>> {
   const pageSize = options.pageSize ?? DEFAULT_PAGE_SIZE;
+  let queryCount = options.queryCount ?? true;
   const link: T[] = [];
   let start = 0;
   let firstStart: number | undefined;
   let reportedTotal: number | undefined;
-  let previousResponseStart: number | undefined;
+  const seenPageSignatures = new Set<string>();
 
   for (let requestCount = 0; requestCount < MAX_PAGE_REQUESTS; requestCount += 1) {
-    const pageParams = new URLSearchParams(params);
-    pageParams.set("maxResult", String(pageSize));
-    pageParams.set("startIndex", String(start));
-    pageParams.set("queryCount", "true");
+    const buildPagePath = (includeQueryCount: boolean): string => {
+      const pageParams = new URLSearchParams(params);
+      pageParams.set("maxResult", String(pageSize));
+      pageParams.set("startIndex", String(start));
+      if (includeQueryCount) pageParams.set("queryCount", "true");
+      return `${path}?${formatQuery(pageParams)}`;
+    };
 
-    const page = await http.get<VroPage<T>>(`${path}?${formatQuery(pageParams)}`);
+    let page: VroPage<T>;
+    try {
+      page = await http.get<VroPage<T>>(buildPagePath(queryCount));
+    } catch (error) {
+      if (!queryCount || !isQueryCountUnsupported(error)) throw error;
+      queryCount = false;
+      reportedTotal = undefined;
+      page = await http.get<VroPage<T>>(buildPagePath(false));
+    }
     const items = page.link ?? [];
     if (firstStart === undefined) firstStart = page.start;
-    if (page.total !== undefined) reportedTotal = page.total;
+    if (queryCount && page.total !== undefined) reportedTotal = page.total;
 
-    if (
-      requestCount > 0 &&
-      page.start !== undefined &&
-      previousResponseStart !== undefined &&
-      page.start <= previousResponseStart
-    ) {
-      break;
+    if (items.length > 0) {
+      const signature = JSON.stringify(items);
+      if (seenPageSignatures.has(signature)) {
+        throw new Error(
+          `vRO pagination did not advance for ${path}; received a repeated page at startIndex=${start}`,
+        );
+      }
+      seenPageSignatures.add(signature);
     }
-    previousResponseStart = page.start;
 
     link.push(...items);
 
@@ -80,7 +99,7 @@ export async function getAllVroPages<T>(
     if (reportedTotal !== undefined && link.length >= reportedTotal) break;
     if (items.length < pageSize && reportedTotal === undefined) break;
 
-    start = (page.start ?? start) + items.length;
+    start += items.length;
   }
 
   return {

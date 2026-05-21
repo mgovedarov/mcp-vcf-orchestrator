@@ -223,6 +223,254 @@ test("vRO pagination continues after short pages when total reports more results
   );
 });
 
+test("listWorkflows keeps page size 100 while collecting inventories over 600 items", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+
+    const requestUrl = new URL(String(url));
+    const startIndex = Number(requestUrl.searchParams.get("startIndex"));
+    const maxResult = Number(requestUrl.searchParams.get("maxResult"));
+    const queryCount = requestUrl.searchParams.get("queryCount");
+    const total = queryCount === "true" ? 625 : 100;
+    const count = Math.max(0, Math.min(maxResult, total - startIndex));
+    return Response.json({
+      start: 0,
+      total,
+      link: Array.from({ length: count }, (_, index) => ({
+        attributes: [
+          { name: "id", value: `workflow-${startIndex + index}` },
+          { name: "name", value: `Workflow ${startIndex + index}` },
+        ],
+      })),
+    });
+  };
+
+  const client = new VroClient(config());
+  const workflows = await client.listWorkflows();
+
+  assert.equal(workflows.total, 625);
+  assert.equal(workflows.link.length, 625);
+  assert.equal(calls.length, 8);
+
+  const pageUrls = calls.slice(1).map((call) => new URL(call.url));
+  assert.deepEqual(
+    pageUrls.map((url) => url.searchParams.get("startIndex")),
+    ["0", "100", "200", "300", "400", "500", "600"],
+  );
+  assert.ok(
+    pageUrls.every(
+      (url) =>
+        url.searchParams.get("maxResult") === "100" &&
+        url.searchParams.get("queryCount") === "true",
+    ),
+  );
+});
+
+test("listWorkflows falls back when vRO rejects queryCount", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+
+    const requestUrl = new URL(String(url));
+    if (requestUrl.searchParams.get("queryCount") === "true") {
+      return Response.json(
+        {
+          message:
+            "isQueryCount is not implemented for the type.",
+        },
+        { status: 400, statusText: "Bad Request" },
+      );
+    }
+
+    const startIndex = Number(requestUrl.searchParams.get("startIndex"));
+    const maxResult = Number(requestUrl.searchParams.get("maxResult"));
+    const total = 625;
+    const count = Math.max(0, Math.min(maxResult, total - startIndex));
+    return Response.json({
+      start: 0,
+      total: 100,
+      link: Array.from({ length: count }, (_, index) => ({
+        attributes: [
+          { name: "id", value: `workflow-${startIndex + index}` },
+          { name: "name", value: `Workflow ${startIndex + index}` },
+        ],
+      })),
+    });
+  };
+
+  const client = new VroClient(config());
+  const workflows = await client.listWorkflows();
+
+  assert.equal(workflows.total, 625);
+  assert.equal(workflows.link.length, 625);
+
+  const pageUrls = calls.slice(2).map((call) => new URL(call.url));
+  assert.deepEqual(
+    pageUrls.map((url) => url.searchParams.get("startIndex")),
+    ["0", "100", "200", "300", "400", "500", "600"],
+  );
+  assert.ok(
+    pageUrls.every(
+      (url) =>
+        url.searchParams.get("maxResult") === "100" &&
+        url.searchParams.get("queryCount") === null,
+    ),
+  );
+});
+
+test("listWorkflows falls back to categories when workflow pages repeat", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+
+    const requestUrl = new URL(String(url));
+    if (requestUrl.pathname.endsWith("/workflows")) {
+      if (requestUrl.searchParams.get("queryCount") === "true") {
+        return Response.json(
+          { message: "isQueryCount is not implemented for the type." },
+          { status: 400, statusText: "Bad Request" },
+        );
+      }
+      return Response.json({
+        start: 0,
+        total: 100,
+        link: Array.from({ length: 100 }, (_, index) => ({
+          attributes: [
+            { name: "id", value: `repeated-${index}` },
+            { name: "name", value: `Repeated ${index}` },
+          ],
+        })),
+      });
+    }
+
+    if (requestUrl.pathname.endsWith("/categories")) {
+      return Response.json({
+        total: 1,
+        link: [
+          {
+            attributes: [
+              { name: "id", value: "root" },
+              { name: "name", value: "Root" },
+              { name: "type", value: "WorkflowCategory" },
+            ],
+          },
+        ],
+      });
+    }
+
+    if (requestUrl.pathname.endsWith("/categories/root")) {
+      return Response.json({
+        id: "root",
+        name: "Root",
+        type: "WorkflowCategory",
+        relations: {
+          link: [
+            {
+              rel: "down",
+              attributes: [
+                { name: "type", value: "Workflow" },
+                { name: "id", value: "workflow-1" },
+                { name: "name", value: "Workflow One" },
+              ],
+            },
+            {
+              rel: "down",
+              attributes: [
+                { name: "type", value: "Workflow" },
+                { name: "id", value: "workflow-2" },
+                { name: "name", value: "Workflow Two" },
+              ],
+            },
+          ],
+        },
+      });
+    }
+
+    throw new Error(`Unexpected URL: ${url}`);
+  };
+
+  const client = new VroClient(config());
+  const workflows = await client.listWorkflows();
+
+  assert.equal(workflows.total, 2);
+  assert.deepEqual(
+    workflows.link.map((workflow) => workflow.id),
+    ["workflow-1", "workflow-2"],
+  );
+});
+
+test("listWorkflows falls back to categories when counted workflow pages repeat", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+
+    const requestUrl = new URL(String(url));
+    if (requestUrl.pathname.endsWith("/workflows")) {
+      return Response.json({
+        start: 0,
+        total: 250,
+        link: Array.from({ length: 100 }, (_, index) => ({
+          attributes: [
+            { name: "id", value: `repeated-${index}` },
+            { name: "name", value: `Repeated ${index}` },
+          ],
+        })),
+      });
+    }
+
+    if (requestUrl.pathname.endsWith("/categories")) {
+      return Response.json({
+        total: 1,
+        link: [
+          {
+            attributes: [
+              { name: "id", value: "root" },
+              { name: "name", value: "Root" },
+              { name: "type", value: "WorkflowCategory" },
+            ],
+          },
+        ],
+      });
+    }
+
+    if (requestUrl.pathname.endsWith("/categories/root")) {
+      return Response.json({
+        id: "root",
+        name: "Root",
+        type: "WorkflowCategory",
+        relations: {
+          link: [
+            {
+              rel: "down",
+              attributes: [
+                { name: "type", value: "Workflow" },
+                { name: "id", value: "workflow-1" },
+                { name: "name", value: "Workflow One" },
+              ],
+            },
+          ],
+        },
+      });
+    }
+
+    throw new Error(`Unexpected URL: ${url}`);
+  };
+
+  const client = new VroClient(config());
+  const workflows = await client.listWorkflows();
+
+  assert.equal(workflows.total, 1);
+  assert.deepEqual(
+    workflows.link.map((workflow) => workflow.id),
+    ["workflow-1"],
+  );
+});
+
 test("vra8 platform paginates vRO lists with Basic auth", async () => {
   const calls = [];
   globalThis.fetch = async (url, init) => {
