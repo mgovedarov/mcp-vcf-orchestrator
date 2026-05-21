@@ -26,6 +26,7 @@ function discoveryGuardrails(): string[] {
     "Workflow layout preference: when authoring or editing workflow XML/package content, arrange sequential workflow items horizontally from left to right.",
     "Workflow input form preference: generated workflows with inputs must include a valid input_form_ entry. Use page-level titles, section objects with only id and fields, field IDs that match schema keys, and options.externalValidations: []. Do not add section title or unverified field properties such as size.",
     "Publish reusable vRO content through the configured project package by default: ensure-project-package, add content, rebuild-project-package, export-project-package, inspect import details, and import-project-package. Use direct artifact imports only for narrow validation or explicitly requested one-off tests.",
+    "Two-phase confirmation preference: after discovery, include expected target fields such as expectedName, expectedWorkflowName, expectedCategoryName, expectedPackageName, expectedDeploymentName, expectedActionName, expectedEventTopicId, or expectedRunnableId in confirmed mutation calls when the tool supports them.",
     "Prefer reading vcfa://docs/artifact-authoring and the relevant vcfa://patterns/* or vcfa://schemas/* resource before drafting artifacts.",
   ];
 }
@@ -55,7 +56,7 @@ export function registerVcfaPrompts(server: McpServer): void {
           "Use VCFA MCP tools to inspect existing categories, workflows, and reusable actions before creating anything new.",
           ...discoveryGuardrails(),
           "Prefer scaffold-workflow-file for local artifact generation, then run preflight-workflow-file and summarize any errors or warnings.",
-          "For reusable workflow content, recommend adding the workflow to the project package and importing the package. Only recommend direct import-workflow-file for narrow validation or explicitly requested one-off tests after preflight passes and the user confirms the target category and import intent.",
+          "For reusable workflow content, recommend adding the workflow to the project package and importing the package. Only recommend direct import-workflow-file for narrow validation or explicitly requested one-off tests after preflight passes and the user confirms the target category and import intent; include expectedCategoryId or expectedCategoryName when available.",
         ]),
       ),
   );
@@ -83,7 +84,7 @@ export function registerVcfaPrompts(server: McpServer): void {
           "Run the matching preflight tool for this artifact and summarize blocking errors, warnings, metadata, parameters, and action references.",
           ...discoveryGuardrails(),
           "Check the target category or package context with list-categories, list-packages, list-workflows, list-actions, or list-configurations as appropriate.",
-          "For reusable project content, recommend the package import path. Recommend a direct artifact import only after explaining why it is a validation or one-off import, plus the risks and required confirmation.",
+          "For reusable project content, recommend the package import path. Recommend a direct artifact import only after explaining why it is a validation or one-off import, plus the risks and required confirmation; include expected category or package fields when available.",
         ]),
       ),
   );
@@ -114,7 +115,7 @@ export function registerVcfaPrompts(server: McpServer): void {
           "Use list-deployment-actions to identify available day-2 operations and their required inputs.",
           ...discoveryGuardrails(),
           "Irreversible actions such as destroy or delete require extra confirmation including the deployment name, expected data loss, and explicit user acknowledgement before execution.",
-          "Do not run deployment actions until the user confirms the action, inputs, target deployment, and expected impact.",
+          "Do not run deployment actions until the user confirms the action, inputs, target deployment, and expected impact. Pass expectedDeploymentName and expectedActionName when submitting the confirmed action.",
         ]),
       ),
   );
@@ -251,7 +252,7 @@ export function registerVcfaPrompts(server: McpServer): void {
           "Export the current workflow with export-workflow-file before preparing replacement artifacts.",
           "Read vcfa://docs/artifact-authoring and vcfa://patterns/workflows/basic-scriptable-task for scaffold and validation constraints.",
           ...discoveryGuardrails(),
-          "Use preflight-workflow-file and diff-workflow-file before recommending import. Do not import until the user confirms target, overwrite intent, and risk.",
+          "Use preflight-workflow-file and diff-workflow-file before recommending import. Do not import until the user confirms target, overwrite intent, and risk; include expectedCategoryId or expectedCategoryName in the confirmed import call when available.",
         ]),
       ),
   );
@@ -339,7 +340,7 @@ export function registerVcfaPrompts(server: McpServer): void {
           "Use list-workflows/get-workflow, list-templates/get-template, list-catalog-items/get-catalog-item, list-event-topics, and list-subscriptions to map current state.",
           "Use list-deployments and list-deployment-actions if day-2 behavior matters.",
           ...discoveryGuardrails(),
-          "Recommend create-subscription, update-subscription, template creation, or workflow import only as explicit next steps with required confirm arguments and risks.",
+          "Recommend create-subscription, update-subscription, template creation, or workflow import only as explicit next steps with required confirm arguments, expected target fields where supported, and risks.",
         ]),
       ),
   );
@@ -368,7 +369,7 @@ export function registerVcfaPrompts(server: McpServer): void {
           "Start with read-only discovery calls relevant to the artifact focus: list-workflows, list-workflows-by-category, list-actions, list-configurations, list-resource-elements, list-templates, list-catalog-items, list-deployments, list-event-topics, list-subscriptions, list-categories, list-packages, and list-plugins.",
           "Read relevant vcfa://docs, vcfa://schemas, and vcfa://patterns resources before recommending artifact creation.",
           ...discoveryGuardrails(),
-          "Return a phased plan with discovery, local artifact generation, preflight/diff, confirmation points, import or create calls, and post-change verification.",
+          "Return a phased plan with discovery, local artifact generation, preflight/diff, expected target fields for confirmed mutations, confirmation points, import or create calls, and post-change verification.",
         ]),
       ),
   );

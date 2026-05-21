@@ -3,6 +3,12 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { formatPreflightReport } from "../client/artifact-preflight.js";
 import type { VroClient } from "../vro-client.js";
+import {
+  appendGuardGuidance,
+  guardExpectedCategory,
+  guardExpectedFields,
+  hasAnyExpectedValue,
+} from "./confirmation-guards.js";
 
 export function registerConfigTools(
   server: McpServer,
@@ -202,6 +208,12 @@ export function registerConfigTools(
         "Delete a configuration element from VCF Automation Orchestrator. This action is irreversible. Set confirm to true to proceed.",
       inputSchema: z.object({
         id: z.string().describe("The configuration element ID to delete"),
+        expectedName: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected configuration element name verified before deletion",
+          ),
         confirm: z
           .boolean()
           .describe(
@@ -210,7 +222,7 @@ export function registerConfigTools(
       }),
       annotations: { readOnlyHint: false, destructiveHint: true },
     },
-    async ({ id, confirm }): Promise<CallToolResult> => {
+    async ({ id, expectedName, confirm }): Promise<CallToolResult> => {
       if (!confirm) {
         return {
           content: [
@@ -222,6 +234,18 @@ export function registerConfigTools(
         };
       }
       try {
+        if (hasAnyExpectedValue({ expectedName })) {
+          const config = await client.getConfiguration(id);
+          const guard = guardExpectedFields(`configuration ${id}`, [
+            {
+              label: "configuration name",
+              expected: expectedName,
+              actual: config.name,
+            },
+          ]);
+          if (guard) return guard;
+        }
+
         await client.deleteConfiguration(id);
         return {
           content: [
@@ -345,6 +369,18 @@ export function registerConfigTools(
           .describe(
             "Configuration file name under the configured configuration artifact directory to import",
           ),
+        expectedCategoryId: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected configuration category ID; must match categoryId before import",
+          ),
+        expectedCategoryName: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected configuration category name verified before import",
+          ),
         confirm: z
           .boolean()
           .describe(
@@ -353,7 +389,13 @@ export function registerConfigTools(
       }),
       annotations: { readOnlyHint: false },
     },
-    async ({ categoryId, fileName, confirm }): Promise<CallToolResult> => {
+    async ({
+      categoryId,
+      fileName,
+      expectedCategoryId,
+      expectedCategoryName,
+      confirm,
+    }): Promise<CallToolResult> => {
       if (!confirm) {
         return {
           content: [
@@ -365,12 +407,37 @@ export function registerConfigTools(
         };
       }
       try {
+        const categoryIdGuard = guardExpectedFields(
+          `configuration import target ${categoryId}`,
+          [
+            {
+              label: "category ID",
+              expected: expectedCategoryId,
+              actual: categoryId,
+            },
+          ],
+        );
+        if (categoryIdGuard) return categoryIdGuard;
+
+        if (expectedCategoryName !== undefined) {
+          const categoryNameGuard = await guardExpectedCategory(
+            `configuration import target ${categoryId}`,
+            "ConfigurationElementCategory",
+            categoryId,
+            expectedCategoryName,
+            client.listCategories.bind(client),
+          );
+          if (categoryNameGuard) return categoryNameGuard;
+        }
+
         await client.importConfigurationFile(categoryId, fileName);
         return {
           content: [
             {
               type: "text",
-              text: `Configuration element imported successfully from: ${fileName}`,
+              text: appendGuardGuidance(
+                `Configuration element imported successfully from: ${fileName}`,
+              ),
             },
           ],
         };
@@ -396,6 +463,12 @@ export function registerConfigTools(
         "Update an existing configuration element's name, description, or attributes. Only the fields you provide will be updated.",
       inputSchema: z.object({
         id: z.string().describe("The configuration element ID to update"),
+        expectedName: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected current configuration element name verified before update",
+          ),
         name: z
           .string()
           .optional()
@@ -426,6 +499,7 @@ export function registerConfigTools(
     },
     async ({
       id,
+      expectedName,
       name,
       description,
       attributes,
@@ -443,6 +517,18 @@ export function registerConfigTools(
       }
 
       try {
+        if (hasAnyExpectedValue({ expectedName })) {
+          const config = await client.getConfiguration(id);
+          const guard = guardExpectedFields(`configuration ${id}`, [
+            {
+              label: "configuration name",
+              expected: expectedName,
+              actual: config.name,
+            },
+          ]);
+          if (guard) return guard;
+        }
+
         await client.updateConfiguration(id, { name, description, attributes });
         return {
           content: [

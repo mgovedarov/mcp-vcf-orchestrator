@@ -166,3 +166,35 @@ test("template tools create and delete with confirmation", async () => {
   await handlers.get("delete-template")({ id: "template-2", confirm: true });
   assert.equal(deletedId, "template-2");
 });
+
+test("delete-template verifies expected metadata before deletion", async () => {
+  let deletedId;
+  const handlers = registeredTools(registerTemplateTools, {
+    getTemplate: async (id) => ({
+      id,
+      name: "Small VM",
+      projectId: "project-1",
+      status: "DRAFT",
+    }),
+    deleteTemplate: async (id) => {
+      deletedId = id;
+    },
+  });
+
+  const mismatch = await handlers.get("delete-template")({
+    id: "template-1",
+    expectedName: "Large VM",
+    expectedProjectId: "project-1",
+    confirm: true,
+  });
+  assert.equal(mismatch.isError, true);
+  assert.equal(deletedId, undefined);
+
+  await handlers.get("delete-template")({
+    id: "template-1",
+    expectedName: "Small VM",
+    expectedStatus: "DRAFT",
+    confirm: true,
+  });
+  assert.equal(deletedId, "template-1");
+});

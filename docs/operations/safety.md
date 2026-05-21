@@ -16,6 +16,17 @@ These operations should be performed only after explicit user confirmation:
 - deleting workflows, actions, configurations, resource elements, packages, templates, deployments, or subscriptions
 - running deployment day-2 actions
 
+## Two-Phase Target Confirmation
+
+For high-risk live mutations, prefer a two-phase flow:
+
+1. Discover the live target with the matching list/get tool or prepare the artifact with `prepare-artifact-promotion`.
+2. Confirm the exact target and impact with the user.
+3. Pass `confirm: true` plus supported expected target fields such as `expectedName`, `expectedWorkflowName`, `expectedInputNames`, `expectedCategoryId`, `expectedCategoryName`, `expectedPackageName`, `expectedDeploymentName`, `expectedActionName`, `expectedEventTopicId`, or `expectedRunnableId`.
+4. Verify with a read-only get/list call after mutation.
+
+Expected fields are optional for backward compatibility. When provided, the handler fetches current live metadata before the mutation and refuses if any expected value does not match. Direct imports remain available for narrow validation and one-off tests, but package-first promotion with preflight, diff, backup, expected fields, and post-change verification is safer for reusable content.
+
 ## Artifact Path Safety
 
 Artifact file tools require plain file names under configured artifact directories. They reject:

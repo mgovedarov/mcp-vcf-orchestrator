@@ -268,6 +268,85 @@ test("run-workflow-and-wait fills omitted input types and returns outputs", asyn
   assert.match(result.content[0].text, /result \(string\): "ok"/);
 });
 
+test("run-workflow expected guards stop before execution on mismatch", async () => {
+  let runCalls = 0;
+  const handlers = registeredWorkflowTools({
+    getWorkflow: async () => ({
+      id: "workflow-1",
+      name: "Provision VM",
+      inputParameters: [{ name: "vmName", type: "string" }],
+    }),
+    runWorkflow: async () => {
+      runCalls += 1;
+      return { id: "execution-1", state: "running" };
+    },
+  });
+
+  const result = await handlers.get("run-workflow")({
+    id: "workflow-1",
+    expectedWorkflowName: "Delete VM",
+    confirm: true,
+  });
+
+  assert.equal(result.isError, true);
+  assert.equal(runCalls, 0);
+  assert.match(result.content[0].text, /Target confirmation failed/);
+  assert.match(result.content[0].text, /workflow name/);
+});
+
+test("run-workflow-and-wait verifies expected input names before running", async () => {
+  let runCalls = 0;
+  const handlers = registeredWorkflowTools({
+    getWorkflow: async () => ({
+      id: "workflow-1",
+      name: "Provision VM",
+      inputParameters: [{ name: "vmName", type: "string" }],
+    }),
+    runWorkflow: async () => {
+      runCalls += 1;
+      return { id: "execution-1", state: "running" };
+    },
+  });
+
+  const result = await handlers.get("run-workflow-and-wait")({
+    id: "workflow-1",
+    expectedWorkflowName: "Provision VM",
+    expectedInputNames: ["projectName"],
+    inputs: [{ name: "vmName", value: "web-01" }],
+    confirm: true,
+  });
+
+  assert.equal(result.isError, true);
+  assert.equal(runCalls, 0);
+  assert.match(result.content[0].text, /input names/);
+});
+
+test("delete-workflow verifies expected name when provided", async () => {
+  let deletedId;
+  const handlers = registeredWorkflowTools({
+    getWorkflow: async (id) => ({ id, name: "Cleanup VM" }),
+    deleteWorkflow: async (id) => {
+      deletedId = id;
+    },
+  });
+
+  const mismatch = await handlers.get("delete-workflow")({
+    id: "workflow-1",
+    expectedName: "Provision VM",
+    confirm: true,
+  });
+  assert.equal(mismatch.isError, true);
+  assert.equal(deletedId, undefined);
+
+  const success = await handlers.get("delete-workflow")({
+    id: "workflow-1",
+    expectedName: "Cleanup VM",
+    confirm: true,
+  });
+  assert.equal(success.isError, undefined);
+  assert.equal(deletedId, "workflow-1");
+});
+
 test("run-workflow-and-wait reports failure diagnostics and log excerpts", async () => {
   const handlers = registeredWorkflowTools({
     getWorkflow: async () => ({

@@ -158,3 +158,61 @@ test("delete-subscription requires confirmation", async () => {
   await handlers.get("delete-subscription")({ id: "sub-1", confirm: true });
   assert.equal(deletedId, "sub-1");
 });
+
+test("subscription update and delete expected guards verify current target", async () => {
+  let updatedCall;
+  let deletedId;
+  const handlers = registeredSubscriptionTools({
+    getSubscription: async (id) => ({
+      id,
+      name: "Approval",
+      eventTopicId: "topic-1",
+      runnableId: "workflow-1",
+    }),
+    updateSubscription: async (id, params) => {
+      updatedCall = { id, params };
+      return { id, name: params.name ?? "Approval", disabled: params.disabled };
+    },
+    deleteSubscription: async (id) => {
+      deletedId = id;
+    },
+  });
+
+  const mismatch = await handlers.get("update-subscription")({
+    id: "sub-1",
+    expectedName: "Other approval",
+    disabled: true,
+    confirm: true,
+  });
+  assert.equal(mismatch.isError, true);
+  assert.equal(updatedCall, undefined);
+
+  await handlers.get("update-subscription")({
+    id: "sub-1",
+    expectedName: "Approval",
+    expectedEventTopicId: "topic-1",
+    disabled: true,
+    confirm: true,
+  });
+  assert.deepEqual(updatedCall, {
+    id: "sub-1",
+    params: {
+      name: undefined,
+      description: undefined,
+      disabled: true,
+      runnableId: undefined,
+      runnableType: undefined,
+      blocking: undefined,
+      priority: undefined,
+      timeout: undefined,
+    },
+  });
+
+  const deleteMismatch = await handlers.get("delete-subscription")({
+    id: "sub-1",
+    expectedRunnableId: "workflow-2",
+    confirm: true,
+  });
+  assert.equal(deleteMismatch.isError, true);
+  assert.equal(deletedId, undefined);
+});

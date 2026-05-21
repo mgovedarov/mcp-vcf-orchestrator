@@ -199,3 +199,74 @@ test("run-deployment-action reports submitted request id and status", async () =
   assert.match(result.content[0].text, /ID: request-1/);
   assert.match(result.content[0].text, /Status: INPROGRESS/);
 });
+
+test("deployment delete expected guards stop mismatched deletion", async () => {
+  let deletedId;
+  const handlers = registeredDeploymentTools({
+    getDeployment: async (id) => ({
+      id,
+      name: "Ubuntu VM",
+      projectId: "project-1",
+      status: "CREATE_SUCCESSFUL",
+    }),
+    deleteDeployment: async (id) => {
+      deletedId = id;
+    },
+  });
+
+  const result = await handlers.get("delete-deployment")({
+    id: "deployment-1",
+    expectedName: "Database VM",
+    expectedProjectId: "project-1",
+    confirm: true,
+  });
+
+  assert.equal(result.isError, true);
+  assert.equal(deletedId, undefined);
+  assert.match(result.content[0].text, /deployment name/);
+});
+
+test("run-deployment-action verifies expected deployment and action metadata", async () => {
+  let requestParams;
+  const handlers = registeredDeploymentTools({
+    getDeployment: async (id) => ({
+      id,
+      name: "Ubuntu VM",
+      projectId: "project-1",
+      projectName: "Development",
+      status: "CREATE_SUCCESSFUL",
+    }),
+    listDeploymentActions: async () => ({
+      content: [{ id: "Deployment.PowerOff", name: "Power off" }],
+    }),
+    runDeploymentAction: async (params) => {
+      requestParams = params;
+      return { id: "request-1", status: "INPROGRESS" };
+    },
+  });
+
+  const mismatch = await handlers.get("run-deployment-action")({
+    deploymentId: "deployment-1",
+    actionId: "Deployment.PowerOff",
+    expectedDeploymentName: "Ubuntu VM",
+    expectedActionName: "Delete",
+    confirm: true,
+  });
+  assert.equal(mismatch.isError, true);
+  assert.equal(requestParams, undefined);
+
+  await handlers.get("run-deployment-action")({
+    deploymentId: "deployment-1",
+    actionId: "Deployment.PowerOff",
+    expectedDeploymentName: "Ubuntu VM",
+    expectedProjectName: "Development",
+    expectedActionName: "Power off",
+    confirm: true,
+  });
+  assert.deepEqual(requestParams, {
+    deploymentId: "deployment-1",
+    actionId: "Deployment.PowerOff",
+    reason: undefined,
+    inputs: undefined,
+  });
+});

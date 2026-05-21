@@ -2,6 +2,12 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import type { VroClient } from "../vro-client.js";
+import {
+  appendGuardGuidance,
+  guardExpectedCategory,
+  guardExpectedFields,
+  hasAnyExpectedValue,
+} from "./confirmation-guards.js";
 
 export function registerResourceTools(
   server: McpServer,
@@ -120,6 +126,18 @@ export function registerResourceTools(
         fileName: z
           .string()
           .describe("File name under the configured resource artifact directory to import"),
+        expectedCategoryId: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected resource category ID; must match categoryId before import",
+          ),
+        expectedCategoryName: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected resource category name verified before import",
+          ),
         confirm: z
           .boolean()
           .describe(
@@ -128,7 +146,13 @@ export function registerResourceTools(
       }),
       annotations: { readOnlyHint: false },
     },
-    async ({ categoryId, fileName, confirm }): Promise<CallToolResult> => {
+    async ({
+      categoryId,
+      fileName,
+      expectedCategoryId,
+      expectedCategoryName,
+      confirm,
+    }): Promise<CallToolResult> => {
       if (!confirm) {
         return {
           content: [
@@ -140,12 +164,37 @@ export function registerResourceTools(
         };
       }
       try {
+        const categoryIdGuard = guardExpectedFields(
+          `resource import target ${categoryId}`,
+          [
+            {
+              label: "category ID",
+              expected: expectedCategoryId,
+              actual: categoryId,
+            },
+          ],
+        );
+        if (categoryIdGuard) return categoryIdGuard;
+
+        if (expectedCategoryName !== undefined) {
+          const categoryNameGuard = await guardExpectedCategory(
+            `resource import target ${categoryId}`,
+            "ResourceElementCategory",
+            categoryId,
+            expectedCategoryName,
+            client.listCategories.bind(client),
+          );
+          if (categoryNameGuard) return categoryNameGuard;
+        }
+
         await client.importResource(categoryId, fileName);
         return {
           content: [
             {
               type: "text",
-              text: `Resource element imported successfully from: ${fileName}`,
+              text: appendGuardGuidance(
+                `Resource element imported successfully from: ${fileName}`,
+              ),
             },
           ],
         };
@@ -171,6 +220,18 @@ export function registerResourceTools(
         "Update an existing resource element's binary content from a file under the configured resource artifact directory.",
       inputSchema: z.object({
         id: z.string().describe("The resource element ID to update"),
+        expectedName: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected resource element name verified before update",
+          ),
+        expectedCategoryName: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected resource category name verified before update",
+          ),
         fileName: z
           .string()
           .describe(
@@ -192,6 +253,8 @@ export function registerResourceTools(
     },
     async ({
       id,
+      expectedName,
+      expectedCategoryName,
       fileName,
       changesetSha,
       confirm,
@@ -207,6 +270,23 @@ export function registerResourceTools(
         };
       }
       try {
+        if (hasAnyExpectedValue({ expectedName, expectedCategoryName })) {
+          const resource = await client.getResourceElement(id);
+          const guard = guardExpectedFields(`resource element ${id}`, [
+            {
+              label: "resource name",
+              expected: expectedName,
+              actual: resource.name,
+            },
+            {
+              label: "category name",
+              expected: expectedCategoryName,
+              actual: resource.categoryName,
+            },
+          ]);
+          if (guard) return guard;
+        }
+
         await client.updateResourceContent(id, fileName, changesetSha);
         return {
           content: [
@@ -238,6 +318,18 @@ export function registerResourceTools(
         "Delete a resource element from VCF Automation Orchestrator. Set force to true to delete a resource that is referenced by workflows. Set confirm to true to proceed.",
       inputSchema: z.object({
         id: z.string().describe("The resource element ID to delete"),
+        expectedName: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected resource element name verified before deletion",
+          ),
+        expectedCategoryName: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected resource category name verified before deletion",
+          ),
         force: z
           .boolean()
           .optional()
@@ -252,7 +344,13 @@ export function registerResourceTools(
       }),
       annotations: { readOnlyHint: false, destructiveHint: true },
     },
-    async ({ id, force, confirm }): Promise<CallToolResult> => {
+    async ({
+      id,
+      expectedName,
+      expectedCategoryName,
+      force,
+      confirm,
+    }): Promise<CallToolResult> => {
       if (!confirm) {
         return {
           content: [
@@ -264,6 +362,23 @@ export function registerResourceTools(
         };
       }
       try {
+        if (hasAnyExpectedValue({ expectedName, expectedCategoryName })) {
+          const resource = await client.getResourceElement(id);
+          const guard = guardExpectedFields(`resource element ${id}`, [
+            {
+              label: "resource name",
+              expected: expectedName,
+              actual: resource.name,
+            },
+            {
+              label: "category name",
+              expected: expectedCategoryName,
+              actual: resource.categoryName,
+            },
+          ]);
+          if (guard) return guard;
+        }
+
         await client.deleteResource(id, force ?? false);
         return {
           content: [
