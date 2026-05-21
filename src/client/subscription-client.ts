@@ -4,18 +4,23 @@ import type {
   SubscriptionList,
 } from "../types.js";
 import type { VroHttpClient } from "./core.js";
+import { getAllAutomationPages } from "./pagination.js";
 
 export class SubscriptionClient {
   constructor(private http: VroHttpClient) {}
 
   listSubscriptions(projectId?: string): Promise<SubscriptionList> {
-    let path = "/subscriptions";
+    const params = new URLSearchParams();
     if (projectId) {
       // Escape single quotes for OData string literal ('' is the OData escape for ').
-      const safeProjectId = encodeURIComponent(projectId.replace(/'/g, "''"));
-      path += `?$filter=projectId eq '${safeProjectId}'`;
+      params.set("$filter", `projectId eq '${projectId.replace(/'/g, "''")}'`);
     }
-    return this.http.get<SubscriptionList>(path, this.http.eventBrokerBaseUrl);
+    return getAllAutomationPages<Subscription>(
+      this.http,
+      "/subscriptions",
+      this.http.eventBrokerBaseUrl,
+      params,
+    );
   }
 
   getSubscription(id: string): Promise<Subscription> {
@@ -88,7 +93,8 @@ export class SubscriptionClient {
   }
 
   listEventTopics(): Promise<EventTopicList> {
-    return this.http.get<EventTopicList>(
+    return getAllAutomationPages(
+      this.http,
       "/topics",
       this.http.eventBrokerBaseUrl,
     );

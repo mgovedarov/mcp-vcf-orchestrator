@@ -145,9 +145,112 @@ test("vra8 platform uses Basic auth directly against vRO APIs", async () => {
   assert.equal(calls.length, 1);
   assert.equal(
     calls[0].url,
-    "https://vcfa.example.test/vco/api/workflows",
+    "https://vcfa.example.test/vco/api/workflows?maxResult=100&startIndex=0&queryCount=true",
   );
   assert.equal(calls[0].init.headers.Authorization, "Basic YWRtaW5Ab3JnOnNlY3JldA==");
+});
+
+test("vRO list clients aggregate multiple startIndex pages and preserve filters", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+
+    const requestUrl = new URL(String(url));
+    const startIndex = Number(requestUrl.searchParams.get("startIndex"));
+    const count = startIndex === 0 ? 100 : 1;
+    return Response.json({
+      start: startIndex,
+      total: 101,
+      link: Array.from({ length: count }, (_, index) => ({
+        attributes: [
+          { name: "id", value: `action-${startIndex + index}` },
+          { name: "name", value: `Action ${startIndex + index}` },
+          { name: "module", value: "com.example" },
+        ],
+      })),
+    });
+  };
+
+  const client = new VroClient(config());
+  const actions = await client.listActions("deploy vm");
+
+  assert.equal(actions.total, 101);
+  assert.equal(actions.link.length, 101);
+  assert.equal(
+    calls[1].url,
+    "https://vcfa.example.test/vco/api/actions?conditions=name~deploy%20vm&maxResult=100&startIndex=0&queryCount=true",
+  );
+  assert.equal(
+    calls[2].url,
+    "https://vcfa.example.test/vco/api/actions?conditions=name~deploy%20vm&maxResult=100&startIndex=100&queryCount=true",
+  );
+});
+
+test("vRO pagination continues after short pages when total reports more results", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+
+    const requestUrl = new URL(String(url));
+    const startIndex = Number(requestUrl.searchParams.get("startIndex"));
+    const count = startIndex === 0 ? 50 : 25;
+    return Response.json({
+      start: startIndex,
+      total: 75,
+      link: Array.from({ length: count }, (_, index) => ({
+        attributes: [
+          { name: "id", value: `workflow-${startIndex + index}` },
+          { name: "name", value: `Workflow ${startIndex + index}` },
+        ],
+      })),
+    });
+  };
+
+  const client = new VroClient(config());
+  const workflows = await client.listWorkflows();
+
+  assert.equal(workflows.total, 75);
+  assert.equal(workflows.link.length, 75);
+  assert.equal(
+    calls[1].url,
+    "https://vcfa.example.test/vco/api/workflows?maxResult=100&startIndex=0&queryCount=true",
+  );
+  assert.equal(
+    calls[2].url,
+    "https://vcfa.example.test/vco/api/workflows?maxResult=100&startIndex=50&queryCount=true",
+  );
+});
+
+test("vra8 platform paginates vRO lists with Basic auth", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    const requestUrl = new URL(String(url));
+    const startIndex = Number(requestUrl.searchParams.get("startIndex"));
+    return Response.json({
+      start: startIndex,
+      total: 101,
+      link: Array.from({ length: startIndex === 0 ? 100 : 1 }, (_, index) => ({
+        attributes: [
+          { name: "id", value: `workflow-${startIndex + index}` },
+          { name: "name", value: `Workflow ${startIndex + index}` },
+        ],
+      })),
+    });
+  };
+
+  const client = new VroClient(config({ targetPlatform: "vra8" }));
+  const workflows = await client.listWorkflows();
+
+  assert.equal(workflows.link.length, 101);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].init.headers.Authorization, "Basic YWRtaW5Ab3JnOnNlY3JldA==");
+  assert.equal(
+    calls[1].url,
+    "https://vcfa.example.test/vco/api/workflows?maxResult=100&startIndex=100&queryCount=true",
+  );
 });
 
 test("client rejects invalid target platform values", () => {
@@ -695,7 +798,11 @@ test("catalog client uses service broker endpoints and request payloads", async 
     calls.push({ url: String(url), init });
     if (calls.length === 1) return authResponse();
 
-    if (String(url).endsWith("/catalog/api/items?$search=ubuntu%2022")) {
+    if (
+      String(url).endsWith(
+        "/catalog/api/items?$search=ubuntu%2022&page=0&size=100",
+      )
+    ) {
       return Response.json({
         totalElements: 1,
         content: [{ id: "catalog-1", name: "Ubuntu 22" }],
@@ -726,7 +833,7 @@ test("catalog client uses service broker endpoints and request payloads", async 
   assert.equal(deployment.id, "deployment-1");
   assert.equal(
     calls[1].url,
-    "https://vcfa.example.test/catalog/api/items?$search=ubuntu%2022",
+    "https://vcfa.example.test/catalog/api/items?$search=ubuntu%2022&page=0&size=100",
   );
   assert.equal(
     calls[2].url,
@@ -743,6 +850,84 @@ test("catalog client uses service broker endpoints and request payloads", async 
     reason: "Test",
     inputs: { size: "small" },
   });
+});
+
+test("Automation service list clients aggregate multiple page results", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+
+    const requestUrl = new URL(String(url));
+    const page = Number(requestUrl.searchParams.get("page"));
+    const count = page === 0 ? 100 : 1;
+    return Response.json({
+      content: Array.from({ length: count }, (_, index) => ({
+        id: `deployment-${page * 100 + index}`,
+        name: `Deployment ${page * 100 + index}`,
+      })),
+      last: page === 1,
+      number: page,
+      numberOfElements: count,
+      size: 100,
+      totalElements: 101,
+      totalPages: 2,
+    });
+  };
+
+  const client = new VroClient(config());
+  const deployments = await client.listDeployments("prod vm", "project/1");
+
+  assert.equal(deployments.totalElements, 101);
+  assert.equal(deployments.numberOfElements, 101);
+  assert.equal(deployments.content.length, 101);
+  assert.equal(
+    calls[1].url,
+    "https://vcfa.example.test/deployment/api/deployments?$search=prod%20vm&projectId=project%2F1&page=0&size=100",
+  );
+  assert.equal(
+    calls[2].url,
+    "https://vcfa.example.test/deployment/api/deployments?$search=prod%20vm&projectId=project%2F1&page=1&size=100",
+  );
+});
+
+test("Automation pagination continues after short pages when total reports more results", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+
+    const requestUrl = new URL(String(url));
+    const page = Number(requestUrl.searchParams.get("page"));
+    const count = page === 0 ? 50 : 25;
+    return Response.json({
+      content: Array.from({ length: count }, (_, index) => ({
+        id: `catalog-${page * 50 + index}`,
+        name: `Catalog ${page * 50 + index}`,
+      })),
+      last: page === 1,
+      number: page,
+      numberOfElements: count,
+      size: 50,
+      totalElements: 75,
+      totalPages: 2,
+    });
+  };
+
+  const client = new VroClient(config());
+  const catalogItems = await client.listCatalogItems();
+
+  assert.equal(catalogItems.totalElements, 75);
+  assert.equal(catalogItems.numberOfElements, 75);
+  assert.equal(catalogItems.content.length, 75);
+  assert.equal(
+    calls[1].url,
+    "https://vcfa.example.test/catalog/api/items?page=0&size=100",
+  );
+  assert.equal(
+    calls[2].url,
+    "https://vcfa.example.test/catalog/api/items?page=1&size=100",
+  );
 });
 
 test("template client uses blueprint endpoints and optional payload fields", async () => {
@@ -786,7 +971,7 @@ test("template client uses blueprint endpoints and optional payload fields", asy
   assert.equal(created.id, "template-2");
   assert.equal(
     calls[1].url,
-    "https://vcfa.example.test/blueprint/api/blueprints?$search=small%20vm&projectId=project%2F1",
+    "https://vcfa.example.test/blueprint/api/blueprints?$search=small%20vm&projectId=project%2F1&page=0&size=100",
   );
   assert.equal(
     calls[2].url,
@@ -816,7 +1001,7 @@ test("subscription client uses event broker endpoints and payloads", async () =>
     calls.push({ url: String(url), init });
     if (calls.length === 1) return authResponse();
 
-    if (String(url).endsWith("/event-broker/api/topics")) {
+    if (String(url).endsWith("/event-broker/api/topics?page=0&size=100")) {
       return Response.json({ content: [{ id: "topic-1" }] });
     }
 
@@ -856,11 +1041,11 @@ test("subscription client uses event broker endpoints and payloads", async () =>
   assert.equal(subscriptions.content[0].id, "sub-1");
   assert.equal(
     calls[1].url,
-    "https://vcfa.example.test/event-broker/api/topics",
+    "https://vcfa.example.test/event-broker/api/topics?page=0&size=100",
   );
   assert.equal(
     calls[2].url,
-    "https://vcfa.example.test/event-broker/api/subscriptions?$filter=projectId eq 'project%2F1'",
+    "https://vcfa.example.test/event-broker/api/subscriptions?$filter=projectId%20eq%20%27project%2F1%27&page=0&size=100",
   );
   assert.deepEqual(JSON.parse(calls[3].init.body), {
     name: "Approval",
@@ -948,11 +1133,11 @@ test("category and plugin clients parse attribute links", async () => {
   ]);
   assert.equal(
     calls[1].url,
-    "https://vcfa.example.test/vco/api/categories?categoryType=WorkflowCategory&conditions=name~Provisioning",
+    "https://vcfa.example.test/vco/api/categories?categoryType=WorkflowCategory&conditions=name~Provisioning&maxResult=100&startIndex=0&queryCount=true",
   );
   assert.equal(
     calls[2].url,
-    "https://vcfa.example.test/vco/api/plugins?conditions=name~library",
+    "https://vcfa.example.test/vco/api/plugins?conditions=name~library&maxResult=100&startIndex=0&queryCount=true",
   );
 });
 
@@ -1056,7 +1241,11 @@ test("listWorkflowsByCategory resolves paths from category details and relations
     if (calls.length === 1) return authResponse();
 
     const href = String(url);
-    if (href.endsWith("/categories?categoryType=WorkflowCategory")) {
+    if (
+      href.endsWith(
+        "/categories?categoryType=WorkflowCategory&maxResult=100&startIndex=0&queryCount=true",
+      )
+    ) {
       return Response.json({
         link: [
           {
@@ -1160,7 +1349,7 @@ test("listWorkflowsByCategory resolves paths from category details and relations
   );
   assert.equal(
     calls[1].url,
-    "https://vcfa.example.test/vco/api/categories?categoryType=WorkflowCategory",
+    "https://vcfa.example.test/vco/api/categories?categoryType=WorkflowCategory&maxResult=100&startIndex=0&queryCount=true",
   );
   assert.equal(
     calls[2].url,
@@ -1173,7 +1362,11 @@ test("listWorkflowsByCategory includes empty categories when requested", async (
     if (String(url).endsWith("/sessions")) return authResponse();
 
     const href = String(url);
-    if (href.endsWith("/categories?categoryType=WorkflowCategory")) {
+    if (
+      href.endsWith(
+        "/categories?categoryType=WorkflowCategory&maxResult=100&startIndex=0&queryCount=true",
+      )
+    ) {
       return Response.json({
         link: [
           {
@@ -2169,7 +2362,7 @@ test("listResources parses singular resource attributes", async () => {
 
   assert.equal(
     calls[1].url,
-    "https://vcfa.example.test/vco/api/resources?conditions=name~logo",
+    "https://vcfa.example.test/vco/api/resources?conditions=name~logo&maxResult=100&startIndex=0&queryCount=true",
   );
   assert.deepEqual(resources.link, [
     {

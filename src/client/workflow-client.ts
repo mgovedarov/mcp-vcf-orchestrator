@@ -34,6 +34,7 @@ import {
   rejectSymlink,
   resolveFileInDirectory,
 } from "./files.js";
+import { getAllVroPages } from "./pagination.js";
 import { buildWorkflowArtifact } from "./workflow-artifact.js";
 
 const LOG_SEVERITY_RANK: Record<string, number> = {
@@ -489,18 +490,13 @@ export class WorkflowClient {
   }
 
   async listWorkflows(filter?: string): Promise<WorkflowList> {
-    let path = "/workflows";
-    const params: string[] = [];
+    const params = new URLSearchParams();
     if (filter) {
-      params.push(`conditions=name~${encodeURIComponent(filter)}`);
+      params.set("conditions", `name~${filter}`);
     }
-    if (params.length > 0) {
-      path += `?${params.join("&")}`;
-    }
-    const raw = await this.http.get<{
-      link?: { attributes?: { name: string; value: string }[] }[];
-      total?: number;
-    }>(path);
+    const raw = await getAllVroPages<{
+      attributes?: { name: string; value: string }[];
+    }>(this.http, "/workflows", params);
     const link: Workflow[] = (raw.link ?? []).map((item) => {
       const a = parseAttrs(item.attributes);
       return {
@@ -530,10 +526,14 @@ export class WorkflowClient {
     }
 
     const maxCategories = params.maxCategories ?? DEFAULT_MAX_CATEGORIES;
-    const rawCategories = await this.http.get<{
-      link?: { href?: string; attributes?: { name: string; value: string }[] }[];
-      total?: number;
-    }>("/categories?categoryType=WorkflowCategory");
+    const rawCategories = await getAllVroPages<{
+      href?: string;
+      attributes?: { name: string; value: string }[];
+    }>(
+      this.http,
+      "/categories",
+      new URLSearchParams([["categoryType", "WorkflowCategory"]]),
+    );
     const categories = (rawCategories.link ?? []).map(parseWorkflowCategory);
     const rootCategory = await this.resolveWorkflowCategory(categories, params);
     const { groups: rawGroups, truncated } = await this.collectWorkflowCategoryTree(

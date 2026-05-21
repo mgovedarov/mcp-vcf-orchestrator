@@ -16,6 +16,7 @@ import {
   rejectSymlink,
   resolveFileInDirectory,
 } from "./files.js";
+import { getAllVroPages } from "./pagination.js";
 
 function isNotFoundError(error: unknown): boolean {
   return (
@@ -28,17 +29,11 @@ export class ActionClient {
   constructor(private http: VroHttpClient) {}
 
   async listActions(filter?: string): Promise<ActionList> {
-    let path = "/actions";
-    const params: string[] = [];
+    const params = new URLSearchParams();
     if (filter) {
-      params.push(`conditions=name~${encodeURIComponent(filter)}`);
+      params.set("conditions", `name~${filter}`);
     }
-    if (params.length > 0) {
-      path += `?${params.join("&")}`;
-    }
-    const raw = await this.http.get<{ link?: AttributeLink[]; total?: number }>(
-      path,
-    );
+    const raw = await getAllVroPages<AttributeLink>(this.http, "/actions", params);
     const link: Action[] = (raw.link ?? []).map((item) => {
       const a = getLinkAttrs(item);
       return {

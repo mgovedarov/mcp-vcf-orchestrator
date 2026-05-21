@@ -8,6 +8,8 @@ Tools are grouped by operating domain. Each tool carries an MCP annotation hint 
 
 Each tool lists its input schema in a collapsible parameters section. Required confirmation fields such as `confirm` must be set to `true` before the tool performs the write or destructive operation.
 
+Discovery list tools automatically follow server-side pagination for both vRO `/vco/api` list responses and VCF Automation service pages. Tool inputs stay focused on filters and selectors; callers do not need to provide page cursors for normal discovery.
+
 ## Context Snapshots
 
 ### `collect-context-snapshot`

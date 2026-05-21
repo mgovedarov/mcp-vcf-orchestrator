@@ -685,6 +685,47 @@ test("collectContextSnapshot count matches list tool output size", async () => {
   }
 });
 
+test("collectContextSnapshot skipped counts use reported list totals", async () => {
+  const contextDir = await mkdtemp(join(tmpdir(), "vcfa-context-"));
+  try {
+    const client = {
+      ...baseClient(contextDir),
+      listWorkflows: async () => ({
+        total: 7,
+        link: [
+          { id: "wf-1", name: "Alpha" },
+          { id: "wf-2", name: "Beta" },
+          { id: "wf-3", name: "Gamma" },
+        ],
+      }),
+      getWorkflow: async (id) => ({
+        id,
+        name: id,
+        description: "",
+        version: "1.0.0",
+        categoryName: "VCFA",
+        inputParameters: [],
+        outputParameters: [],
+      }),
+    };
+
+    const result = await collectContextSnapshot(client, {
+      fileBaseName: "reported-total-check",
+      domains: ["workflows"],
+      maxItemsPerDomain: 2,
+    });
+
+    assert.equal(result.counts.workflows, 2);
+    assert.equal(result.skipped.workflows, 5);
+
+    const json = JSON.parse(await readFile(result.jsonPath, "utf8"));
+    assert.equal(json.data.workflows.length, 2);
+    assert.equal(json.skipped.workflows, 5);
+  } finally {
+    await rm(contextDir, { recursive: true, force: true });
+  }
+});
+
 test("collectContextSnapshot workflow items contain actionable metadata for next steps", async () => {
   const contextDir = await mkdtemp(join(tmpdir(), "vcfa-context-"));
   try {

@@ -21,19 +21,19 @@ import {
   rejectSymlink,
   resolveFileInDirectory,
 } from "./files.js";
+import { getAllVroPages } from "./pagination.js";
 
 export class PackageClient {
   constructor(private http: VroHttpClient) {}
 
   async listPackages(filter?: string): Promise<VroPackageList> {
-    let path = "/packages";
+    const params = new URLSearchParams();
     if (filter) {
-      path += `?conditions=name~${encodeURIComponent(filter)}`;
+      params.set("conditions", `name~${filter}`);
     }
-    const raw = await this.http.get<{
-      link?: { attributes?: { name: string; value: string }[] }[];
-      total?: number;
-    }>(path);
+    const raw = await getAllVroPages<{
+      attributes?: { name: string; value: string }[];
+    }>(this.http, "/packages", params);
     const link: VroPackage[] = (raw.link ?? []).map((item) => {
       const a = parseAttrs(item.attributes);
       return {

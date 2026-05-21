@@ -6,6 +6,7 @@ import type {
   DeploymentRequest,
 } from "../types.js";
 import type { VroHttpClient } from "./core.js";
+import { getAllAutomationPages } from "./pagination.js";
 
 export class DeploymentClient {
   constructor(private http: VroHttpClient) {}
@@ -14,16 +15,19 @@ export class DeploymentClient {
     search?: string,
     projectId?: string,
   ): Promise<DeploymentList> {
-    const params: string[] = [];
+    const params = new URLSearchParams();
     if (search) {
-      params.push(`$search=${encodeURIComponent(search)}`);
+      params.set("$search", search);
     }
     if (projectId) {
-      params.push(`projectId=${encodeURIComponent(projectId)}`);
+      params.set("projectId", projectId);
     }
-    const path =
-      params.length > 0 ? `/deployments?${params.join("&")}` : "/deployments";
-    return this.http.get<DeploymentList>(path, this.http.deploymentBaseUrl);
+    return getAllAutomationPages<Deployment>(
+      this.http,
+      "/deployments",
+      this.http.deploymentBaseUrl,
+      params,
+    );
   }
 
   getDeployment(id: string): Promise<Deployment> {

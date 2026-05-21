@@ -14,6 +14,7 @@ import {
   rejectSymlink,
   resolveFileInDirectory,
 } from "./files.js";
+import { getAllVroPages } from "./pagination.js";
 import { toVroParameters } from "./parameters.js";
 
 export class ConfigurationClient {
@@ -26,18 +27,13 @@ export class ConfigurationClient {
     if (categoryId) {
       return this.listConfigurationsByCategory(categoryId, filter);
     }
-    let path = "/configurations";
-    const params: string[] = [];
+    const params = new URLSearchParams();
     if (filter) {
-      params.push(`conditions=name~${encodeURIComponent(filter)}`);
+      params.set("conditions", `name~${filter}`);
     }
-    if (params.length > 0) {
-      path += `?${params.join("&")}`;
-    }
-    const raw = await this.http.get<{
-      link?: { attributes?: { name: string; value: string }[] }[];
-      total?: number;
-    }>(path);
+    const raw = await getAllVroPages<{
+      attributes?: { name: string; value: string }[];
+    }>(this.http, "/configurations", params);
     const link: ConfigElement[] = (raw.link ?? []).map((item) => {
       const a = parseAttrs(item.attributes);
       return {
