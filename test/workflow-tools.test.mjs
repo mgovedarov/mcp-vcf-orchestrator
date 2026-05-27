@@ -139,6 +139,32 @@ test("list-workflows-by-category reports empty and error responses", async () =>
   assert.match(error.content[0].text, /Multiple WorkflowCategory/);
 });
 
+test("list-workflows returns structured workflow summaries", async () => {
+  let filterSeen;
+  const handlers = registeredWorkflowTools({
+    listWorkflows: async (filter) => {
+      filterSeen = filter;
+      return {
+        link: [
+          {
+            id: "workflow-1",
+            name: "Create Org",
+            description: "Creates an organization",
+          },
+        ],
+      };
+    },
+  });
+
+  const result = await handlers.get("list-workflows")({ filter: "Create" });
+
+  assert.equal(filterSeen, "Create");
+  assert.match(result.content[0].text, /Create Org \(id: workflow-1\)/);
+  assert.deepEqual(result.structuredContent, {
+    workflows: [{ id: "workflow-1", name: "Create Org" }],
+  });
+});
+
 test("list-workflows-by-category shows truncation warning", async () => {
   const handlers = registeredWorkflowTools({
     listWorkflowsByCategory: async () => ({
@@ -489,6 +515,15 @@ test("get-workflow-execution-logs formats execution log entries", async () => {
   assert.equal(result.isError, undefined);
   assert.match(result.content[0].text, /Found 1 execution log/);
   assert.match(result.content[0].text, /2026-05-12T10:00:00Z \[INFO\] item1 Started/);
+  assert.deepEqual(result.structuredContent, {
+    logs: [
+      {
+        severity: "INFO",
+        timestamp: "2026-05-12T10:00:00Z",
+        message: "Started",
+      },
+    ],
+  });
 });
 
 test("get-workflow-execution-logs formats attribute-shaped log entries", async () => {
@@ -515,6 +550,57 @@ test("get-workflow-execution-logs formats attribute-shaped log entries", async (
     result.content[0].text,
     /2026-05-13T07:15:45Z \[INFO\] hello from attributes/,
   );
+  assert.deepEqual(result.structuredContent, {
+    logs: [
+      {
+        severity: "INFO",
+        timestamp: "2026-05-13T07:15:45Z",
+        message: "hello from attributes",
+      },
+    ],
+  });
+});
+
+test("get-workflow-execution-logs structures long log descriptions", async () => {
+  const handlers = registeredWorkflowTools({
+    getWorkflowExecutionLogs: async () => ({
+      logs: [
+        {
+          severity: "WARN",
+          "time-stamp": "2026-05-13T07:16:00Z",
+          "long-description": "Detailed warning",
+        },
+        {
+          severity: "ERROR",
+          "time-stamp": "2026-05-13T07:17:00Z",
+          "short-description": "Failed",
+          "long-description": "Stack trace line",
+        },
+      ],
+    }),
+  });
+
+  const result = await handlers.get("get-workflow-execution-logs")({
+    workflowId: "workflow-1",
+    executionId: "execution-1",
+  });
+
+  assert.match(result.content[0].text, /Detailed warning/);
+  assert.match(result.content[0].text, /Failed — Stack trace line/);
+  assert.deepEqual(result.structuredContent, {
+    logs: [
+      {
+        severity: "WARN",
+        timestamp: "2026-05-13T07:16:00Z",
+        message: "Detailed warning",
+      },
+      {
+        severity: "ERROR",
+        timestamp: "2026-05-13T07:17:00Z",
+        message: "Failed — Stack trace line",
+      },
+    ],
+  });
 });
 
 test("get-workflow-execution-logs filters inline logs by minimum level", async () => {
@@ -576,6 +662,54 @@ test("get-workflow-execution-logs reports empty logs", async () => {
   });
 
   assert.equal(result.content[0].text, "No execution logs found.");
+  assert.deepEqual(result.structuredContent, { logs: [] });
+});
+
+test("list-workflow-executions returns structured execution summaries", async () => {
+  let executionRequest;
+  const handlers = registeredWorkflowTools({
+    listWorkflowExecutions: async (workflowId, options) => {
+      executionRequest = { workflowId, options };
+      return {
+        total: 1,
+        relations: {
+          link: [
+            {
+              id: "execution-1",
+              state: "FAILED",
+              "start-date": "2026-05-12T10:00:00Z",
+              "end-date": "2026-05-12T10:05:00Z",
+              "started-by": "admin",
+            },
+          ],
+        },
+      };
+    },
+  });
+
+  const result = await handlers.get("list-workflow-executions")({
+    workflowId: "workflow-1",
+    maxResults: 5,
+    status: "failed",
+  });
+
+  assert.deepEqual(executionRequest, {
+    workflowId: "workflow-1",
+    options: { maxResults: 5, status: "FAILED" },
+  });
+  assert.match(result.content[0].text, /FAILED \(id: execution-1\)/);
+  assert.deepEqual(result.structuredContent, {
+    total: 1,
+    executions: [
+      {
+        id: "execution-1",
+        state: "FAILED",
+        started: "2026-05-12T10:00:00Z",
+        ended: "2026-05-12T10:05:00Z",
+        startedBy: "admin",
+      },
+    ],
+  });
 });
 
 test("get-workflow-execution-logs exports when fileName is provided", async () => {

@@ -173,7 +173,7 @@ function scalarSummary(source: Record<string, unknown>): string | undefined {
   return parts.length > 0 ? parts.join(", ") : undefined;
 }
 
-function normalizeWorkflowExecutionLog(
+export function normalizeWorkflowExecutionLog(
   raw: WorkflowExecutionLog,
 ): WorkflowExecutionLog {
   const direct = raw as Record<string, unknown>;

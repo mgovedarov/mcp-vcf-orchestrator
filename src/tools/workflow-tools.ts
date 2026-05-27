@@ -14,6 +14,7 @@ import { formatPreflightReport } from "../client/artifact-preflight.js";
 import {
   filterWorkflowExecutionLogsByMinimumLevel,
   formatWorkflowExecutionLogEntry,
+  normalizeWorkflowExecutionLog,
 } from "../client/workflow-client.js";
 import {
   appendGuardGuidance,
@@ -35,6 +36,48 @@ const workflowExecutionStatusMap = {
   canceled: "CANCELED",
   "waiting-signal": "STATE_WAITING_ON_SIGNAL",
 } as const;
+
+function structuredWorkflow(workflow: Workflow): Record<string, unknown> {
+  return {
+    id: workflow.id,
+    name: workflow.name,
+  };
+}
+
+function structuredWorkflowExecution(
+  execution: WorkflowExecution,
+): Record<string, unknown> {
+  return {
+    id: execution.id,
+    state: execution.state,
+    started: execution["start-date"],
+    ended: execution["end-date"],
+    startedBy: execution["started-by"],
+  };
+}
+
+function structuredWorkflowExecutionLog(
+  log: WorkflowExecutionLog,
+): Record<string, unknown> {
+  const normalized = normalizeWorkflowExecutionLog(log);
+  const shortDescription = normalized["short-description"];
+  const longDescription = normalized["long-description"];
+  const message =
+    shortDescription && longDescription && shortDescription !== longDescription
+      ? `${shortDescription} — ${longDescription}`
+      : (shortDescription ??
+        longDescription ??
+        normalized.shortDescription ??
+        normalized.longDescription ??
+        normalized.message ??
+        normalized.msg ??
+        normalized.description);
+  return {
+    severity: normalized.severity,
+    timestamp: normalized["time-stamp"] ?? normalized.timeStamp,
+    message,
+  };
+}
 
 const workflowDiffSourceSchema = z.discriminatedUnion("source", [
   z.object({
@@ -391,6 +434,7 @@ export function registerWorkflowTools(
         if (workflows.length === 0) {
           return {
             content: [{ type: "text", text: "No workflows found." }],
+            structuredContent: { workflows: [] },
           };
         }
         const lines = workflows.map(
@@ -404,6 +448,9 @@ export function registerWorkflowTools(
               text: `Found ${workflows.length} workflow(s):\n\n${lines.join("\n")}`,
             },
           ],
+          structuredContent: {
+            workflows: workflows.map(structuredWorkflow),
+          },
         };
       } catch (error) {
         return {
@@ -1042,6 +1089,7 @@ export function registerWorkflowTools(
         if (logs.length === 0) {
           return {
             content: [{ type: "text", text: "No execution logs found." }],
+            structuredContent: { logs: [] },
           };
         }
         return {
@@ -1053,6 +1101,9 @@ export function registerWorkflowTools(
                 .join("\n")}`,
             },
           ],
+          structuredContent: {
+            logs: logs.map(structuredWorkflowExecutionLog),
+          },
         };
       } catch (error) {
         return {
@@ -1105,6 +1156,10 @@ export function registerWorkflowTools(
         if (executions.length === 0) {
           return {
             content: [{ type: "text", text: "No executions found." }],
+            structuredContent: {
+              total: result.total ?? 0,
+              executions: [],
+            },
           };
         }
         const lines = executions.map((e) => {
@@ -1122,6 +1177,10 @@ export function registerWorkflowTools(
               text: `Found ${total} execution(s):\n\n${lines.join("\n")}`,
             },
           ],
+          structuredContent: {
+            total,
+            executions: executions.map(structuredWorkflowExecution),
+          },
         };
       } catch (error) {
         return {
