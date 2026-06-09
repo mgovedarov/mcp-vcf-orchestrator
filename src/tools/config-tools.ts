@@ -10,6 +10,18 @@ import {
   hasAnyExpectedValue,
 } from "./confirmation-guards.js";
 
+/**
+ * Detects secure/encrypted configuration attribute types whose values must never
+ * be printed (e.g. vRO `SecureString`). The `includes` checks are defensive against
+ * any encrypted/secure variant the API returns. Mirrors the redaction posture of the
+ * context-snapshot path (`src/client/context-snapshot.ts`).
+ */
+function isSecureAttributeType(type: string | undefined): boolean {
+  if (!type) return false;
+  const t = type.toLowerCase();
+  return t === "securestring" || t.includes("secure") || t.includes("encrypted");
+}
+
 export function registerConfigTools(
   server: McpServer,
   client: VroClient,
@@ -97,7 +109,11 @@ export function registerConfigTools(
         if (attrs.length > 0) {
           text += `\nAttributes:\n`;
           for (const a of attrs) {
-            const val = a.value ? JSON.stringify(a.value) : "(no value)";
+            const val = isSecureAttributeType(a.type)
+              ? "[redacted]"
+              : a.value
+                ? JSON.stringify(a.value)
+                : "(no value)";
             text += `  • ${a.name} (${a.type}): ${val}${a.description ? ` — ${a.description}` : ""}\n`;
           }
         } else {

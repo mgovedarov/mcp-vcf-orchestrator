@@ -118,6 +118,12 @@ test("configuration tools format attributes and guard imports and deletes", asyn
           value: { string: { value: "vcfa.example.test" } },
           description: "Host name",
         },
+        {
+          name: "password",
+          type: "SecureString",
+          value: { string: { value: "super-secret" } },
+          description: "Admin password",
+        },
       ],
     }),
     createConfiguration: async (categoryId, name, description, attributes) => {
@@ -151,7 +157,11 @@ test("configuration tools format attributes and guard imports and deletes", asyn
   const detail = await handlers.get("get-configuration")({ id: "config-1" });
   assert.match(detail.content[0].text, /Configuration: Settings/);
   assert.match(detail.content[0].text, /host \(string\):/);
+  assert.match(detail.content[0].text, /vcfa\.example\.test/);
   assert.match(detail.content[0].text, /Host name/);
+  // Secure-typed attribute values must be redacted, never printed in cleartext.
+  assert.match(detail.content[0].text, /password \(SecureString\): \[redacted\]/);
+  assert.doesNotMatch(detail.content[0].text, /super-secret/);
 
   const createResult = await handlers.get("create-configuration")({
     categoryId: "category-1",
