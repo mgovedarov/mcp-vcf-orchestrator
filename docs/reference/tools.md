@@ -152,13 +152,13 @@ Delete a workflow from VCF Automation Orchestrator. This action is irreversible.
 
 ### `run-workflow`
 
-Execute a workflow with optional input parameters. Returns the execution ID; use `get-workflow-execution` to poll status and retrieve outputs.
+Validate inputs against the workflow definition, then execute the workflow with optional input parameters. Returns the execution ID; use `get-workflow-execution` to poll status and retrieve outputs.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `id` | string | Yes | - | Workflow ID to execute. |
-| `inputs` | array | No | `[]` | Input parameters for the workflow execution. Inspect the workflow with `get-workflow` before running. |
+| `inputs` | array | No | `[]` | Input parameters for the workflow execution. Inspect the workflow with `get-workflow` before running. Inputs are validated and type-normalized against the workflow definition before execution. |
 | `expectedWorkflowName` | string | No | - | Expected live workflow name to verify before execution. |
 | `expectedInputNames` | string[] | No | - | Expected workflow input names, in discovered order, to verify before execution. |
 | `confirm` | boolean | Yes | - | Must be `true` to confirm execution. If `false`, the workflow is not run. |
@@ -168,8 +168,8 @@ Execute a workflow with optional input parameters. Returns the execution ID; use
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `name` | string | Yes | Parameter name matching a workflow input parameter. |
-| `type` | string | Yes | vRO parameter type, such as `string`, `number`, `boolean`, `Array/string`, or `Properties`. |
-| `value` | any | Yes | Parameter value compatible with the declared type. |
+| `type` | string | No | Optional vRO parameter type. When omitted, this tool uses the type from `get-workflow`. |
+| `value` | any | Yes | Parameter value compatible with the workflow input type. |
 :::
 
 ### `run-workflow-and-wait`

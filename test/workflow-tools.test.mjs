@@ -320,6 +320,68 @@ test("run-workflow expected guards stop before execution on mismatch", async () 
   assert.match(result.content[0].text, /workflow name/);
 });
 
+test("run-workflow rejects invalid inputs before running", async () => {
+  let runCalls = 0;
+  const handlers = registeredWorkflowTools({
+    getWorkflow: async () => ({
+      id: "workflow-1",
+      name: "Workflow",
+      inputParameters: [
+        { name: "projectName", type: "string" },
+        { name: "count", type: "number" },
+      ],
+    }),
+    runWorkflow: async () => {
+      runCalls += 1;
+      return { id: "execution-1", state: "running" };
+    },
+  });
+
+  const result = await handlers.get("run-workflow")({
+    id: "workflow-1",
+    confirm: true,
+    inputs: [
+      { name: "projectName", type: "string", value: 123 },
+      { name: "projectName", type: "string", value: "duplicate" },
+      { name: "extra", type: "string", value: "unused" },
+    ],
+  });
+
+  assert.equal(result.isError, true);
+  assert.equal(runCalls, 0);
+  assert.match(result.content[0].text, /Input projectName must be a string/);
+  assert.match(result.content[0].text, /Duplicate input: projectName/);
+  assert.match(result.content[0].text, /Unknown input: extra/);
+  assert.match(result.content[0].text, /Missing required input: count/);
+});
+
+test("run-workflow normalizes input types before execution", async () => {
+  let runInputs;
+  const handlers = registeredWorkflowTools({
+    getWorkflow: async () => ({
+      id: "workflow-1",
+      name: "Workflow",
+      inputParameters: [{ name: "name", type: "string" }],
+    }),
+    runWorkflow: async (_id, inputs) => {
+      runInputs = inputs;
+      return { id: "execution-1", state: "running" };
+    },
+  });
+
+  const result = await handlers.get("run-workflow")({
+    id: "workflow-1",
+    confirm: true,
+    inputs: [{ name: "name", value: "web-server-01" }],
+  });
+
+  assert.equal(result.isError, undefined);
+  assert.deepEqual(runInputs, [
+    { name: "name", type: "string", value: "web-server-01" },
+  ]);
+  assert.match(result.content[0].text, /Workflow execution started/);
+});
+
 test("run-workflow-and-wait verifies expected input names before running", async () => {
   let runCalls = 0;
   const handlers = registeredWorkflowTools({

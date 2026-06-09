@@ -280,6 +280,60 @@ function formatValidationErrors(workflow: Workflow, errors: string[]): string {
   ].join("\n");
 }
 
+type WorkflowRunPreamble =
+  | { error: CallToolResult }
+  | { workflow: Workflow; inputs: SimpleParameter[] };
+
+/**
+ * Shared pre-execution path for run-workflow and run-workflow-and-wait: fetch the
+ * live workflow, apply the optional expected-field guards, then validate and
+ * type-normalize the caller inputs. Returns either a short-circuit error result or
+ * the fetched workflow plus normalized inputs ready for client.runWorkflow.
+ */
+async function prepareWorkflowRun(
+  client: VroClient,
+  id: string,
+  inputs: { name: string; type?: string; value?: unknown }[] | undefined,
+  expectedWorkflowName: string | undefined,
+  expectedInputNames: string[] | undefined,
+): Promise<WorkflowRunPreamble> {
+  const workflow = await client.getWorkflow(id);
+
+  const guard = guardExpectedFields(`workflow ${id}`, [
+    {
+      label: "workflow name",
+      expected: expectedWorkflowName,
+      actual: workflow.name,
+    },
+  ]);
+  if (guard) return { error: guard };
+
+  const inputGuard = guardExpectedStringList(
+    `workflow ${id}`,
+    "input names",
+    expectedInputNames,
+    getWorkflowInputParameters(workflow).map((input) => input.name),
+  );
+  if (inputGuard) return { error: inputGuard };
+
+  const validation = validateWorkflowRunInputs(workflow, inputs ?? []);
+  if (validation.errors.length > 0) {
+    return {
+      error: {
+        content: [
+          {
+            type: "text",
+            text: formatValidationErrors(workflow, validation.errors),
+          },
+        ],
+        isError: true,
+      },
+    };
+  }
+
+  return { workflow, inputs: validation.inputs };
+}
+
 function formatOutputParameters(execution: WorkflowExecution): string {
   const outputs = getExecutionOutputParameters(execution);
   if (outputs.length === 0) {
@@ -642,7 +696,7 @@ export function registerWorkflowTools(
     {
       title: "Run Workflow",
       description:
-        "Execute a workflow. Optionally provide input parameters. Returns the execution ID which can be used with get-workflow-execution to check status.",
+        "Validate inputs against the workflow definition, then execute the workflow. Optionally provide input parameters. Returns the execution ID which can be used with get-workflow-execution to check status.",
       inputSchema: z.object({
         id: z.string().describe("The workflow ID to execute"),
         inputs: z
@@ -651,8 +705,9 @@ export function registerWorkflowTools(
               name: z.string().describe("Parameter name"),
               type: z
                 .string()
+                .optional()
                 .describe(
-                  "Parameter type (e.g. string, number, boolean, Array/string)",
+                  "Optional parameter type. If omitted, the workflow definition type is used.",
                 ),
               value: z.unknown().describe("Parameter value"),
             }),
@@ -698,27 +753,16 @@ export function registerWorkflowTools(
       }
 
       try {
-        if (hasAnyExpectedValue({ expectedWorkflowName, expectedInputNames })) {
-          const workflow = await client.getWorkflow(id);
-          const guard = guardExpectedFields(`workflow ${id}`, [
-            {
-              label: "workflow name",
-              expected: expectedWorkflowName,
-              actual: workflow.name,
-            },
-          ]);
-          if (guard) return guard;
+        const prep = await prepareWorkflowRun(
+          client,
+          id,
+          inputs,
+          expectedWorkflowName,
+          expectedInputNames,
+        );
+        if ("error" in prep) return prep.error;
 
-          const inputGuard = guardExpectedStringList(
-            `workflow ${id}`,
-            "input names",
-            expectedInputNames,
-            getWorkflowInputParameters(workflow).map((input) => input.name),
-          );
-          if (inputGuard) return inputGuard;
-        }
-
-        const exec = await client.runWorkflow(id, inputs);
+        const exec = await client.runWorkflow(id, prep.inputs);
         return {
           content: [
             {
@@ -827,36 +871,15 @@ export function registerWorkflowTools(
       }
 
       try {
-        const workflow = await client.getWorkflow(id);
-        const guard = guardExpectedFields(`workflow ${id}`, [
-          {
-            label: "workflow name",
-            expected: expectedWorkflowName,
-            actual: workflow.name,
-          },
-        ]);
-        if (guard) return guard;
-
-        const inputGuard = guardExpectedStringList(
-          `workflow ${id}`,
-          "input names",
+        const prep = await prepareWorkflowRun(
+          client,
+          id,
+          inputs,
+          expectedWorkflowName,
           expectedInputNames,
-          getWorkflowInputParameters(workflow).map((input) => input.name),
         );
-        if (inputGuard) return inputGuard;
-
-        const validation = validateWorkflowRunInputs(workflow, inputs ?? []);
-        if (validation.errors.length > 0) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: formatValidationErrors(workflow, validation.errors),
-              },
-            ],
-            isError: true,
-          };
-        }
+        if ("error" in prep) return prep.error;
+        const { workflow, inputs: normalizedInputs } = prep;
 
         const timeoutMs = Math.max(
           0,
@@ -871,7 +894,7 @@ export function registerWorkflowTools(
         const waitStartedAt = Date.now();
         const deadline = waitStartedAt + timeoutMs;
 
-        startedExecution = await client.runWorkflow(id, validation.inputs);
+        startedExecution = await client.runWorkflow(id, normalizedInputs);
         if (!startedExecution.id) {
           throw new Error("Workflow execution did not return an execution ID");
         }
