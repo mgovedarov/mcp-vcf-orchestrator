@@ -474,7 +474,7 @@ List configuration elements from VCF Automation Orchestrator. Optionally filter 
 
 ### `get-configuration`
 
-Get detailed information about a specific configuration element including its attributes.
+Get detailed information about a specific configuration element including its attributes. Secure-typed attribute values (e.g. `SecureString`) are redacted in the output and shown as `[redacted]`, consistent with the context-snapshot redaction policy.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
