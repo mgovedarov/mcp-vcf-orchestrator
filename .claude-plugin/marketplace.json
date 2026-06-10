@@ -4,6 +4,7 @@
     "name": "mgovedarov",
     "email": "mgovedarov@evoila.com"
   },
+  "description": "Claude Code plugin marketplace for the VCF Automation Orchestrator MCP server: skills for discovery-first vRO authoring, package-first publishing, and guided operations.",
   "plugins": [
     {
       "name": "vcfa-orchestrator",
