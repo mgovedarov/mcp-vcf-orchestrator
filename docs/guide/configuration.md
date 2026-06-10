@@ -26,7 +26,7 @@ For vRA/vRO 8.12+ read/run compatibility, set `VCFA_TARGET_PLATFORM=vra8`. In th
 | Variable | Description |
 | --- | --- |
 | `VCFA_TARGET_PLATFORM` | Target platform mode: `vcfa` (default) or `vra8`. |
-| `VCFA_IGNORE_TLS` | Set to `true` to disable TLS certificate verification for lab environments. |
+| `VCFA_IGNORE_TLS` | Set to `true` to disable TLS certificate verification for this server's requests to the VCFA host (lab environments only). |
 | `VCFA_ARTIFACT_DIR` | Root directory for local artifact import/export files. Defaults to `artifacts/` in the MCP server process working directory, typically the open project. |
 | `VCFA_PACKAGE_DIR` | Override the package artifact directory. |
 | `VCFA_RESOURCE_DIR` | Override the resource element artifact directory. |
@@ -57,4 +57,4 @@ Use the specific directory overrides only when you need different storage locati
 
 ## TLS Warning
 
-`VCFA_IGNORE_TLS=true` sets `NODE_TLS_REJECT_UNAUTHORIZED=0` for the process. Use it only for lab or test environments where the risk is understood.
+`VCFA_IGNORE_TLS=true` disables TLS certificate verification only for this server's requests to the configured VCFA host, using a dedicated HTTPS agent. It does not set `NODE_TLS_REJECT_UNAUTHORIZED` or affect any other HTTPS traffic in the process. Use it only for lab or test environments where the risk is understood.

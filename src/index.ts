@@ -60,9 +60,8 @@ async function main(): Promise<void> {
   const contextDir = process.env["VCFA_CONTEXT_DIR"];
 
   if (ignoreTls) {
-    process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0";
     console.error(
-      "[vcfa-server] WARNING: TLS certificate verification disabled (VCFA_IGNORE_TLS=true)",
+      "[vcfa-server] WARNING: TLS certificate verification disabled for VCFA requests (VCFA_IGNORE_TLS=true)",
     );
   }
 
@@ -143,6 +142,7 @@ async function main(): Promise<void> {
   process.on("SIGINT", async () => {
     console.error("[vcfa-server] Shutting down...");
     await server.close();
+    await client.close();
     process.exit(0);
   });
 }

@@ -99,6 +99,11 @@ export class VroClient {
     this.plugins = new PluginClient(http);
   }
 
+  /** Release network resources (e.g. the TLS-relaxed dispatcher). */
+  close(): Promise<void> {
+    return this.http.close();
+  }
+
   listWorkflows(filter?: string): Promise<WorkflowList> {
     return this.workflows.listWorkflows(filter);
   }

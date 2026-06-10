@@ -1,5 +1,6 @@
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { Agent } from "undici";
 import type { VroClientConfig, VroTargetPlatform } from "../types.js";
 
 const UNSUPPORTED_AUTOMATION_SERVICES =
@@ -7,6 +8,10 @@ const UNSUPPORTED_AUTOMATION_SERVICES =
 
 const UNSUPPORTED_VRO_WRITE =
   "This vRO operation is not supported in VCFA_TARGET_PLATFORM=vra8 mode. The vRA/vRO 8 compatibility phase supports read operations plus workflow execution and execution logs only.";
+
+// The default TypeScript lib's RequestInit lacks undici's dispatcher option,
+// which Node's built-in fetch honors at runtime.
+type DispatchedRequestInit = RequestInit & { dispatcher?: Agent };
 
 const SAFE_ERROR_BODY_KEYS = new Set(["message", "statusCode", "code", "error", "errors"]);
 const NON_JSON_BODY_LIMIT = 200;
@@ -110,12 +115,16 @@ export class VroHttpClient {
   private sessionUrl: string;
   private loginHeader: string;
   private token: string | null = null;
+  // Per-client dispatcher so ignoreTls relaxes TLS verification only for
+  // this client's requests, never process-wide (no NODE_TLS_REJECT_UNAUTHORIZED).
+  private readonly dispatcher: Agent | undefined;
+  private dispatcherClosed = false;
 
   constructor(config: VroClientConfig) {
     this.targetPlatform = normalizeTargetPlatform(config.targetPlatform);
-    if (config.ignoreTls) {
-      process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0";
-    }
+    this.dispatcher = config.ignoreTls
+      ? new Agent({ connect: { rejectUnauthorized: false } })
+      : undefined;
     this.baseUrl = `https://${config.host}/vco/api`;
     this.eventBrokerBaseUrl = `https://${config.host}/event-broker/api`;
     this.catalogBaseUrl = `https://${config.host}/catalog/api`;
@@ -151,6 +160,18 @@ export class VroHttpClient {
       ).toString("base64");
   }
 
+  /**
+   * Release the client's network resources. Closes the TLS-relaxed
+   * dispatcher (if `ignoreTls` was configured) so its keep-alive sockets
+   * do not linger until process exit. Safe to call multiple times.
+   */
+  async close(): Promise<void> {
+    if (this.dispatcher && !this.dispatcherClosed) {
+      this.dispatcherClosed = true;
+      await this.dispatcher.close();
+    }
+  }
+
   async ensureAuthenticated(): Promise<string> {
     if (this.targetPlatform === "vra8") {
       return this.loginHeader;
@@ -171,7 +192,7 @@ export class VroHttpClient {
 
     let res: Response;
     try {
-      res = await fetch(this.sessionUrl, {
+      const init: DispatchedRequestInit = {
         method: "POST",
         headers: {
           Authorization: this.loginHeader,
@@ -179,7 +200,9 @@ export class VroHttpClient {
           Accept: "application/json;version=9.0.0",
         },
         signal: controller.signal,
-      });
+        dispatcher: this.dispatcher,
+      };
+      res = await fetch(this.sessionUrl, init);
     } finally {
       clearTimeout(timeoutId);
     }
@@ -232,7 +255,12 @@ export class VroHttpClient {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeout);
       try {
-        return await fetch(url, { ...init, signal: controller.signal });
+        const fetchInit: DispatchedRequestInit = {
+          ...init,
+          signal: controller.signal,
+          dispatcher: this.dispatcher,
+        };
+        return await fetch(url, fetchInit);
       } finally {
         clearTimeout(timeoutId);
       }
