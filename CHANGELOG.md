@@ -9,6 +9,7 @@
 ### Added
 
 - Added `VroClient.close()` to release the client's network resources (the TLS-relaxed dispatcher); the server now calls it during graceful shutdown.
+- Added a local TLS integration test that runs the client against a self-signed HTTPS server, verifying `ignoreTls` completes a real handshake (and that strict mode still rejects) without touching `NODE_TLS_REJECT_UNAUTHORIZED`.
 
 ## 2.0.0 - 2026-05-18
 
