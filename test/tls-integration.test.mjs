@@ -54,7 +54,9 @@ async function startSelfSignedVcfaStub() {
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 
   return {
-    host: `localhost:${server.address().port}`,
+    // Connect via 127.0.0.1, not localhost: Node 18 resolves localhost to
+    // ::1 first and has no IPv4 fallback (autoSelectFamily landed in 20).
+    host: `127.0.0.1:${server.address().port}`,
     async close() {
       server.closeAllConnections?.();
       await new Promise((resolve) => server.close(resolve));
