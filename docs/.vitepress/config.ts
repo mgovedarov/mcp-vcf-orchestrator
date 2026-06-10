@@ -20,6 +20,7 @@ export default defineConfig({
           { text: "Installation", link: "/guide/installation" },
           { text: "Configuration", link: "/guide/configuration" },
           { text: "MCP Client Setup", link: "/guide/mcp-clients" },
+          { text: "Claude Code Plugin", link: "/guide/claude-code-plugin" },
         ],
       },
       {

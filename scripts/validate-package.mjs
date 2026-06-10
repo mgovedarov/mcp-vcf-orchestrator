@@ -53,6 +53,8 @@ try {
     /^node_modules\//,
     /^coverage\//,
     /^docs\/\.vitepress\//,
+    /^skills\//,
+    /^\.claude-plugin\//,
     /^\.env$/,
     /^\.env\.example$/,
     /^\.npmrc$/,

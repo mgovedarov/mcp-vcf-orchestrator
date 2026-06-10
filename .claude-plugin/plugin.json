@@ -1,0 +1,22 @@
+{
+  "name": "vcfa-orchestrator",
+  "version": "2.0.0",
+  "description": "Skills that drive the VCF Automation Orchestrator MCP server safely: discovery-first authoring, package-first publishing, and guided troubleshooting via the server's vcfa-* prompts and tools.",
+  "author": {
+    "name": "mgovedarov",
+    "email": "mgovedarov@evoila.com"
+  },
+  "homepage": "https://github.com/mgovedarov/mcp-vcf-orchestrator#readme",
+  "repository": "https://github.com/mgovedarov/mcp-vcf-orchestrator.git",
+  "license": "Apache-2.0",
+  "keywords": [
+    "mcp",
+    "vcf",
+    "vro",
+    "orchestrator",
+    "vmware",
+    "automation",
+    "aria",
+    "extensibility"
+  ]
+}

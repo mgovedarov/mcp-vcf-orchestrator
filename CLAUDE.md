@@ -51,6 +51,7 @@ Key architectural concepts:
 - **`AGENTS.md` is the deeper operating playbook.** It documents the full current tool/prompt/resource surface, artifact-lifecycle steps, package-first rules, workflow authoring rules, and template/subscription/catalog/deployment rules. Read it before non-trivial behavior changes; this file is the orientation, `AGENTS.md` is the detail.
 - **Do not invent environment-specific values** (vRO IDs, schemas, parameters, action contracts, package/project/category IDs, blueprint YAML). Verify from source, docs, or configured MCP tools, and report a missing fact rather than filling the gap.
 - **Adding a tool**: update the relevant `src/tools/*` module, set accurate read-only/destructive annotations, add tests, and update `docs/reference/tools.md` plus relevant how-tos. For prompts/resources, update `src/prompts/index.ts` or `src/resources/index.ts` and `docs/reference/resources-prompts.md`. For docs sidebar entries, update `docs/.vitepress/config.ts`.
+- **Claude Code plugin/skills**: the plugin lives in `.claude-plugin/` and skills in `skills/<name>/SKILL.md`. Keep skills thin — they delegate to the `vcfa-*` prompts, `vcfa://` resources, and tools and must not re-document them. Tool/prompt/resource names referenced inside a `SKILL.md` are drift-checked by `npm run validate:docs`; add any legitimate new non-tool kebab term to `KNOWN_NON_REGISTRY_TERMS` in `scripts/validate-docs.mjs`.
 - **Issue codes**: use `VCFO-###` (sequential, prefixed in issue titles, e.g. `[VCFO-001] ...`).
 
 ## Testing & Validation

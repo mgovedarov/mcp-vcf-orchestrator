@@ -45,6 +45,17 @@ npm install
 npm run build
 ```
 
+## Claude Code Plugin
+
+A [Claude Code](https://claude.ai/code) plugin in this repository bundles two skills (`vcfa-authoring` and `vcfa-operations`) that auto-activate and route to the server's `vcfa-*` prompts and tools with discovery-first, confirm-before-write safety. Install it from a Claude Code session:
+
+```text
+/plugin marketplace add mgovedarov/mcp-vcf-orchestrator
+/plugin install vcfa-orchestrator@mcp-vcf-orchestrator
+```
+
+The plugin contains skills only; configure the MCP server separately. See [docs/guide/claude-code-plugin.md](docs/guide/claude-code-plugin.md).
+
 ## License And Branding
 
 This project is licensed under the [Apache License 2.0](LICENSE). Attribution notices are provided in [NOTICE](NOTICE).

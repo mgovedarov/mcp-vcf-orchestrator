@@ -165,6 +165,10 @@ function validateReferenceDrift(registry) {
   assertNoDiff("Resources", diff(registry.resources, resourceDocs));
 }
 
+function skillFiles() {
+  return walk("skills", (path) => extname(path) === ".md");
+}
+
 function markdownFiles() {
   return [
     "README.md",
@@ -172,6 +176,7 @@ function markdownFiles() {
     "CLAUDE.md",
     ...walk("docs", (path) => extname(path) === ".md"),
     ...walk("examples", (path) => extname(path) === ".md"),
+    ...skillFiles(),
   ].filter((path) => existsSync(join(root, path)));
 }
 
@@ -298,13 +303,64 @@ function validateExampleToolCalls(files, registry) {
   assert.deepEqual(failures, [], "Documented examples must reference current tools and arguments");
 }
 
+// Legitimate kebab-case tokens used in skill prose that are not registered tool,
+// prompt, or resource names: plugin/skill/marketplace identifiers and the
+// workflow/template/subscription pattern slugs. A renamed tool still referenced
+// in a SKILL.md fails the check below; a genuinely new non-tool term is a
+// one-line addition here.
+const KNOWN_NON_REGISTRY_TERMS = new Set([
+  "vcfa-orchestrator",
+  "vcfa-authoring",
+  "vcfa-operations",
+  "mcp-vcf-orchestrator",
+  "basic-scriptable-task",
+  "action-wrapper",
+  "small-vm",
+  "catalog-ready",
+  "event-driven",
+]);
+
+const TOOL_TOKEN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)+$/;
+
+function validateSkillReferences(registry, skills) {
+  const failures = [];
+  for (const file of skills) {
+    const text = read(file);
+    for (const match of text.matchAll(/`([^`]+)`/g)) {
+      const token = match[1].trim();
+      if (token.startsWith("vcfa://")) {
+        if (!registry.resources.has(token)) {
+          failures.push(`${file}: unknown resource reference ${token}`);
+        }
+        continue;
+      }
+      if (!TOOL_TOKEN.test(token)) continue;
+      if (
+        registry.tools.has(token) ||
+        registry.prompts.has(token) ||
+        KNOWN_NON_REGISTRY_TERMS.has(token)
+      ) {
+        continue;
+      }
+      failures.push(`${file}: unknown tool/prompt reference ${token}`);
+    }
+  }
+  assert.deepEqual(
+    failures,
+    [],
+    "Skill files must reference current tools, prompts, and resources",
+  );
+}
+
 const registry = collectRegistry();
 const files = markdownFiles();
+const skills = skillFiles();
 
 validateReferenceDrift(registry);
 validateMarkdownLinks(files);
 validateExampleToolCalls(files, registry);
+validateSkillReferences(registry, skills);
 
 console.log(
-  `Validated docs drift and examples: ${registry.tools.size} tools, ${registry.prompts.size} prompts, ${registry.resources.size} resources, ${files.length} markdown files.`,
+  `Validated docs drift and examples: ${registry.tools.size} tools, ${registry.prompts.size} prompts, ${registry.resources.size} resources, ${files.length} markdown files (${skills.length} skill files).`,
 );

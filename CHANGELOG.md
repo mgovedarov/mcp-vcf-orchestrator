@@ -8,6 +8,7 @@
 
 ### Added
 
+- Added a Claude Code plugin (`vcfa-orchestrator`) and marketplace manifest under `.claude-plugin/`, bundling two skills in `skills/`: `vcfa-authoring` (discovery-first artifact lifecycle and package-first publishing) and `vcfa-operations` (running workflows and guided troubleshooting). The skills delegate to the server's existing `vcfa-*` prompts, resources, and tools rather than duplicating them, and `npm run validate:docs` now drift-checks the tool/prompt/resource names they reference.
 - Added `VroClient.close()` to release the client's network resources (the TLS-relaxed dispatcher); the server now calls it during graceful shutdown.
 - Added a local TLS integration test that runs the client against a self-signed HTTPS server, verifying `ignoreTls` completes a real handshake (and that strict mode still rejects) without touching `NODE_TLS_REJECT_UNAUTHORIZED`.
 
