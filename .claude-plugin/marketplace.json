@@ -1,0 +1,17 @@
+{
+  "name": "mcp-vcf-orchestrator",
+  "owner": {
+    "name": "mgovedarov",
+    "email": "mgovedarov@evoila.com"
+  },
+  "plugins": [
+    {
+      "name": "vcfa-orchestrator",
+      "source": "./",
+      "description": "Skills for safely working with the VCF Automation Orchestrator MCP server: discovery-first authoring, package-first publishing, and guided troubleshooting.",
+      "version": "2.0.0",
+      "license": "Apache-2.0",
+      "keywords": ["mcp", "vcf", "vro", "orchestrator", "vmware", "automation"]
+    }
+  ]
+}

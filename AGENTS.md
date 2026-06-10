@@ -35,6 +35,9 @@ Read the relevant source or docs before changing behavior:
 - Safety guidance: `docs/operations/safety.md`
 - Development and docs process: `docs/operations/contributing.md`
 - Checked examples: `examples/README.md`
+- Claude Code plugin and skills: `.claude-plugin/` and `skills/<name>/SKILL.md`
+
+The Claude Code skills must stay thin: they delegate to the `vcfa-*` prompts, `vcfa://` resources, and tools and must not re-document them. Tool/prompt/resource names referenced in a `SKILL.md` are drift-checked by `npm run validate:docs`; add any legitimate new non-tool kebab term to `KNOWN_NON_REGISTRY_TERMS` in `scripts/validate-docs.mjs`.
 
 If the docs and source disagree, inspect the source, update the docs or examples, and run the docs validation gate.
 
