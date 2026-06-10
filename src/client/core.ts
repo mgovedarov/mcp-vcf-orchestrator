@@ -9,6 +9,10 @@ const UNSUPPORTED_AUTOMATION_SERVICES =
 const UNSUPPORTED_VRO_WRITE =
   "This vRO operation is not supported in VCFA_TARGET_PLATFORM=vra8 mode. The vRA/vRO 8 compatibility phase supports read operations plus workflow execution and execution logs only.";
 
+// The default TypeScript lib's RequestInit lacks undici's dispatcher option,
+// which Node's built-in fetch honors at runtime.
+type DispatchedRequestInit = RequestInit & { dispatcher?: Agent };
+
 const SAFE_ERROR_BODY_KEYS = new Set(["message", "statusCode", "code", "error", "errors"]);
 const NON_JSON_BODY_LIMIT = 200;
 const ERRORS_ARRAY_LIMIT = 5;
@@ -114,6 +118,7 @@ export class VroHttpClient {
   // Per-client dispatcher so ignoreTls relaxes TLS verification only for
   // this client's requests, never process-wide (no NODE_TLS_REJECT_UNAUTHORIZED).
   private readonly dispatcher: Agent | undefined;
+  private dispatcherClosed = false;
 
   constructor(config: VroClientConfig) {
     this.targetPlatform = normalizeTargetPlatform(config.targetPlatform);
@@ -155,6 +160,18 @@ export class VroHttpClient {
       ).toString("base64");
   }
 
+  /**
+   * Release the client's network resources. Closes the TLS-relaxed
+   * dispatcher (if `ignoreTls` was configured) so its keep-alive sockets
+   * do not linger until process exit. Safe to call multiple times.
+   */
+  async close(): Promise<void> {
+    if (this.dispatcher && !this.dispatcherClosed) {
+      this.dispatcherClosed = true;
+      await this.dispatcher.close();
+    }
+  }
+
   async ensureAuthenticated(): Promise<string> {
     if (this.targetPlatform === "vra8") {
       return this.loginHeader;
@@ -175,7 +192,7 @@ export class VroHttpClient {
 
     let res: Response;
     try {
-      const init: RequestInit & { dispatcher?: Agent } = {
+      const init: DispatchedRequestInit = {
         method: "POST",
         headers: {
           Authorization: this.loginHeader,
@@ -238,7 +255,7 @@ export class VroHttpClient {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeout);
       try {
-        const fetchInit: RequestInit & { dispatcher?: Agent } = {
+        const fetchInit: DispatchedRequestInit = {
           ...init,
           signal: controller.signal,
           dispatcher: this.dispatcher,

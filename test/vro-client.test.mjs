@@ -2035,6 +2035,15 @@ test("ignoreTls config scopes TLS relaxation to the client's own requests", asyn
   );
 });
 
+test("close releases the TLS-relaxed dispatcher and is idempotent", async () => {
+  const relaxed = new VroClient(config({ ignoreTls: true }));
+  await relaxed.close();
+  await relaxed.close();
+
+  const strict = new VroClient(config());
+  await strict.close();
+});
+
 test("requests carry no dispatcher when ignoreTls is not set", async () => {
   const calls = [];
   globalThis.fetch = async (url, init) => {

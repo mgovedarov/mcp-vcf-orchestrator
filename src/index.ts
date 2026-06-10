@@ -142,6 +142,7 @@ async function main(): Promise<void> {
   process.on("SIGINT", async () => {
     console.error("[vcfa-server] Shutting down...");
     await server.close();
+    await client.close();
     process.exit(0);
   });
 }
