@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Security
+
+- `VCFA_IGNORE_TLS=true` no longer disables TLS certificate verification process-wide via `NODE_TLS_REJECT_UNAUTHORIZED`. TLS relaxation is now scoped to the client's own requests to the configured VCFA host through a dedicated HTTPS agent, so other HTTPS traffic in the same Node process keeps full certificate verification. The minimum supported Node.js version is now 18.17.
+
 ## 2.0.0 - 2026-05-18
 
 This release tightens live-operation safety, improves authentication and error handling, refreshes dependencies and documentation, and adopts Apache License 2.0 with NOTICE attribution.

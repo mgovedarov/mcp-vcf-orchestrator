@@ -1994,13 +1994,13 @@ test("deletePackage sends documented option query", async () => {
   assert.equal(calls[1].init.method, "DELETE");
 });
 
-test("ignoreTls config disables TLS verification for library callers", () => {
+test("ignoreTls config does not mutate NODE_TLS_REJECT_UNAUTHORIZED", () => {
   const previous = process.env["NODE_TLS_REJECT_UNAUTHORIZED"];
 
   try {
     delete process.env["NODE_TLS_REJECT_UNAUTHORIZED"];
     new VroClient(config({ ignoreTls: true }));
-    assert.equal(process.env["NODE_TLS_REJECT_UNAUTHORIZED"], "0");
+    assert.equal(process.env["NODE_TLS_REJECT_UNAUTHORIZED"], undefined);
   } finally {
     if (previous === undefined) {
       delete process.env["NODE_TLS_REJECT_UNAUTHORIZED"];
@@ -2008,6 +2008,46 @@ test("ignoreTls config disables TLS verification for library callers", () => {
       process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = previous;
     }
   }
+});
+
+test("ignoreTls config scopes TLS relaxation to the client's own requests", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return Response.json({ link: [], total: 0 });
+  };
+
+  const client = new VroClient(config({ ignoreTls: true }));
+  await client.listWorkflows();
+
+  assert.equal(
+    calls[0].url,
+    "https://vcfa.example.test/cloudapi/1.0.0/sessions",
+  );
+  assert.ok(
+    calls[0].init.dispatcher,
+    "session auth call should carry a TLS-relaxed dispatcher",
+  );
+  assert.ok(
+    calls[1].init.dispatcher,
+    "authenticated API call should carry a TLS-relaxed dispatcher",
+  );
+});
+
+test("requests carry no dispatcher when ignoreTls is not set", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return Response.json({ link: [], total: 0 });
+  };
+
+  const client = new VroClient(config());
+  await client.listWorkflows();
+
+  assert.equal(calls[0].init.dispatcher, undefined);
+  assert.equal(calls[1].init.dispatcher, undefined);
 });
 
 test("workflow import rejects path traversal before network calls", async () => {

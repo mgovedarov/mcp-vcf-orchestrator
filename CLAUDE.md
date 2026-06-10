@@ -21,7 +21,7 @@ Required at startup (the process exits if any is missing): `VCFA_HOST`, `VCFA_US
 Notable optional variables (see `.env.example` and `README.md` for the full table):
 
 - `VCFA_TARGET_PLATFORM` – `vcfa` (default, VCF Cloud API session flow) or `vra8` (vRA/vRO 8.12+ Basic-auth against `/vco/api`). `vra8` supports only vRO read operations plus workflow execution/logs; Automation-service APIs (catalog, deployments, templates, subscriptions, event topics) are intentionally unsupported in that mode.
-- `VCFA_IGNORE_TLS` – `true` skips TLS verification (lab use only).
+- `VCFA_IGNORE_TLS` – `true` skips TLS verification for the client's VCFA requests only (lab use only).
 - Artifact directories: `VCFA_ARTIFACT_DIR` (root, defaults to `artifacts/` under the process cwd) and per-kind overrides `VCFA_WORKFLOW_DIR`, `VCFA_ACTION_DIR`, `VCFA_CONFIGURATION_DIR`, `VCFA_RESOURCE_DIR`, `VCFA_PACKAGE_DIR`, `VCFA_EXECUTION_LOG_DIR`, `VCFA_CONTEXT_DIR`.
 - Package-first publishing: `VCFA_PROJECT_PACKAGE_NAME` (stable fully-qualified package, e.g. `com.example.project`) and `VCFA_PROJECT_PACKAGE_DESCRIPTION`.
 

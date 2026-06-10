@@ -67,7 +67,7 @@ Useful optional variables:
 | Variable | Description |
 | --- | --- |
 | `VCFA_TARGET_PLATFORM` | Target platform mode. Defaults to `vcfa`, which uses the VCF Cloud API session flow. Set to `vra8` for vRA/vRO 8.12+ Basic-auth mode against `/vco/api`; this mode supports vRO read operations plus workflow execution/logs and does not support Automation-service APIs such as catalog, deployments, templates, or subscriptions. |
-| `VCFA_IGNORE_TLS` | Set to `true` to skip TLS certificate verification in lab environments. |
+| `VCFA_IGNORE_TLS` | Set to `true` to skip TLS certificate verification for this server's requests to the VCFA host (lab environments only). |
 | `VCFA_ARTIFACT_DIR` | Root directory for local artifact files. Defaults to `artifacts/` in the MCP server process working directory, typically the open project. |
 | `VCFA_PACKAGE_DIR` | Override package artifact directory. |
 | `VCFA_RESOURCE_DIR` | Override resource artifact directory. |

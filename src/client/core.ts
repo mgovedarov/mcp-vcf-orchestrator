@@ -1,5 +1,6 @@
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { Agent } from "undici";
 import type { VroClientConfig, VroTargetPlatform } from "../types.js";
 
 const UNSUPPORTED_AUTOMATION_SERVICES =
@@ -110,12 +111,15 @@ export class VroHttpClient {
   private sessionUrl: string;
   private loginHeader: string;
   private token: string | null = null;
+  // Per-client dispatcher so ignoreTls relaxes TLS verification only for
+  // this client's requests, never process-wide (no NODE_TLS_REJECT_UNAUTHORIZED).
+  private readonly dispatcher: Agent | undefined;
 
   constructor(config: VroClientConfig) {
     this.targetPlatform = normalizeTargetPlatform(config.targetPlatform);
-    if (config.ignoreTls) {
-      process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0";
-    }
+    this.dispatcher = config.ignoreTls
+      ? new Agent({ connect: { rejectUnauthorized: false } })
+      : undefined;
     this.baseUrl = `https://${config.host}/vco/api`;
     this.eventBrokerBaseUrl = `https://${config.host}/event-broker/api`;
     this.catalogBaseUrl = `https://${config.host}/catalog/api`;
@@ -171,7 +175,7 @@ export class VroHttpClient {
 
     let res: Response;
     try {
-      res = await fetch(this.sessionUrl, {
+      const init: RequestInit & { dispatcher?: Agent } = {
         method: "POST",
         headers: {
           Authorization: this.loginHeader,
@@ -179,7 +183,9 @@ export class VroHttpClient {
           Accept: "application/json;version=9.0.0",
         },
         signal: controller.signal,
-      });
+        dispatcher: this.dispatcher,
+      };
+      res = await fetch(this.sessionUrl, init);
     } finally {
       clearTimeout(timeoutId);
     }
@@ -232,7 +238,12 @@ export class VroHttpClient {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeout);
       try {
-        return await fetch(url, { ...init, signal: controller.signal });
+        const fetchInit: RequestInit & { dispatcher?: Agent } = {
+          ...init,
+          signal: controller.signal,
+          dispatcher: this.dispatcher,
+        };
+        return await fetch(url, fetchInit);
       } finally {
         clearTimeout(timeoutId);
       }
