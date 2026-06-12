@@ -70,7 +70,16 @@ test("subscription tools format topics, lists, and details", async () => {
   const detail = await handlers.get("get-subscription")({ id: "sub-1" });
   assert.match(detail.content[0].text, /Status: DISABLED/);
   assert.match(detail.content[0].text, /Blocking: true/);
-  assert.match(detail.content[0].text, /"projectId": "project-1"/);
+  assert.match(detail.content[0].text, /Constraints: omitted/);
+  assert.match(detail.content[0].text, /sha256: [0-9a-f]{64}/);
+  assert.match(detail.content[0].text, /includeConstraints: true/);
+  assert.ok(!detail.content[0].text.includes('"projectId": "project-1"'));
+
+  const fullDetail = await handlers.get("get-subscription")({
+    id: "sub-1",
+    includeConstraints: true,
+  });
+  assert.match(fullDetail.content[0].text, /"projectId": "project-1"/);
 });
 
 test("subscription tools pass create and update payloads through", async () => {

@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { VroClient } from "../vro-client.js";
 import { truncationNote } from "./truncation.js";
 import { DESTRUCTIVE_LIVE_WRITE } from "./annotations.js";
+import { omittedContentSummary } from "./content-summary.js";
 import {
   guardExpectedFields,
   hasAnyExpectedValue,
@@ -76,13 +77,19 @@ export function registerTemplateTools(
     {
       title: "Get Template",
       description:
-        "Get detailed information about a specific blueprint template by its ID.",
+        "Get detailed information about a specific blueprint template by its ID. Full YAML content is returned only when includeContent is true.",
       inputSchema: z.object({
         id: z.string().describe("The template (blueprint) ID"),
+        includeContent: z
+          .boolean()
+          .optional()
+          .describe(
+            "Set true to include the full blueprint YAML content, which may embed credentials. By default only a sha256/length summary of the content is returned.",
+          ),
       }),
       annotations: { readOnlyHint: true },
     },
-    async ({ id }): Promise<CallToolResult> => {
+    async ({ id, includeContent }): Promise<CallToolResult> => {
       try {
         const t = await client.getTemplate(id);
         let text = `Template: ${t.name}\nID: ${t.id}\n`;
@@ -95,7 +102,11 @@ export function registerTemplateTools(
         if (t.createdAt) text += `Created At: ${t.createdAt}\n`;
         if (t.updatedBy) text += `Last Updated By: ${t.updatedBy}\n`;
         if (t.updatedAt) text += `Last Updated At: ${t.updatedAt}\n`;
-        if (t.content) text += `\nContent:\n${t.content}\n`;
+        if (t.content) {
+          text += includeContent
+            ? `\nContent:\n${t.content}\n`
+            : `\n${omittedContentSummary("Content", t.content, "get-template", "includeContent")}\n`;
+        }
         return { content: [{ type: "text", text }] };
       } catch (error) {
         return {

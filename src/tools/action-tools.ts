@@ -4,6 +4,7 @@ import { z } from "zod";
 import { formatPreflightReport } from "../client/artifact-preflight.js";
 import type { VroClient } from "../vro-client.js";
 import { DESTRUCTIVE_LIVE_WRITE } from "./annotations.js";
+import { omittedContentSummary } from "./content-summary.js";
 import { truncationNote } from "./truncation.js";
 import {
   appendGuardGuidance,
@@ -82,13 +83,19 @@ export function registerActionTools(
     {
       title: "Get Action Details",
       description:
-        "Get detailed information about a specific action including its script content and parameters.",
+        "Get detailed information about a specific action including its parameters. The full script is returned only when includeScript is true.",
       inputSchema: z.object({
         id: z.string().describe("The action ID"),
+        includeScript: z
+          .boolean()
+          .optional()
+          .describe(
+            "Set true to include the full action script, which may embed credentials. By default only a sha256/length summary of the script is returned.",
+          ),
       }),
       annotations: { readOnlyHint: true },
     },
-    async ({ id }): Promise<CallToolResult> => {
+    async ({ id, includeScript }): Promise<CallToolResult> => {
       try {
         const action = await client.getAction(id);
         const inputParams = action["input-parameters"] ?? [];
@@ -108,7 +115,9 @@ export function registerActionTools(
         }
 
         if (action.script) {
-          text += `\nScript:\n\`\`\`javascript\n${action.script}\n\`\`\`\n`;
+          text += includeScript
+            ? `\nScript:\n\`\`\`javascript\n${action.script}\n\`\`\`\n`
+            : `\n${omittedContentSummary("Script", action.script, "get-action", "includeScript")}\n`;
         }
         return { content: [{ type: "text", text }] };
       } catch (error) {
