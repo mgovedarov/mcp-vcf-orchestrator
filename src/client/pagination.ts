@@ -39,12 +39,26 @@ function isQueryCountUnsupported(error: unknown): boolean {
   );
 }
 
+function encodeQueryComponent(value: string): string {
+  // RFC 3986-strict variant of encodeURIComponent (also encodes ! ' ( ) *).
+  // ~ is unreserved and stays literal; $ is encoded as %24.
+  return encodeURIComponent(value).replace(
+    /[!'()*]/g,
+    (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+}
+
 export function formatQuery(params: URLSearchParams): string {
-  return params
-    .toString()
-    .replace(/\+/g, "%20")
-    .replace(/%24/g, "$")
-    .replace(/%7E/gi, "~");
+  const parts: string[] = [];
+  for (const [key, value] of params) {
+    // OData system query keys ($filter, $search, $top, ...) must keep a
+    // literal $ in the key; some VMware Automation endpoints reject %24filter.
+    const encodedKey = /^\$[A-Za-z]+$/.test(key)
+      ? key
+      : encodeQueryComponent(key);
+    parts.push(`${encodedKey}=${encodeQueryComponent(value)}`);
+  }
+  return parts.join("&");
 }
 
 export async function getAllVroPages<T>(

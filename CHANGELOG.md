@@ -12,6 +12,10 @@
 - Added `VroClient.close()` to release the client's network resources (the TLS-relaxed dispatcher); the server now calls it during graceful shutdown.
 - Added a local TLS integration test that runs the client against a self-signed HTTPS server, verifying `ignoreTls` completes a real handshake (and that strict mode still rejects) without touching `NODE_TLS_REJECT_UNAUTHORIZED`.
 
+### Fixed
+
+- Query parameter values containing `$` or `~` are no longer un-encoded by the pagination query serializer; the literal-`$` exemption now applies only to OData system query keys such as `$filter` and `$search` (VCFO-050).
+
 ## 2.0.0 - 2026-05-18
 
 This release tightens live-operation safety, improves authentication and error handling, refreshes dependencies and documentation, and adopts Apache License 2.0 with NOTICE attribution.

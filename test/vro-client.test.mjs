@@ -13,6 +13,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { buildWorkflowArtifact } from "../dist/client/workflow-artifact.js";
 import { sanitizeErrorBody } from "../dist/client/core.js";
+import { formatQuery } from "../dist/client/pagination.js";
 import { VroClient } from "../dist/vro-client.js";
 
 const config = (overrides = {}) => ({
@@ -184,6 +185,55 @@ test("vRO list clients aggregate multiple startIndex pages and preserve filters"
   assert.equal(
     calls[2].url,
     "https://vcfa.example.test/vco/api/actions?conditions=name~deploy%20vm&maxResult=100&startIndex=100&queryCount=true",
+  );
+});
+
+test("formatQuery preserves $ and ~ in values while keeping OData $-keys literal", () => {
+  assert.equal(
+    formatQuery(new URLSearchParams({ $filter: "projectId eq 'a$b~c'" })),
+    "$filter=projectId%20eq%20%27a%24b~c%27",
+  );
+  assert.equal(
+    formatQuery(new URLSearchParams({ conditions: "name~cost$center" })),
+    "conditions=name~cost%24center",
+  );
+  assert.equal(
+    formatQuery(new URLSearchParams({ conditions: "a&b=c%d+e" })),
+    "conditions=a%26b%3Dc%25d%2Be",
+  );
+});
+
+test("vRO conditions values containing $ are percent-encoded", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return Response.json({ start: 0, total: 0, link: [] });
+  };
+
+  const client = new VroClient(config());
+  await client.listActions("cost$center ~v2");
+
+  assert.equal(
+    calls[1].url,
+    "https://vcfa.example.test/vco/api/actions?conditions=name~cost%24center%20~v2&maxResult=100&startIndex=0&queryCount=true",
+  );
+});
+
+test("$search values containing $ keep the key literal and encode the value", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return Response.json({ totalElements: 0, content: [] });
+  };
+
+  const client = new VroClient(config());
+  await client.listCatalogItems("price $100");
+
+  assert.equal(
+    calls[1].url,
+    "https://vcfa.example.test/catalog/api/items?$search=price%20%24100&page=0&size=100",
   );
 });
 
