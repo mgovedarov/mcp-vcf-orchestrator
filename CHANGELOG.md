@@ -15,6 +15,7 @@
 ### Fixed
 
 - Query parameter values containing `$` or `~` are no longer un-encoded by the pagination query serializer; the literal-`$` exemption now applies only to OData system query keys such as `$filter` and `$search` (VCFO-050).
+- Artifact preflight now rejects `input_form_` entries that are not UTF-16BE (the documented contract) instead of silently accepting UTF-16LE, decodes UTF-16 entries fatally so corrupt bytes fail instead of passing as U+FFFD mojibake, and reports XML-looking `.action`/`.vsoconf` archive entries with invalid byte sequences instead of skipping them (VCFO-056).
 
 ## 2.0.0 - 2026-05-18
 
