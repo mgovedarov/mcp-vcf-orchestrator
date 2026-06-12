@@ -19,6 +19,9 @@ const config = (host, overrides = {}) => ({
   username: "admin",
   organization: "org",
   password: "secret",
+  // Pin the Cloud API version so authentication skips the GET /api/versions
+  // discovery probe; version negotiation is covered in vro-client.test.mjs.
+  targetPlatform: "vcfa9.0",
   ...overrides,
 });
 

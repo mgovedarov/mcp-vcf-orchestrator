@@ -11,6 +11,14 @@ VCFA_ORGANIZATION=...
 VCFA_PASSWORD=...
 ```
 
+## 401 Unauthorized At Login
+
+The session request sends Basic auth as `{VCFA_USERNAME}@{VCFA_ORGANIZATION}`. If credentials are correct but the login still returns 401:
+
+- `VCFA_ORGANIZATION` must be the organization **name** (the tenant URL slug, for example the `<orgName>` in `https://<host>/tenant/<orgName>`), not its display name.
+- Provider/system administrator accounts must set `VCFA_ORGANIZATION=system`. That routes the login to `/cloudapi/1.0.0/sessions/provider`; the tenant `/sessions` endpoint rejects provider accounts with 401 regardless of password.
+- The server auto-negotiates the VCF Cloud API version (`9.1.0` on VCF Automation 9.1, `9.0.0` otherwise) via `GET /api/versions`. If negotiation misbehaves against an unusual target, pin it with `VCFA_TARGET_PLATFORM=vcfa9.1` or `vcfa9.0`.
+
 ## TLS Errors In Lab Environments
 
 For lab systems with self-signed certificates, set:

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- VCF Automation 9.1 support: the default `vcfa` platform now auto-negotiates the VCF Cloud API version before authenticating, probing the unauthenticated `GET /api/versions` discovery document and preferring `9.1.0` over `9.0.0`. A probe that fails outright falls back to `9.0.0` for that attempt only and discovery is retried on the next authentication; a probe that succeeds but advertises no known version caches the `9.0.0` fallback. Authentication is single-flighted, so concurrent requests share one probe and one session login. New `VCFA_TARGET_PLATFORM` values `vcfa9.1` and `vcfa9.0` pin the version explicitly and skip the probe (VCFO-057).
+- Provider/system administrator logins: `VCFA_ORGANIZATION=system` (case-insensitive) now routes authentication to `/cloudapi/1.0.0/sessions/provider`; the tenant `/sessions` endpoint rejects provider accounts with 401. Login 401 errors now include a hint distinguishing organization names from display names and pointing provider accounts at `VCFA_ORGANIZATION=system` (VCFO-057).
+
 ## 2.1.0 - 2026-06-12
 
 This release scopes TLS relaxation to the client's own requests, hardens response parsing and artifact preflight, gates bulky tool output behind opt-in flags, adds two-phase confirmation fields for live mutations, and ships a Claude Code plugin with authoring and operations skills.

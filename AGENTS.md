@@ -60,6 +60,8 @@ Many write-capable tools require a `confirm: true` argument before they mutate s
 
 In `vra8` mode, support only vRO `/vco/api` read operations plus workflow execution and execution logs. Automation-service APIs such as catalog, deployments, templates, subscriptions, and event topics are intentionally unsupported in Basic-auth mode until token-auth support is added.
 
+On the default `vcfa` platform, the client auto-negotiates the VCF Cloud API version (`9.1.0` preferred, then `9.0.0`) via the unauthenticated `GET /api/versions` discovery document; `VCFA_TARGET_PLATFORM=vcfa9.1` or `vcfa9.0` pins it. Logins with `VCFA_ORGANIZATION=system` (case-insensitive) are routed to `/cloudapi/1.0.0/sessions/provider` for provider/system administrators; tenant logins use `/cloudapi/1.0.0/sessions` with the organization name (URL slug), not its display name.
+
 ## Current MCP Prompts And Resources
 
 Prefer server-provided prompts for larger VCFA/vRO tasks because they encode the repository's discovery and safety playbooks.
