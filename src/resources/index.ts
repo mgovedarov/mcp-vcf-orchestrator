@@ -92,7 +92,7 @@ const WORKFLOW_SCAFFOLD_SCHEMA = {
 
 const TEMPLATE_CONVENTIONS = `# Template Metadata And Content Conventions
 
-Use \`list-templates\` to discover existing Cloud Assembly blueprint templates before creating new ones. Use \`get-template\` to inspect full metadata and YAML content for candidate templates.
+Use \`list-templates\` to discover existing Cloud Assembly blueprint templates before creating new ones. Use \`get-template\` to inspect full metadata; set \`includeContent: true\` to read the YAML content for candidate templates.
 
 Template metadata handled by the current tools includes:
 
@@ -143,7 +143,7 @@ Use this pattern when a workflow should expose an existing vRO action through wo
 
 Discovery first:
 
-- Run \`list-actions\` with a focused filter, then \`get-action\` for the exact action ID or fully qualified name.
+- Run \`list-actions\` with a focused filter, then \`get-action\` (with \`includeScript: true\` when the script matters) for the exact action ID or fully qualified name.
 - Confirm the action module, name, input parameters, return type, and script behavior before authoring the wrapper.
 - If the action is not found or discovery returns partial data, stop and ask for the missing action details. Do not invent parameter names or return types.
 
@@ -172,7 +172,7 @@ Use this pattern to draft a small VM blueprint template only after discovering t
 Discovery first:
 
 - Run \`list-templates\` for existing small VM, Linux, Windows, or project-specific templates.
-- Run \`get-template\` on the closest match and reuse its resource type names, image/flavor conventions, networks, constraints, and inputs when appropriate.
+- Run \`get-template\` (with \`includeContent: true\`) on the closest match and reuse its resource type names, image/flavor conventions, networks, constraints, and inputs when appropriate.
 - Confirm the target \`projectId\`; do not guess project IDs.
 
 Implementation shape:
@@ -217,7 +217,7 @@ Use this pattern when creating extensibility subscriptions that wire VCF Automat
 Discovery first:
 
 - Run \`list-event-topics\` to discover available event topics and their IDs before creating subscriptions.
-- Run \`list-subscriptions\` and \`get-subscription\` to inspect existing subscriptions for naming conventions, event filters, and workflow bindings.
+- Run \`list-subscriptions\` and \`get-subscription\` (with \`includeConstraints: true\`) to inspect existing subscriptions for naming conventions, event filters, and workflow bindings.
 - Run \`list-workflows\` and \`get-workflow\` to verify the target workflow exists, has the expected inputs, and can accept event payload data.
 - If a required event topic, workflow, or project cannot be found, stop and report the gap.
 

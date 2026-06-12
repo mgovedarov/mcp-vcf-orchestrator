@@ -13,7 +13,7 @@ templateHint: "Ubuntu"
 
 ```text
 list-templates(search: "Ubuntu")
-get-template(id: "<template-id>")
+get-template(id: "<template-id>", includeContent: true)
 list-catalog-items(search: "Ubuntu")
 get-catalog-item(id: "<catalog-item-id>")
 list-deployments(search: "Ubuntu", projectId: "<project-id>")
@@ -41,5 +41,5 @@ Create the subscription only after the topic, workflow ID, blocking behavior, an
 
 ```text
 create-subscription(name: "Tag Ubuntu deployments", eventTopicId: "<event-topic-id>", runnableType: "extensibility.vro", runnableId: "<workflow-id>", projectId: "<project-id>", blocking: false, priority: 100, timeout: 10, disabled: true, confirm: true)
-get-subscription(id: "<subscription-id>")
+get-subscription(id: "<subscription-id>", includeConstraints: true)
 ```

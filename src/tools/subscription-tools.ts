@@ -3,6 +3,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import type { VroClient } from "../vro-client.js";
 import { DESTRUCTIVE_LIVE_WRITE } from "./annotations.js";
+import { omittedContentSummary } from "./content-summary.js";
 import {
   guardExpectedFields,
   hasAnyExpectedValue,
@@ -114,13 +115,19 @@ export function registerSubscriptionTools(
     {
       title: "Get Subscription Details",
       description:
-        "Get detailed information about a specific extensibility subscription.",
+        "Get detailed information about a specific extensibility subscription. The full constraints JSON is returned only when includeConstraints is true.",
       inputSchema: z.object({
         id: z.string().describe("The subscription ID"),
+        includeConstraints: z
+          .boolean()
+          .optional()
+          .describe(
+            "Set true to include the full constraints JSON. By default only a sha256/length summary of the constraints is returned.",
+          ),
       }),
       annotations: { readOnlyHint: true },
     },
-    async ({ id }): Promise<CallToolResult> => {
+    async ({ id, includeConstraints }): Promise<CallToolResult> => {
       try {
         const sub = await client.getSubscription(id);
 
@@ -136,7 +143,10 @@ export function registerSubscriptionTools(
         if (sub.projectId) text += `Project ID: ${sub.projectId}\n`;
         if (sub.orgId) text += `Org ID: ${sub.orgId}\n`;
         if (sub.constraints) {
-          text += `Constraints: ${JSON.stringify(sub.constraints, null, 2)}\n`;
+          const constraintsJson = JSON.stringify(sub.constraints, null, 2);
+          text += includeConstraints
+            ? `Constraints: ${constraintsJson}\n`
+            : `${omittedContentSummary("Constraints", constraintsJson, "get-subscription", "includeConstraints")}\n`;
         }
 
         return { content: [{ type: "text", text }] };

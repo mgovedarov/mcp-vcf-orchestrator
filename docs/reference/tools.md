@@ -361,12 +361,13 @@ List actions from VCF Automation Orchestrator. Optionally filter by name.
 
 ### `get-action`
 
-Get detailed information about a specific action including script content and parameters.
+Get detailed information about a specific action including its parameters. The script is summarized (sha256 + length) unless `includeScript` is set.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `id` | string | Yes | - | Action ID to inspect. |
+| `includeScript` | boolean | No | `false` | If `true`, include the full action script. By default only a sha256/length summary of the script is returned. |
 :::
 
 ### `create-action`
@@ -775,12 +776,13 @@ List blueprint templates in VCF Automation Cloud Assembly. Optionally filter by 
 
 ### `get-template`
 
-Get detailed information about a specific blueprint template by its ID.
+Get detailed information about a specific blueprint template by its ID. The YAML content is summarized (sha256 + length) unless `includeContent` is set.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `id` | string | Yes | - | Template or blueprint ID to inspect. |
+| `includeContent` | boolean | No | `false` | If `true`, include the full blueprint YAML content. By default only a sha256/length summary of the content is returned. |
 :::
 
 ### `create-template`
@@ -1063,12 +1065,13 @@ List extensibility subscriptions, optionally filtered by project ID.
 
 ### `get-subscription`
 
-Get subscription details including constraints, blocking setting, and priority.
+Get subscription details including blocking setting and priority. Constraints are summarized (sha256 + length) unless `includeConstraints` is set.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `id` | string | Yes | - | Subscription ID to inspect. |
+| `includeConstraints` | boolean | No | `false` | If `true`, include the full constraints JSON. By default only a sha256/length summary of the constraints is returned. |
 :::
 
 ### `create-subscription`
