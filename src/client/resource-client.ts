@@ -37,7 +37,12 @@ export class ResourceClient {
         href: item.href,
       };
     });
-    return { total: raw.total ?? link.length, start: raw.start, link };
+    return {
+      total: raw.total ?? link.length,
+      start: raw.start,
+      link,
+      ...(raw.truncated ? { truncated: true } : {}),
+    };
   }
 
   async getResourceElement(id: string): Promise<ResourceElement> {

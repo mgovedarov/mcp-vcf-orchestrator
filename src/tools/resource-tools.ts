@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import type { VroClient } from "../vro-client.js";
+import { truncationNote } from "./truncation.js";
 import { DESTRUCTIVE_LIVE_WRITE } from "./annotations.js";
 import {
   appendGuardGuidance,
@@ -49,7 +50,7 @@ export function registerResourceTools(
           content: [
             {
               type: "text",
-              text: `Found ${resources.length} resource element(s):\n\n${lines.join("\n")}`,
+              text: `Found ${resources.length} resource element(s):\n\n${lines.join("\n")}${truncationNote(result, resources.length, result.total)}`,
             },
           ],
         };

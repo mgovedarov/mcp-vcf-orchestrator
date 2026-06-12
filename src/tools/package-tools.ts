@@ -3,6 +3,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { formatPreflightReport } from "../client/artifact-preflight.js";
 import type { VroClient } from "../vro-client.js";
+import { truncationNote } from "./truncation.js";
 import { DESTRUCTIVE_LIVE_WRITE } from "./annotations.js";
 import {
   appendGuardGuidance,
@@ -115,7 +116,7 @@ export function registerPackageTools(
           content: [
             {
               type: "text",
-              text: `Found ${packages.length} package(s):\n\n${lines.join("\n")}`,
+              text: `Found ${packages.length} package(s):\n\n${lines.join("\n")}${truncationNote(result, packages.length, result.total)}`,
             },
           ],
         };

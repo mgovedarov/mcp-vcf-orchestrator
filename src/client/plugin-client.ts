@@ -24,6 +24,10 @@ export class PluginClient {
         type: a["type"],
       };
     });
-    return { total: raw.total ?? link.length, link };
+    return {
+      total: raw.total ?? link.length,
+      link,
+      ...(raw.truncated ? { truncated: true } : {}),
+    };
   }
 }
