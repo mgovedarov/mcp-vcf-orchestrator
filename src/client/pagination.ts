@@ -41,7 +41,9 @@ function isQueryCountUnsupported(error: unknown): boolean {
 
 function encodeQueryComponent(value: string): string {
   // RFC 3986-strict variant of encodeURIComponent (also encodes ! ' ( ) *).
-  // ~ is unreserved and stays literal; $ is encoded as %24.
+  // ~ is unreserved and stays literal; $ is encoded as %24. Unlike
+  // URLSearchParams.toString(), * serializes as %2A (wire-equivalent after
+  // server-side decoding).
   return encodeURIComponent(value).replace(
     /[!'()*]/g,
     (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
@@ -59,6 +61,11 @@ export function formatQuery(params: URLSearchParams): string {
     parts.push(`${encodedKey}=${encodeQueryComponent(value)}`);
   }
   return parts.join("&");
+}
+
+function withQuery(path: string, params: URLSearchParams): string {
+  const query = formatQuery(params);
+  return query ? `${path}?${query}` : path;
 }
 
 export async function getAllVroPages<T>(
@@ -81,7 +88,7 @@ export async function getAllVroPages<T>(
       pageParams.set("maxResult", String(pageSize));
       pageParams.set("startIndex", String(start));
       if (includeQueryCount) pageParams.set("queryCount", "true");
-      return `${path}?${formatQuery(pageParams)}`;
+      return withQuery(path, pageParams);
     };
 
     let page: VroPage<T>;
@@ -141,7 +148,7 @@ export async function getAllAutomationPages<T>(
     pageParams.set("size", String(pageSize));
 
     const page = await http.get<AutomationPage<T>>(
-      `${path}?${formatQuery(pageParams)}`,
+      withQuery(path, pageParams),
       baseUrl,
     );
     const items = page.content ?? [];
