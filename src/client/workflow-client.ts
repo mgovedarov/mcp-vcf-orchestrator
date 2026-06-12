@@ -641,7 +641,7 @@ export class WorkflowClient {
         value: { [p.type]: { value: p.value } },
       }));
     }
-    return this.http.post<WorkflowExecution>(
+    return this.http.startExecution<WorkflowExecution>(
       `/workflows/${encodeURIComponent(id)}/executions`,
       body,
     );
