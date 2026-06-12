@@ -310,12 +310,12 @@ export class VroHttpClient {
     throw new Error(UNSUPPORTED_VRO_WRITE);
   }
 
-  async request<T>(
+  private async send(
     method: string,
     path: string,
     body?: unknown,
     overrideBaseUrl?: string,
-  ): Promise<T> {
+  ): Promise<{ res: Response; text: string }> {
     this.assertOperationSupported(method, path, overrideBaseUrl);
     const url = `${overrideBaseUrl ?? this.baseUrl}${path}`;
     console.error(`[vro-client] ${method} ${path}`);
@@ -344,7 +344,29 @@ export class VroHttpClient {
       );
     }
 
-    const text = await res.text();
+    return { res, text: await res.text() };
+  }
+
+  async request<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    overrideBaseUrl?: string,
+  ): Promise<T> {
+    const { text } = await this.send(method, path, body, overrideBaseUrl);
+    if (!text) return {} as T;
+    return JSON.parse(text) as T;
+  }
+
+  /**
+   * POST an execution-style request where the API may answer 202 with an
+   * empty body and a Location header pointing at the created execution.
+   * Synthesizes { id, state: "running" } from the Location header in that
+   * case; generic empty 2xx responses elsewhere must use request/post and
+   * receive {} instead.
+   */
+  async startExecution<T>(path: string, body?: unknown): Promise<T> {
+    const { res, text } = await this.send("POST", path, body);
     if (!text) {
       const location = res.headers.get("location");
       if (location) {
@@ -353,7 +375,6 @@ export class VroHttpClient {
       }
       return {} as T;
     }
-
     return JSON.parse(text) as T;
   }
 
