@@ -18,6 +18,10 @@ import {
   VroHttpClient,
 } from "../dist/client/core.js";
 import { formatQuery } from "../dist/client/pagination.js";
+import {
+  toVroParameters,
+  toVroParameterValue,
+} from "../dist/client/parameters.js";
 import { VroClient } from "../dist/vro-client.js";
 
 const config = (overrides = {}) => ({
@@ -951,6 +955,117 @@ test("bodyless 202 responses with Location return an execution id", async () => 
   assert.equal(execution.id, "execution-123");
   assert.equal(execution.state, "running");
   assert.equal(calls.length, 2);
+});
+
+test("runWorkflow keys execution input values by the canonical vRO type literal", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return new Response("", {
+      status: 202,
+      headers: {
+        location:
+          "https://vcfa.example.test/vco/api/workflows/wf/executions/execution-123",
+      },
+    });
+  };
+
+  const client = new VroClient(config());
+  await client.runWorkflow("workflow-1", [
+    { name: "username", type: "string", value: "admin" },
+    { name: "password", type: "SecureString", value: "s3cret" },
+    { name: "expiry", type: "Date", value: "2026-06-12T00:00:00Z" },
+  ]);
+
+  const body = JSON.parse(calls[1].init.body);
+  assert.deepEqual(body.parameters, [
+    {
+      name: "username",
+      type: "string",
+      value: { string: { value: "admin" } },
+    },
+    {
+      name: "password",
+      type: "SecureString",
+      value: { "secure-string": { value: "s3cret" } },
+    },
+    {
+      name: "expiry",
+      type: "Date",
+      value: { date: { value: "2026-06-12T00:00:00Z" } },
+    },
+  ]);
+});
+
+test("toVroParameterValue maps display types to canonical value keys and shapes", () => {
+  assert.deepEqual(toVroParameterValue("SecureString", "s3cret"), {
+    "secure-string": { value: "s3cret" },
+  });
+  assert.deepEqual(toVroParameterValue("MimeAttachment", "data"), {
+    "mime-attachment": { value: "data" },
+  });
+  assert.deepEqual(toVroParameterValue("number", 7), {
+    number: { value: 7 },
+  });
+  assert.deepEqual(toVroParameterValue("Array/SecureString", ["a", "b"]), {
+    array: {
+      elements: [
+        { "secure-string": { value: "a" } },
+        { "secure-string": { value: "b" } },
+      ],
+    },
+  });
+  assert.deepEqual(toVroParameterValue("VC:VirtualMachine", "vm-123"), {
+    "sdk-object": { id: "vm-123", type: "VC:VirtualMachine" },
+  });
+  assert.deepEqual(toVroParameterValue("Array/VC:VirtualMachine", ["vm-1"]), {
+    array: {
+      elements: [
+        { "sdk-object": { id: "vm-1", type: "VC:VirtualMachine" } },
+      ],
+    },
+  });
+  assert.deepEqual(
+    toVroParameterValue("CompositeType(name:string,count:number):Pair", {
+      type: "CompositeType(name:string,count:number):Pair",
+      field: [{ name: "name", value: { string: { value: "a" } } }],
+    }),
+    {
+      composite: {
+        type: "CompositeType(name:string,count:number):Pair",
+        field: [{ name: "name", value: { string: { value: "a" } } }],
+      },
+    },
+  );
+  assert.deepEqual(
+    toVroParameterValue("Properties", { color: "blue", count: 2 }),
+    {
+      properties: {
+        property: [
+          { key: "color", value: { string: { value: "blue" } } },
+          { key: "count", value: { number: { value: 2 } } },
+        ],
+      },
+    },
+  );
+});
+
+test("toVroParameters omits the value wrapper for parameters without a value", () => {
+  assert.deepEqual(
+    toVroParameters([
+      { name: "password", type: "SecureString", value: "s3cret" },
+      { name: "optional", type: "string" },
+    ]),
+    [
+      {
+        name: "password",
+        type: "SecureString",
+        value: { "secure-string": { value: "s3cret" } },
+      },
+      { name: "optional", type: "string", value: undefined },
+    ],
+  );
 });
 
 test("generic bodyless 2xx responses with a Location header do not synthesize an execution", async () => {

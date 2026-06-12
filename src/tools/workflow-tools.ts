@@ -203,7 +203,10 @@ function validateParameterValue(type: string, value: unknown): string | null {
   }
 
   const normalizedType = type.toLowerCase();
-  if (normalizedType === "string" && typeof value !== "string") {
+  if (
+    ["string", "securestring", "encryptedstring"].includes(normalizedType) &&
+    typeof value !== "string"
+  ) {
     return `must be a string for type ${type}`;
   }
   if (

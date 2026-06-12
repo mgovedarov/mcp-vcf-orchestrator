@@ -35,6 +35,7 @@ import {
   resolveFileInDirectory,
 } from "./files.js";
 import { getAllVroPages } from "./pagination.js";
+import { toVroParameters } from "./parameters.js";
 import { buildWorkflowArtifact } from "./workflow-artifact.js";
 
 const LOG_SEVERITY_RANK: Record<string, number> = {
@@ -644,11 +645,7 @@ export class WorkflowClient {
   ): Promise<WorkflowExecution> {
     const body: Record<string, unknown> = {};
     if (inputs && inputs.length > 0) {
-      body.parameters = inputs.map((p) => ({
-        name: p.name,
-        type: p.type,
-        value: { [p.type]: { value: p.value } },
-      }));
+      body.parameters = toVroParameters(inputs);
     }
     return this.http.startExecution<WorkflowExecution>(
       `/workflows/${encodeURIComponent(id)}/executions`,

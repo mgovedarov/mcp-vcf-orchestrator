@@ -7,6 +7,11 @@
 - VCF Automation 9.1 support: the default `vcfa` platform now auto-negotiates the VCF Cloud API version before authenticating, probing the unauthenticated `GET /api/versions` discovery document and preferring `9.1.0` over `9.0.0`. A probe that fails outright falls back to `9.0.0` for that attempt only and discovery is retried on the next authentication; a probe that succeeds but advertises no known version caches the `9.0.0` fallback. Authentication is single-flighted, so concurrent requests share one probe and one session login. New `VCFA_TARGET_PLATFORM` values `vcfa9.1` and `vcfa9.0` pin the version explicitly and skip the probe (VCFO-057).
 - Provider/system administrator logins: `VCFA_ORGANIZATION=system` (case-insensitive) now routes authentication to `/cloudapi/1.0.0/sessions/provider`; the tenant `/sessions` endpoint rejects provider accounts with 401. Login 401 errors now include a hint distinguishing organization names from display names and pointing provider accounts at `VCFA_ORGANIZATION=system` (VCFO-057).
 
+### Fixed
+
+- Workflow execution and configuration attribute payloads now key parameter values by the canonical lowercase/hyphenated vRO type literal (`secure-string`, `date`, `mime-attachment`, …) instead of the display type from the definition (`SecureString`), which the vRO REST API rejects with a 400. `Array/<type>` inputs are serialized as `{"array": {"elements": [...]}}`, SDK object types (e.g. `VC:VirtualMachine`) as `{"sdk-object": {"id", "type"}}`, and plain-object `Properties` values as `{"properties": {"property": [...]}}` (VCFO-058).
+- `run-workflow` and `run-workflow-and-wait` input validation now rejects non-string values for `SecureString` and `EncryptedString` inputs instead of forwarding them to the vRO API (VCFO-058).
+
 ## 2.1.0 - 2026-06-12
 
 This release scopes TLS relaxation to the client's own requests, hardens response parsing and artifact preflight, gates bulky tool output behind opt-in flags, adds two-phase confirmation fields for live mutations, and ships a Claude Code plugin with authoring and operations skills.
