@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { buildWorkflowArtifact } from "../dist/client/workflow-artifact.js";
-import { sanitizeErrorBody } from "../dist/client/core.js";
+import { sanitizeErrorBody, VroHttpClient } from "../dist/client/core.js";
 import { formatQuery } from "../dist/client/pagination.js";
 import { VroClient } from "../dist/vro-client.js";
 
@@ -697,6 +697,83 @@ test("bodyless 202 responses with Location return an execution id", async () => 
   assert.equal(execution.id, "execution-123");
   assert.equal(execution.state, "running");
   assert.equal(calls.length, 2);
+});
+
+test("generic bodyless 2xx responses with a Location header do not synthesize an execution", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return new Response("", {
+      status: 202,
+      headers: {
+        location: "https://vcfa.example.test/vco/api/things/thing-9",
+      },
+    });
+  };
+
+  const http = new VroHttpClient(config());
+  const result = await http.post("/things/thing-9/promote");
+
+  assert.deepEqual(result, {});
+  assert.equal(result.state, undefined);
+  assert.equal(calls.length, 2);
+});
+
+test("non-JSON 2xx responses throw a contextualized error", async () => {
+  const htmlBody = "<html><body>Maintenance</body></html>" + "x".repeat(300);
+  globalThis.fetch = async (url, init) => {
+    if (String(url).includes("/sessions")) return authResponse();
+    return new Response(htmlBody, {
+      status: 200,
+      headers: { "content-type": "text/html", "x-request-id": "req-42" },
+    });
+  };
+
+  const client = new VroClient(config());
+  await assert.rejects(
+    () => client.getWorkflow("workflow-1"),
+    (error) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /non-JSON response body \(200/);
+      assert.match(error.message, /GET \/workflows\/workflow-1/);
+      assert.match(error.message, /x-request-id: req-42/);
+      assert.ok(error.message.includes("…"), "excerpt should be truncated");
+      assert.ok(
+        !error.message.includes("x".repeat(250)),
+        "raw body tail must not leak into the error",
+      );
+      return true;
+    },
+  );
+});
+
+test("whitespace-only 2xx responses throw a contextualized error", async () => {
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/sessions")) return authResponse();
+    return new Response("   ", { status: 200 });
+  };
+
+  const client = new VroClient(config());
+  await assert.rejects(
+    () => client.getWorkflow("workflow-1"),
+    /non-JSON response body .*GET \/workflows\/workflow-1/s,
+  );
+});
+
+test("startExecution parses a JSON 2xx body", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return Response.json({ id: "execution-9", state: "completed" });
+  };
+
+  const http = new VroHttpClient(config());
+  const execution = await http.startExecution("/workflows/wf-1/executions", {});
+
+  assert.equal(execution.id, "execution-9");
+  assert.equal(execution.state, "completed");
 });
 
 test("getWorkflowExecution can request detailed execution data", async () => {

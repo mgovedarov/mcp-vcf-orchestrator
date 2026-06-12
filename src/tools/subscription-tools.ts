@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import type { VroClient } from "../vro-client.js";
+import { truncationNote } from "./truncation.js";
 import { DESTRUCTIVE_LIVE_WRITE } from "./annotations.js";
 import { omittedContentSummary } from "./content-summary.js";
 import {
@@ -41,7 +42,7 @@ export function registerSubscriptionTools(
           content: [
             {
               type: "text",
-              text: `Found ${topics.length} event topic(s):\n\n${lines.join("\n")}`,
+              text: `Found ${topics.length} event topic(s):\n\n${lines.join("\n")}${truncationNote(result, topics.length, result.totalElements)}`,
             },
           ],
         };
@@ -92,7 +93,7 @@ export function registerSubscriptionTools(
           content: [
             {
               type: "text",
-              text: `Found ${subs.length} subscription(s):\n\n${lines.join("\n")}`,
+              text: `Found ${subs.length} subscription(s):\n\n${lines.join("\n")}${truncationNote(result, subs.length, result.totalElements)}`,
             },
           ],
         };

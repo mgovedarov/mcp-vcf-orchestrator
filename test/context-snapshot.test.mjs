@@ -726,6 +726,48 @@ test("collectContextSnapshot skipped counts use reported list totals", async () 
   }
 });
 
+test("collectContextSnapshot warns when a domain list is truncated", async () => {
+  const contextDir = await mkdtemp(join(tmpdir(), "vcfa-context-"));
+  try {
+    const client = {
+      ...baseClient(contextDir),
+      listWorkflows: async () => ({
+        total: 50,
+        truncated: true,
+        link: [
+          { id: "wf-1", name: "Alpha" },
+          { id: "wf-2", name: "Beta" },
+        ],
+      }),
+      getWorkflow: async (id) => ({
+        id,
+        name: id,
+        description: "",
+        version: "1.0.0",
+        categoryName: "VCFA",
+        inputParameters: [],
+        outputParameters: [],
+      }),
+    };
+
+    const result = await collectContextSnapshot(client, {
+      fileBaseName: "truncated-list-check",
+      domains: ["workflows"],
+      maxItemsPerDomain: 10,
+    });
+
+    assert.ok(
+      result.warnings.some((warning) =>
+        /workflows: .*truncated by the pagination request limit/.test(warning),
+      ),
+    );
+    assert.equal(result.counts.workflows, 2);
+    assert.equal(result.skipped.workflows, 48);
+  } finally {
+    await rm(contextDir, { recursive: true, force: true });
+  }
+});
+
 test("collectContextSnapshot workflow items contain actionable metadata for next steps", async () => {
   const contextDir = await mkdtemp(join(tmpdir(), "vcfa-context-"));
   try {

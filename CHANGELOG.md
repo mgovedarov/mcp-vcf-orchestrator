@@ -19,6 +19,9 @@
 ### Fixed
 
 - Query parameter values containing `$` or `~` are no longer un-encoded by the pagination query serializer; the literal-`$` exemption now applies only to OData system query keys such as `$filter` and `$search` (VCFO-050).
+- Empty-body 2xx responses with a `Location` header no longer masquerade as a running workflow execution for non-execution endpoints; the synthetic `{ id, state: "running" }` shape is now scoped to the explicit workflow-execution start path (`startExecution`), and generic empty 2xx responses return `{}` (VCFO-052).
+- A 2xx response with a non-JSON body (for example an HTML error page from a load balancer or SSO interstitial) now throws a sanitized, contextualized error naming the method, path, and correlation ID instead of a bare `SyntaxError: Unexpected token` (VCFO-053).
+- List results that stop at the pagination request cap now carry a `truncated` flag instead of silently returning partial data with the server's full total; list tools append a visible truncation warning and context snapshots record a per-domain warning (VCFO-054).
 
 ## 2.0.0 - 2026-05-18
 

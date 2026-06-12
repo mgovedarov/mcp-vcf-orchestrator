@@ -28,6 +28,23 @@ test("list-deployment-actions reports empty action lists", async () => {
   );
 });
 
+test("list-deployments surfaces a pagination truncation warning", async () => {
+  const handlers = registeredDeploymentTools({
+    listDeployments: async () => ({
+      totalElements: 50,
+      truncated: true,
+      content: [
+        { id: "deployment-1", name: "VM 1", status: "CREATE_SUCCESSFUL" },
+      ],
+    }),
+  });
+
+  const result = await handlers.get("list-deployments")({});
+
+  assert.match(result.content[0].text, /Results truncated/);
+  assert.match(result.content[0].text, /collecting 1 of ~50 item\(s\)/);
+});
+
 test("deployment tools list, get, create, and delete with confirmation", async () => {
   let createParams;
   let deletedId;

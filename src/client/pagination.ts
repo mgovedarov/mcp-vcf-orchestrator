@@ -24,12 +24,16 @@ export interface VroPageResult<T> {
   link: T[];
   start?: number;
   total?: number;
+  /** Present (true) when collection stopped at the page-request cap. */
+  truncated?: boolean;
 }
 
 export interface AutomationPageResult<T> {
   content: T[];
   numberOfElements?: number;
   totalElements?: number;
+  /** Present (true) when collection stopped at the page-request cap. */
+  truncated?: boolean;
 }
 
 function isQueryCountUnsupported(error: unknown): boolean {
@@ -72,9 +76,14 @@ export async function getAllVroPages<T>(
   http: VroHttpClient,
   path: string,
   params: URLSearchParams = new URLSearchParams(),
-  options: { pageSize?: number; queryCount?: boolean } = {},
+  options: {
+    pageSize?: number;
+    queryCount?: boolean;
+    maxPageRequests?: number;
+  } = {},
 ): Promise<VroPageResult<T>> {
   const pageSize = options.pageSize ?? DEFAULT_PAGE_SIZE;
+  const maxPageRequests = options.maxPageRequests ?? MAX_PAGE_REQUESTS;
   let queryCount = options.queryCount ?? true;
   const link: T[] = [];
   let start = 0;
@@ -82,7 +91,8 @@ export async function getAllVroPages<T>(
   let reportedTotal: number | undefined;
   const seenPageSignatures = new Set<string>();
 
-  for (let requestCount = 0; requestCount < MAX_PAGE_REQUESTS; requestCount += 1) {
+  let requestCount = 0;
+  for (; requestCount < maxPageRequests; requestCount += 1) {
     const buildPagePath = (includeQueryCount: boolean): string => {
       const pageParams = new URLSearchParams(params);
       pageParams.set("maxResult", String(pageSize));
@@ -123,10 +133,12 @@ export async function getAllVroPages<T>(
     start += items.length;
   }
 
+  const truncated = requestCount >= maxPageRequests;
   return {
     link,
     ...(firstStart !== undefined ? { start: firstStart } : {}),
     total: reportedTotal ?? link.length,
+    ...(truncated ? { truncated } : {}),
   };
 }
 
@@ -135,14 +147,16 @@ export async function getAllAutomationPages<T>(
   path: string,
   baseUrl: string,
   params: URLSearchParams = new URLSearchParams(),
-  options: { pageSize?: number } = {},
+  options: { pageSize?: number; maxPageRequests?: number } = {},
 ): Promise<AutomationPageResult<T>> {
   const pageSize = options.pageSize ?? DEFAULT_PAGE_SIZE;
+  const maxPageRequests = options.maxPageRequests ?? MAX_PAGE_REQUESTS;
   const content: T[] = [];
   let reportedTotal: number | undefined;
   let totalPages: number | undefined;
 
-  for (let pageNumber = 0; pageNumber < MAX_PAGE_REQUESTS; pageNumber += 1) {
+  let pageNumber = 0;
+  for (; pageNumber < maxPageRequests; pageNumber += 1) {
     const pageParams = new URLSearchParams(params);
     pageParams.set("page", String(pageNumber));
     pageParams.set("size", String(pageSize));
@@ -170,9 +184,11 @@ export async function getAllAutomationPages<T>(
     }
   }
 
+  const truncated = pageNumber >= maxPageRequests;
   return {
     content,
     numberOfElements: content.length,
     totalElements: reportedTotal ?? content.length,
+    ...(truncated ? { truncated } : {}),
   };
 }

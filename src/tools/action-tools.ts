@@ -5,6 +5,7 @@ import { formatPreflightReport } from "../client/artifact-preflight.js";
 import type { VroClient } from "../vro-client.js";
 import { DESTRUCTIVE_LIVE_WRITE } from "./annotations.js";
 import { omittedContentSummary } from "./content-summary.js";
+import { truncationNote } from "./truncation.js";
 import {
   appendGuardGuidance,
   guardExpectedFields,
@@ -59,7 +60,7 @@ export function registerActionTools(
           content: [
             {
               type: "text",
-              text: `Found ${actions.length} action(s):\n\n${lines.join("\n")}`,
+              text: `Found ${actions.length} action(s):\n\n${lines.join("\n")}${truncationNote(result, actions.length, result.total)}`,
             },
           ],
         };
