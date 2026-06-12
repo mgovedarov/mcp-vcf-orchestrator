@@ -12,8 +12,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { buildWorkflowArtifact } from "../dist/client/workflow-artifact.js";
-import { sanitizeErrorBody, VroHttpClient } from "../dist/client/core.js";
+import {
+  normalizeTargetPlatformInput,
+  sanitizeErrorBody,
+  VroHttpClient,
+} from "../dist/client/core.js";
 import { formatQuery } from "../dist/client/pagination.js";
+import {
+  toVroParameters,
+  toVroParameterValue,
+} from "../dist/client/parameters.js";
 import { VroClient } from "../dist/vro-client.js";
 
 const config = (overrides = {}) => ({
@@ -21,6 +29,9 @@ const config = (overrides = {}) => ({
   username: "admin",
   organization: "org",
   password: "secret",
+  // Pin the Cloud API version so authentication skips the GET /api/versions
+  // discovery probe; version negotiation has dedicated tests below.
+  targetPlatform: "vcfa9.0",
   ...overrides,
 });
 
@@ -554,7 +565,254 @@ test("vra8 platform paginates vRO lists with Basic auth", async () => {
 test("client rejects invalid target platform values", () => {
   assert.throws(
     () => new VroClient(config({ targetPlatform: "vro8" })),
-    /targetPlatform must be one of: vcfa, vra8/,
+    /targetPlatform must be one of: vcfa, vcfa9\.0, vcfa9\.1, vra8/,
+  );
+});
+
+// ─── VCF Cloud API version negotiation and login routing (VCFO-057) ─────────
+
+const versionsXml = (versions) =>
+  `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<SupportedVersions xmlns="http://www.vmware.com/vcloud/versions">
+${versions
+  .map(
+    (v) => `    <VersionInfo deprecated="false">
+        <Version>${v}</Version>
+        <LoginUrl>https://vcfa.example.test/cloudapi/1.0.0/sessions</LoginUrl>
+    </VersionInfo>`,
+  )
+  .join("\n")}
+</SupportedVersions>`;
+
+test("vcfa auto-negotiation prefers API version 9.1.0 from GET /api/versions", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (String(url).endsWith("/api/versions")) {
+      return new Response(versionsXml(["40.0", "9.0.0", "9.1.0"]), {
+        status: 200,
+      });
+    }
+    if (String(url).includes("/cloudapi/1.0.0/sessions")) return authResponse();
+    return Response.json({ link: [], total: 0 });
+  };
+
+  const client = new VroClient(config({ targetPlatform: "vcfa" }));
+  await client.listWorkflows();
+
+  assert.equal(calls[0].url, "https://vcfa.example.test/api/versions");
+  assert.equal(
+    calls[1].url,
+    "https://vcfa.example.test/cloudapi/1.0.0/sessions",
+  );
+  assert.equal(
+    calls[1].init.headers.Accept,
+    "application/json;version=9.1.0",
+  );
+  assert.equal(
+    calls[1].init.headers["Content-Type"],
+    "application/json;version=9.1.0",
+  );
+  const probes = calls.filter((c) => c.url.endsWith("/api/versions"));
+  assert.equal(probes.length, 1, "discovery probe should run exactly once");
+});
+
+test("vcfa auto-negotiation falls back to 9.0.0 when no known version is advertised", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (String(url).endsWith("/api/versions")) {
+      return new Response(versionsXml(["8.7.0"]), { status: 200 });
+    }
+    if (String(url).includes("/cloudapi/1.0.0/sessions")) return authResponse();
+    return Response.json({ link: [], total: 0 });
+  };
+
+  const client = new VroClient(config({ targetPlatform: "vcfa" }));
+  await client.listWorkflows();
+
+  assert.equal(
+    calls[1].init.headers.Accept,
+    "application/json;version=9.0.0",
+  );
+});
+
+test("vcfa auto-negotiation falls back to 9.0.0 when the discovery probe fails", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (String(url).endsWith("/api/versions")) {
+      return new Response("not found", { status: 404, statusText: "Not Found" });
+    }
+    if (String(url).includes("/cloudapi/1.0.0/sessions")) return authResponse();
+    return Response.json({ link: [], total: 0 });
+  };
+
+  const client = new VroClient(config({ targetPlatform: "vcfa" }));
+  await client.listWorkflows();
+
+  assert.equal(
+    calls[1].init.headers.Accept,
+    "application/json;version=9.0.0",
+  );
+});
+
+test("a failed discovery probe is retried on the next authentication", async () => {
+  let probeCount = 0;
+  const sessionVersions = [];
+  let workflowCalls = 0;
+  globalThis.fetch = async (url, init) => {
+    if (String(url).endsWith("/api/versions")) {
+      probeCount += 1;
+      if (probeCount === 1) {
+        return new Response("boom", {
+          status: 503,
+          statusText: "Service Unavailable",
+        });
+      }
+      return new Response(versionsXml(["9.1.0", "9.0.0"]), { status: 200 });
+    }
+    if (String(url).includes("/cloudapi/1.0.0/sessions")) {
+      sessionVersions.push(init.headers.Accept);
+      return authResponse();
+    }
+    workflowCalls += 1;
+    // First workflow request gets 401 to force a token refresh + re-auth.
+    if (workflowCalls === 1) {
+      return new Response("", { status: 401, statusText: "Unauthorized" });
+    }
+    return Response.json({ link: [], total: 0 });
+  };
+
+  const client = new VroClient(config({ targetPlatform: "vcfa" }));
+  await client.listWorkflows();
+
+  assert.equal(probeCount, 2, "failed probe must be retried on re-auth");
+  assert.deepEqual(sessionVersions, [
+    "application/json;version=9.0.0",
+    "application/json;version=9.1.0",
+  ]);
+});
+
+test("concurrent first requests share one probe and one session login", async () => {
+  let probeCount = 0;
+  let sessionCount = 0;
+  globalThis.fetch = async (url) => {
+    if (String(url).endsWith("/api/versions")) {
+      probeCount += 1;
+      return new Response(versionsXml(["9.1.0"]), { status: 200 });
+    }
+    if (String(url).includes("/cloudapi/1.0.0/sessions")) {
+      sessionCount += 1;
+      return authResponse();
+    }
+    return Response.json({ link: [], total: 0 });
+  };
+
+  const client = new VroClient(config({ targetPlatform: "vcfa" }));
+  await Promise.all([
+    client.listWorkflows(),
+    client.listWorkflows(),
+    client.listWorkflows(),
+  ]);
+
+  assert.equal(probeCount, 1, "concurrent requests must share one probe");
+  assert.equal(sessionCount, 1, "concurrent requests must share one login");
+});
+
+test("normalizeTargetPlatformInput preserves version pins and validates input", () => {
+  assert.equal(normalizeTargetPlatformInput(undefined), "vcfa");
+  assert.equal(normalizeTargetPlatformInput(""), "vcfa");
+  assert.equal(normalizeTargetPlatformInput("VCFA"), "vcfa");
+  assert.equal(normalizeTargetPlatformInput("VCFA9.1"), "vcfa9.1");
+  assert.equal(normalizeTargetPlatformInput("vcfa9.0"), "vcfa9.0");
+  assert.equal(normalizeTargetPlatformInput("vra8"), "vra8");
+  assert.throws(
+    () => normalizeTargetPlatformInput("vro8"),
+    /targetPlatform must be one of: vcfa, vcfa9\.0, vcfa9\.1, vra8/,
+  );
+});
+
+test("vcfa9.1 pin skips the discovery probe and uses version 9.1.0", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (String(url).includes("/cloudapi/1.0.0/sessions")) return authResponse();
+    return Response.json({ link: [], total: 0 });
+  };
+
+  const client = new VroClient(config({ targetPlatform: "vcfa9.1" }));
+  await client.listWorkflows();
+
+  assert.equal(
+    calls.filter((c) => c.url.endsWith("/api/versions")).length,
+    0,
+    "pinned version must not probe GET /api/versions",
+  );
+  assert.equal(
+    calls[0].url,
+    "https://vcfa.example.test/cloudapi/1.0.0/sessions",
+  );
+  assert.equal(
+    calls[0].init.headers.Accept,
+    "application/json;version=9.1.0",
+  );
+});
+
+test("system organization routes login to the provider sessions endpoint", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (String(url).includes("/cloudapi/1.0.0/sessions")) return authResponse();
+    return Response.json({ link: [], total: 0 });
+  };
+
+  const client = new VroClient(config({ organization: "System" }));
+  await client.listWorkflows();
+
+  assert.equal(
+    calls[0].url,
+    "https://vcfa.example.test/cloudapi/1.0.0/sessions/provider",
+  );
+  assert.equal(
+    calls[0].init.headers.Authorization,
+    "Basic " + Buffer.from("admin@System:secret").toString("base64"),
+  );
+});
+
+test("tenant 401 failure hints at org name vs display name and provider logins", async () => {
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/cloudapi/1.0.0/sessions")) {
+      return new Response(JSON.stringify({ message: "Unauthorized" }), {
+        status: 401,
+        statusText: "Unauthorized",
+      });
+    }
+    return Response.json({ link: [], total: 0 });
+  };
+
+  const client = new VroClient(config());
+  await assert.rejects(
+    () => client.listWorkflows(),
+    /organization name \(the tenant URL slug\), not its display name[\s\S]*VCFA_ORGANIZATION=system/,
+  );
+});
+
+test("provider 401 failure hints at provider account verification", async () => {
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/cloudapi/1.0.0/sessions")) {
+      return new Response(JSON.stringify({ message: "Unauthorized" }), {
+        status: 401,
+        statusText: "Unauthorized",
+      });
+    }
+    return Response.json({ link: [], total: 0 });
+  };
+
+  const client = new VroClient(config({ organization: "system" }));
+  await assert.rejects(
+    () => client.listWorkflows(),
+    /provider logins use the system organization/,
   );
 });
 
@@ -697,6 +955,117 @@ test("bodyless 202 responses with Location return an execution id", async () => 
   assert.equal(execution.id, "execution-123");
   assert.equal(execution.state, "running");
   assert.equal(calls.length, 2);
+});
+
+test("runWorkflow keys execution input values by the canonical vRO type literal", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return new Response("", {
+      status: 202,
+      headers: {
+        location:
+          "https://vcfa.example.test/vco/api/workflows/wf/executions/execution-123",
+      },
+    });
+  };
+
+  const client = new VroClient(config());
+  await client.runWorkflow("workflow-1", [
+    { name: "username", type: "string", value: "admin" },
+    { name: "password", type: "SecureString", value: "s3cret" },
+    { name: "expiry", type: "Date", value: "2026-06-12T00:00:00Z" },
+  ]);
+
+  const body = JSON.parse(calls[1].init.body);
+  assert.deepEqual(body.parameters, [
+    {
+      name: "username",
+      type: "string",
+      value: { string: { value: "admin" } },
+    },
+    {
+      name: "password",
+      type: "SecureString",
+      value: { "secure-string": { value: "s3cret" } },
+    },
+    {
+      name: "expiry",
+      type: "Date",
+      value: { date: { value: "2026-06-12T00:00:00Z" } },
+    },
+  ]);
+});
+
+test("toVroParameterValue maps display types to canonical value keys and shapes", () => {
+  assert.deepEqual(toVroParameterValue("SecureString", "s3cret"), {
+    "secure-string": { value: "s3cret" },
+  });
+  assert.deepEqual(toVroParameterValue("MimeAttachment", "data"), {
+    "mime-attachment": { value: "data" },
+  });
+  assert.deepEqual(toVroParameterValue("number", 7), {
+    number: { value: 7 },
+  });
+  assert.deepEqual(toVroParameterValue("Array/SecureString", ["a", "b"]), {
+    array: {
+      elements: [
+        { "secure-string": { value: "a" } },
+        { "secure-string": { value: "b" } },
+      ],
+    },
+  });
+  assert.deepEqual(toVroParameterValue("VC:VirtualMachine", "vm-123"), {
+    "sdk-object": { id: "vm-123", type: "VC:VirtualMachine" },
+  });
+  assert.deepEqual(toVroParameterValue("Array/VC:VirtualMachine", ["vm-1"]), {
+    array: {
+      elements: [
+        { "sdk-object": { id: "vm-1", type: "VC:VirtualMachine" } },
+      ],
+    },
+  });
+  assert.deepEqual(
+    toVroParameterValue("CompositeType(name:string,count:number):Pair", {
+      type: "CompositeType(name:string,count:number):Pair",
+      field: [{ name: "name", value: { string: { value: "a" } } }],
+    }),
+    {
+      composite: {
+        type: "CompositeType(name:string,count:number):Pair",
+        field: [{ name: "name", value: { string: { value: "a" } } }],
+      },
+    },
+  );
+  assert.deepEqual(
+    toVroParameterValue("Properties", { color: "blue", count: 2 }),
+    {
+      properties: {
+        property: [
+          { key: "color", value: { string: { value: "blue" } } },
+          { key: "count", value: { number: { value: 2 } } },
+        ],
+      },
+    },
+  );
+});
+
+test("toVroParameters omits the value wrapper for parameters without a value", () => {
+  assert.deepEqual(
+    toVroParameters([
+      { name: "password", type: "SecureString", value: "s3cret" },
+      { name: "optional", type: "string" },
+    ]),
+    [
+      {
+        name: "password",
+        type: "SecureString",
+        value: { "secure-string": { value: "s3cret" } },
+      },
+      { name: "optional", type: "string", value: undefined },
+    ],
+  );
 });
 
 test("generic bodyless 2xx responses with a Location header do not synthesize an execution", async () => {

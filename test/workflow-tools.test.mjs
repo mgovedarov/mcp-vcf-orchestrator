@@ -241,6 +241,44 @@ test("run-workflow-and-wait rejects strict validation errors before running", as
   assert.match(result.content[0].text, /Missing required input: count/);
 });
 
+test("run-workflow rejects non-string SecureString and EncryptedString values", async () => {
+  let runCalls = 0;
+  const handlers = registeredWorkflowTools({
+    getWorkflow: async () => ({
+      id: "workflow-1",
+      name: "Workflow",
+      inputParameters: [
+        { name: "password", type: "SecureString" },
+        { name: "apiKey", type: "EncryptedString" },
+      ],
+    }),
+    runWorkflow: async () => {
+      runCalls += 1;
+      return { id: "execution-1", state: "running" };
+    },
+  });
+
+  const result = await handlers.get("run-workflow")({
+    id: "workflow-1",
+    confirm: true,
+    inputs: [
+      { name: "password", value: 12345 },
+      { name: "apiKey", value: true },
+    ],
+  });
+
+  assert.equal(result.isError, true);
+  assert.equal(runCalls, 0);
+  assert.match(
+    result.content[0].text,
+    /Input password must be a string for type SecureString/,
+  );
+  assert.match(
+    result.content[0].text,
+    /Input apiKey must be a string for type EncryptedString/,
+  );
+});
+
 test("run-workflow-and-wait requires confirmation before discovery or execution", async () => {
   let getCalls = 0;
   let runCalls = 0;

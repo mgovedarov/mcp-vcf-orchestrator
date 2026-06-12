@@ -1,7 +1,11 @@
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Agent } from "undici";
-import type { VroClientConfig, VroTargetPlatform } from "../types.js";
+import type {
+  VroClientConfig,
+  VroTargetPlatform,
+  VroTargetPlatformInput,
+} from "../types.js";
 
 const UNSUPPORTED_AUTOMATION_SERVICES =
   "Automation-service APIs (catalog, deployments, templates, subscriptions, and event topics) are not supported in VCFA_TARGET_PLATFORM=vra8 Basic-auth mode. This mode supports vRO /vco/api read operations plus workflow execution and execution logs.";
@@ -78,17 +82,65 @@ export function sanitizeErrorBody(rawText: string, res?: Response): string {
   return parts.join("\n");
 }
 
+// Known VCF Cloud API versions this client can speak, newest first. Version
+// negotiation picks the first entry the target server advertises via the
+// unauthenticated GET /api/versions discovery document.
+const VCFA_KNOWN_API_VERSIONS = ["9.1.0", "9.0.0"] as const;
+// Used when discovery fails or advertises no known version. 9.0.0 is the most
+// compatible choice: 9.1 servers still accept it, while 9.0 servers reject
+// 9.1.0 outright.
+const VCFA_FALLBACK_API_VERSION = "9.0.0";
+
 export function normalizeTargetPlatform(
   value: VroClientConfig["targetPlatform"] | string | undefined,
 ): VroTargetPlatform {
   const normalized = value?.toLowerCase();
-  if (normalized === undefined || normalized === "" || normalized === "vcfa") {
+  if (
+    normalized === undefined ||
+    normalized === "" ||
+    normalized === "vcfa" ||
+    normalized === "vcfa9.0" ||
+    normalized === "vcfa9.1"
+  ) {
     return "vcfa";
   }
   if (normalized === "vra8") {
     return "vra8";
   }
-  throw new Error("targetPlatform must be one of: vcfa, vra8.");
+  throw new Error(
+    "targetPlatform must be one of: vcfa, vcfa9.0, vcfa9.1, vra8.",
+  );
+}
+
+/**
+ * Resolve an explicit VCF Cloud API version pin from the target platform
+ * value. `vcfa9.0`/`vcfa9.1` pin the session API version and skip the
+ * GET /api/versions discovery probe; plain `vcfa` (and `vra8`) return
+ * undefined, meaning auto-negotiation.
+ */
+export function resolvePinnedApiVersion(
+  value: VroClientConfig["targetPlatform"] | string | undefined,
+): string | undefined {
+  const normalized = value?.toLowerCase();
+  if (normalized === "vcfa9.0") return "9.0.0";
+  if (normalized === "vcfa9.1") return "9.1.0";
+  return undefined;
+}
+
+/**
+ * Validate a targetPlatform configuration value and return it in canonical
+ * lowercase input form, preserving the `vcfa9.0`/`vcfa9.1` pins that
+ * normalizeTargetPlatform collapses into the `vcfa` platform.
+ */
+export function normalizeTargetPlatformInput(
+  value: VroClientConfig["targetPlatform"] | string | undefined,
+): VroTargetPlatformInput {
+  const platform = normalizeTargetPlatform(value);
+  const normalized = value?.toLowerCase();
+  if (normalized === "vcfa9.0" || normalized === "vcfa9.1") {
+    return normalized;
+  }
+  return platform;
 }
 
 /**
@@ -113,8 +165,15 @@ export class VroHttpClient {
   readonly contextDir: string;
 
   private sessionUrl: string;
+  private versionsUrl: string;
+  private isProviderLogin: boolean;
+  private pinnedApiVersion: string | undefined;
+  private negotiatedApiVersion: string | null = null;
   private loginHeader: string;
   private token: string | null = null;
+  // Shared in-flight authentication so concurrent requests on a fresh or
+  // expired session run one version probe and one session POST, not one each.
+  private authInFlight: Promise<void> | null = null;
   // Per-client dispatcher so ignoreTls relaxes TLS verification only for
   // this client's requests, never process-wide (no NODE_TLS_REJECT_UNAUTHORIZED).
   private readonly dispatcher: Agent | undefined;
@@ -130,7 +189,15 @@ export class VroHttpClient {
     this.catalogBaseUrl = `https://${config.host}/catalog/api`;
     this.deploymentBaseUrl = `https://${config.host}/deployment/api`;
     this.blueprintBaseUrl = `https://${config.host}/blueprint/api`;
-    this.sessionUrl = `https://${config.host}/cloudapi/1.0.0/sessions`;
+    // Provider/system administrators authenticate at the dedicated provider
+    // session endpoint; the tenant endpoint rejects them with 401.
+    this.isProviderLogin =
+      config.organization.trim().toLowerCase() === "system";
+    this.sessionUrl = this.isProviderLogin
+      ? `https://${config.host}/cloudapi/1.0.0/sessions/provider`
+      : `https://${config.host}/cloudapi/1.0.0/sessions`;
+    this.versionsUrl = `https://${config.host}/api/versions`;
+    this.pinnedApiVersion = resolvePinnedApiVersion(config.targetPlatform);
     const artifactDir = resolve(
       config.artifactDir ?? join(tmpdir(), "mcp-vcf-orchestrator"),
     );
@@ -177,7 +244,7 @@ export class VroHttpClient {
       return this.loginHeader;
     }
     if (!this.token) {
-      await this.authenticate();
+      await this.startAuthentication();
     }
     if (!this.token) {
       throw new Error("Authentication did not produce a bearer token");
@@ -185,8 +252,76 @@ export class VroHttpClient {
     return this.token;
   }
 
+  private startAuthentication(): Promise<void> {
+    if (!this.authInFlight) {
+      this.authInFlight = this.authenticate().finally(() => {
+        this.authInFlight = null;
+      });
+    }
+    return this.authInFlight;
+  }
+
+  /**
+   * Determine the VCF Cloud API version to use for the session request.
+   * An explicit `vcfa9.0`/`vcfa9.1` pin wins; otherwise the unauthenticated
+   * GET /api/versions discovery document is probed and the newest mutually
+   * supported version is cached. A probe that completes but advertises no
+   * known version caches the 9.0.0 fallback; a probe that fails outright
+   * (network error, non-2xx, timeout) falls back to 9.0.0 for this attempt
+   * only, so the next authentication retries discovery.
+   */
+  private async negotiateApiVersion(): Promise<string> {
+    if (this.pinnedApiVersion) return this.pinnedApiVersion;
+    if (this.negotiatedApiVersion) return this.negotiatedApiVersion;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30_000);
+    try {
+      const init: DispatchedRequestInit = {
+        method: "GET",
+        headers: { Accept: "*/*" },
+        signal: controller.signal,
+        dispatcher: this.dispatcher,
+      };
+      const res = await fetch(this.versionsUrl, init);
+      if (!res.ok) {
+        throw new Error(`${res.status} ${res.statusText}`);
+      }
+      const text = await res.text();
+      const advertised = new Set(
+        [...text.matchAll(/<Version>(\d+\.\d+\.\d+)<\/Version>/g)].map(
+          (m) => m[1],
+        ),
+      );
+      const chosen = VCFA_KNOWN_API_VERSIONS.find((v) => advertised.has(v));
+      if (chosen) {
+        console.error(
+          `[vro-client] Negotiated VCF Cloud API version ${chosen} via GET /api/versions`,
+        );
+        this.negotiatedApiVersion = chosen;
+      } else {
+        console.error(
+          `[vro-client] WARNING: GET /api/versions advertised no known API version (known: ${VCFA_KNOWN_API_VERSIONS.join(", ")}); falling back to ${VCFA_FALLBACK_API_VERSION}`,
+        );
+        this.negotiatedApiVersion = VCFA_FALLBACK_API_VERSION;
+      }
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      console.error(
+        `[vro-client] WARNING: VCF Cloud API version discovery failed (${reason}); falling back to ${VCFA_FALLBACK_API_VERSION} for this attempt. Discovery is retried on the next authentication; set VCFA_TARGET_PLATFORM=vcfa9.1 or vcfa9.0 to pin the version explicitly.`,
+      );
+      return VCFA_FALLBACK_API_VERSION;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+    return this.negotiatedApiVersion;
+  }
+
   private async authenticate(): Promise<void> {
-    console.error("[vro-client] Authenticating via VCF Cloud API sessions…");
+    const apiVersion = await this.negotiateApiVersion();
+    console.error(
+      `[vro-client] Authenticating via VCF Cloud API ${this.isProviderLogin ? "provider " : ""}sessions (version ${apiVersion})…`,
+    );
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30_000);
 
@@ -196,8 +331,8 @@ export class VroHttpClient {
         method: "POST",
         headers: {
           Authorization: this.loginHeader,
-          "Content-Type": "application/json;version=9.0.0",
-          Accept: "application/json;version=9.0.0",
+          "Content-Type": `application/json;version=${apiVersion}`,
+          Accept: `application/json;version=${apiVersion}`,
         },
         signal: controller.signal,
         dispatcher: this.dispatcher,
@@ -209,8 +344,14 @@ export class VroHttpClient {
 
     if (!res.ok) {
       const text = await res.text().catch(() => "");
+      const hint =
+        res.status === 401
+          ? this.isProviderLogin
+            ? "\nHint: provider logins use the system organization — verify the username is a provider/system administrator account and the password is correct."
+            : '\nHint: VCFA_ORGANIZATION must be the organization name (the tenant URL slug), not its display name. Provider/system administrators must set VCFA_ORGANIZATION=system, which routes the login to /cloudapi/1.0.0/sessions/provider.'
+          : "";
       throw new Error(
-        `VCF authentication failed: ${res.status} ${res.statusText}\n${sanitizeErrorBody(text, res)}`,
+        `VCF authentication failed: ${res.status} ${res.statusText}\n${sanitizeErrorBody(text, res)}${hint}`,
       );
     }
 
@@ -279,7 +420,7 @@ export class VroHttpClient {
         res.status,
       );
       this.token = null;
-      await this.authenticate();
+      await this.startAuthentication();
       init.headers["Authorization"] = await this.authorizationHeader();
       return doFetch();
     }

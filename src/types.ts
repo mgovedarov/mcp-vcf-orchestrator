@@ -613,12 +613,22 @@ export interface VroPluginList {
 
 export type VroTargetPlatform = "vcfa" | "vra8";
 
+/**
+ * Accepted targetPlatform configuration values. `vcfa` auto-negotiates the
+ * VCF Cloud API version (9.1 preferred); `vcfa9.0`/`vcfa9.1` pin it
+ * explicitly. All `vcfa*` values normalize to the `vcfa` platform.
+ */
+export type VroTargetPlatformInput =
+  | VroTargetPlatform
+  | "vcfa9.0"
+  | "vcfa9.1";
+
 export interface VroClientConfig {
   host: string;
   username: string;
   organization: string;
   password: string;
-  targetPlatform?: VroTargetPlatform;
+  targetPlatform?: VroTargetPlatformInput;
   ignoreTls?: boolean;
   artifactDir?: string;
   packageDir?: string;

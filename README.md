@@ -70,14 +70,14 @@ Required environment variables:
 | --- | --- |
 | `VCFA_HOST` | VCF Automation hostname, for example `vcfa.example.com`. |
 | `VCFA_USERNAME` | Username without organization, for example `admin`. |
-| `VCFA_ORGANIZATION` | Organization or tenant, for example `System` or `vsphere.local`. |
+| `VCFA_ORGANIZATION` | Organization name (the tenant URL slug, not the display name), or `system` for provider/system administrator logins, which are routed to `/cloudapi/1.0.0/sessions/provider`. |
 | `VCFA_PASSWORD` | Password for the VCF Cloud API session, or the vRO Basic-auth password when `VCFA_TARGET_PLATFORM=vra8`. |
 
 Useful optional variables:
 
 | Variable | Description |
 | --- | --- |
-| `VCFA_TARGET_PLATFORM` | Target platform mode. Defaults to `vcfa`, which uses the VCF Cloud API session flow. Set to `vra8` for vRA/vRO 8.12+ Basic-auth mode against `/vco/api`; this mode supports vRO read operations plus workflow execution/logs and does not support Automation-service APIs such as catalog, deployments, templates, or subscriptions. |
+| `VCFA_TARGET_PLATFORM` | Target platform mode. Defaults to `vcfa`, which uses the VCF Cloud API session flow and auto-negotiates the API version (`9.1.0` preferred, then `9.0.0`) via the unauthenticated `GET /api/versions` discovery document. Set to `vcfa9.1` or `vcfa9.0` to pin the VCF Cloud API version and skip the probe. Set to `vra8` for vRA/vRO 8.12+ Basic-auth mode against `/vco/api`; this mode supports vRO read operations plus workflow execution/logs and does not support Automation-service APIs such as catalog, deployments, templates, or subscriptions. |
 | `VCFA_IGNORE_TLS` | Set to `true` to skip TLS certificate verification for this server's requests to the VCFA host (lab environments only). |
 | `VCFA_ARTIFACT_DIR` | Root directory for local artifact files. Defaults to `artifacts/` in the MCP server process working directory, typically the open project. |
 | `VCFA_PACKAGE_DIR` | Override package artifact directory. |
