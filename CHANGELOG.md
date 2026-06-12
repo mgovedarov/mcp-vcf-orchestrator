@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 2.1.0 - 2026-06-12
+
+This release scopes TLS relaxation to the client's own requests, hardens response parsing and artifact preflight, gates bulky tool output behind opt-in flags, adds two-phase confirmation fields for live mutations, and ships a Claude Code plugin with authoring and operations skills.
 
 ### Security
 
