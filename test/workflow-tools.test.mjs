@@ -165,6 +165,25 @@ test("list-workflows returns structured workflow summaries", async () => {
   });
 });
 
+test("list-workflows surfaces a pagination truncation warning", async () => {
+  const handlers = registeredWorkflowTools({
+    listWorkflows: async () => ({
+      link: [
+        { id: "workflow-1", name: "Create Org" },
+        { id: "workflow-2", name: "Delete Org" },
+      ],
+      total: 100,
+      truncated: true,
+    }),
+  });
+
+  const result = await handlers.get("list-workflows")({});
+
+  assert.match(result.content[0].text, /Results truncated/);
+  assert.match(result.content[0].text, /collecting 2 of ~100 item\(s\)/);
+  assert.equal(result.structuredContent.truncated, true);
+});
+
 test("list-workflows-by-category shows truncation warning", async () => {
   const handlers = registeredWorkflowTools({
     listWorkflowsByCategory: async () => ({

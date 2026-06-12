@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import type { VroClient } from "../vro-client.js";
+import { truncationNote } from "./truncation.js";
 
 export function registerPluginTools(
   server: McpServer,
@@ -42,7 +43,7 @@ export function registerPluginTools(
           content: [
             {
               type: "text",
-              text: `Found ${plugins.length} plugin(s):\n\n${lines.join("\n")}`,
+              text: `Found ${plugins.length} plugin(s):\n\n${lines.join("\n")}${truncationNote(result, plugins.length, result.total)}`,
             },
           ],
         };

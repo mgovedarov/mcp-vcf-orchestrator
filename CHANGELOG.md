@@ -15,6 +15,7 @@
 ### Fixed
 
 - Query parameter values containing `$` or `~` are no longer un-encoded by the pagination query serializer; the literal-`$` exemption now applies only to OData system query keys such as `$filter` and `$search` (VCFO-050).
+- List results that stop at the pagination request cap now carry a `truncated` flag instead of silently returning partial data with the server's full total; list tools append a visible truncation warning and context snapshots record a per-domain warning (VCFO-054).
 
 ## 2.0.0 - 2026-05-18
 

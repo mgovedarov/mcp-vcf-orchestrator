@@ -47,6 +47,10 @@ export class CategoryClient {
       }
       return category;
     });
-    return { total: raw.total ?? link.length, link };
+    return {
+      total: raw.total ?? link.length,
+      link,
+      ...(raw.truncated ? { truncated: true } : {}),
+    };
   }
 }

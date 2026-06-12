@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import type { VroClient } from "../vro-client.js";
+import { truncationNote } from "./truncation.js";
 import { DESTRUCTIVE_LIVE_WRITE } from "./annotations.js";
 import {
   guardExpectedFields,
@@ -52,7 +53,7 @@ export function registerTemplateTools(
           content: [
             {
               type: "text",
-              text: `Found ${total} template(s):\n\n${lines.join("\n")}`,
+              text: `Found ${total} template(s):\n\n${lines.join("\n")}${truncationNote(result, items.length, result.totalElements)}`,
             },
           ],
         };

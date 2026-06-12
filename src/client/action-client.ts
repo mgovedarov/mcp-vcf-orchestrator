@@ -46,7 +46,11 @@ export class ActionClient {
         fqn: a["fqn"],
       };
     });
-    return { total: raw.total ?? link.length, link };
+    return {
+      total: raw.total ?? link.length,
+      link,
+      ...(raw.truncated ? { truncated: true } : {}),
+    };
   }
 
   private parseActionReference(

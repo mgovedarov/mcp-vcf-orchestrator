@@ -44,7 +44,11 @@ export class ConfigurationClient {
         categoryId: a["categoryId"] ?? a["category-id"] ?? a["categoryid"],
       };
     });
-    return { total: raw.total ?? link.length, link };
+    return {
+      total: raw.total ?? link.length,
+      link,
+      ...(raw.truncated ? { truncated: true } : {}),
+    };
   }
 
   private async listConfigurationsByCategory(
