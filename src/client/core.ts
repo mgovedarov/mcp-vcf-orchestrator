@@ -347,15 +347,30 @@ export class VroHttpClient {
     return { res, text: await res.text() };
   }
 
+  private parseJsonBody<T>(
+    text: string,
+    res: Response,
+    method: string,
+    path: string,
+  ): T {
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      throw new Error(
+        `vRO API error: non-JSON response body (${res.status} ${res.statusText}) — ${method} ${path}\n${sanitizeErrorBody(text, res)}`,
+      );
+    }
+  }
+
   async request<T>(
     method: string,
     path: string,
     body?: unknown,
     overrideBaseUrl?: string,
   ): Promise<T> {
-    const { text } = await this.send(method, path, body, overrideBaseUrl);
+    const { res, text } = await this.send(method, path, body, overrideBaseUrl);
     if (!text) return {} as T;
-    return JSON.parse(text) as T;
+    return this.parseJsonBody<T>(text, res, method, path);
   }
 
   /**
@@ -375,7 +390,7 @@ export class VroHttpClient {
       }
       return {} as T;
     }
-    return JSON.parse(text) as T;
+    return this.parseJsonBody<T>(text, res, "POST", path);
   }
 
   get<T>(path: string, overrideBaseUrl?: string): Promise<T> {
