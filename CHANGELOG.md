@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 2.2.0 - 2026-06-12
+
+This release adds VCF Automation 9.1 support with automatic API version negotiation, provider/system administrator logins, and fixes workflow and configuration parameter payloads to use the canonical vRO type keys the REST API expects.
 
 ### Added
 
