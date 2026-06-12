@@ -3,6 +3,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { formatPreflightReport } from "../client/artifact-preflight.js";
 import type { VroClient } from "../vro-client.js";
+import { DESTRUCTIVE_LIVE_WRITE } from "./annotations.js";
 import {
   appendGuardGuidance,
   guardExpectedFields,
@@ -361,7 +362,7 @@ export function registerActionTools(
             "Must be set to true to confirm import. If false, the import will not proceed.",
           ),
       }),
-      annotations: { readOnlyHint: false },
+      annotations: DESTRUCTIVE_LIVE_WRITE,
     },
     async ({
       categoryName,
@@ -465,7 +466,7 @@ export function registerActionTools(
             "Must be set to true to confirm deletion. If false, the deletion will not proceed.",
           ),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: true },
+      annotations: DESTRUCTIVE_LIVE_WRITE,
     },
     async ({
       id,
