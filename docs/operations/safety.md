@@ -4,7 +4,7 @@ Tools fall into three categories:
 
 - **Read-only discovery** (`readOnlyHint: true`): list, get, preflight, and diff tools. They do not write local files or mutate live VCFA/vRO state. `get-workflow-execution-logs` is also read-only by default; it only writes a local file when the optional `fileName` parameter is provided.
 - **Local artifact writes** (`readOnlyHint: false`, no `confirm` required): export, scaffold, and snapshot tools — for example `export-workflow-file`, `export-action-file`, `export-configuration-file`, `export-resource-element`, `export-package`, `export-project-package`, `scaffold-workflow-file`, `collect-context-snapshot`, and `prepare-artifact-promotion`. These write files under configured artifact directories and default `overwrite` to `false`. They do not mutate live VCFA/vRO state.
-- **Live VCFA/vRO mutations** (`readOnlyHint: false`, `confirm: true` required): create, update, import, delete, run, and deployment day-2 action tools. Treat every live write operation as an environment change.
+- **Live VCFA/vRO mutations** (`readOnlyHint: false`, `confirm: true` required): create, update, import, delete, run, and deployment day-2 action tools. Treat every live write operation as an environment change. Tools that overwrite or delete live state — import, update, run, and delete tools, plus `rebuild-project-package` — additionally set `destructiveHint: true` so hosts can require heightened approval; additive creates and `add-*-to-project-package` tools do not.
 
 ## Confirmation Required
 

@@ -3,6 +3,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { formatPreflightReport } from "../client/artifact-preflight.js";
 import type { VroClient } from "../vro-client.js";
+import { DESTRUCTIVE_LIVE_WRITE } from "./annotations.js";
 import {
   appendGuardGuidance,
   guardExpectedFields,
@@ -305,7 +306,7 @@ export function registerPackageTools(
           ),
         ...packageImportOptionsSchema,
       }),
-      annotations: { readOnlyHint: false },
+      annotations: DESTRUCTIVE_LIVE_WRITE,
     },
     async ({
       fileName,
@@ -509,7 +510,7 @@ export function registerPackageTools(
         packageName: z.string().optional().describe("Exact package name"),
         confirm: z.boolean().describe("Must be true to rebuild the package."),
       }),
-      annotations: { readOnlyHint: false },
+      annotations: DESTRUCTIVE_LIVE_WRITE,
     },
     async ({ packageName, confirm }): Promise<CallToolResult> => {
       if (!confirm) {
@@ -877,7 +878,7 @@ export function registerPackageTools(
         confirm: z.boolean().describe("Must be true to import the package."),
         ...packageImportOptionsSchema,
       }),
-      annotations: { readOnlyHint: false },
+      annotations: DESTRUCTIVE_LIVE_WRITE,
     },
     async ({
       packageName,
@@ -973,7 +974,7 @@ export function registerPackageTools(
             "Must be set to true to confirm deletion. If false, the deletion will not proceed.",
           ),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: true },
+      annotations: DESTRUCTIVE_LIVE_WRITE,
     },
     async ({
       name,

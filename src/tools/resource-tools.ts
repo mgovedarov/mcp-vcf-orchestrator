@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import type { VroClient } from "../vro-client.js";
+import { DESTRUCTIVE_LIVE_WRITE } from "./annotations.js";
 import {
   appendGuardGuidance,
   guardExpectedCategory,
@@ -144,7 +145,7 @@ export function registerResourceTools(
             "Must be set to true to confirm import. If false, the import will not proceed.",
           ),
       }),
-      annotations: { readOnlyHint: false },
+      annotations: DESTRUCTIVE_LIVE_WRITE,
     },
     async ({
       categoryId,
@@ -249,7 +250,7 @@ export function registerResourceTools(
             "Must be set to true to confirm update. If false, the update will not proceed.",
           ),
       }),
-      annotations: { readOnlyHint: false },
+      annotations: DESTRUCTIVE_LIVE_WRITE,
     },
     async ({
       id,
@@ -342,7 +343,7 @@ export function registerResourceTools(
             "Must be set to true to confirm deletion. If false, the deletion will not proceed.",
           ),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: true },
+      annotations: DESTRUCTIVE_LIVE_WRITE,
     },
     async ({
       id,

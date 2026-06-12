@@ -19,7 +19,7 @@ When adding a new MCP tool:
 
 1. Add the tool in the relevant `src/tools/*` module.
 2. Use existing client modules before introducing new API logic.
-3. Mark read-only and destructive annotations accurately.
+3. Mark read-only and destructive annotations accurately. Tools that overwrite or delete live state must use the shared `DESTRUCTIVE_LIVE_WRITE` constant from `src/tools/annotations.ts`; `test/tool-annotations.test.mjs` fails if a new `import-`/`delete-`/`update-`/`run-` tool is not annotated and listed there.
 4. Add tests for success, error, confirmation, and formatting behavior.
 5. Update the tool reference with a collapsible parameters section directly under the tool, and update relevant how-to docs.
 

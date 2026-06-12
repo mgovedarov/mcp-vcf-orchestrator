@@ -16,6 +16,7 @@ import {
   formatWorkflowExecutionLogEntry,
   normalizeWorkflowExecutionLog,
 } from "../client/workflow-client.js";
+import { DESTRUCTIVE_LIVE_WRITE } from "./annotations.js";
 import {
   appendGuardGuidance,
   guardExpectedCategory,
@@ -732,7 +733,7 @@ export function registerWorkflowTools(
             "Must be set to true to confirm workflow execution. If false, the workflow will not be run.",
           ),
       }),
-      annotations: { readOnlyHint: false },
+      annotations: DESTRUCTIVE_LIVE_WRITE,
     },
     async ({
       id,
@@ -846,7 +847,7 @@ export function registerWorkflowTools(
             "Must be set to true to confirm workflow execution. If false, the workflow will not be run.",
           ),
       }),
-      annotations: { readOnlyHint: false },
+      annotations: DESTRUCTIVE_LIVE_WRITE,
     },
     async ({
       id,
@@ -1369,7 +1370,7 @@ export function registerWorkflowTools(
             "Must be set to true to confirm import. If false, the import will not proceed.",
           ),
       }),
-      annotations: { readOnlyHint: false },
+      annotations: DESTRUCTIVE_LIVE_WRITE,
     },
     async ({
       categoryId,
@@ -1592,7 +1593,7 @@ export function registerWorkflowTools(
             "Must be set to true to confirm deletion. If false, the deletion will not proceed.",
           ),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: true },
+      annotations: DESTRUCTIVE_LIVE_WRITE,
     },
     async ({ id, expectedName, confirm }): Promise<CallToolResult> => {
       if (!confirm) {

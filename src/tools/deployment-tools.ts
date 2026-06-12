@@ -7,6 +7,7 @@ import type {
   DeploymentRequest,
 } from "../types.js";
 import type { VroClient } from "../vro-client.js";
+import { DESTRUCTIVE_LIVE_WRITE } from "./annotations.js";
 import {
   guardExpectedFields,
   hasAnyExpectedValue,
@@ -233,7 +234,7 @@ export function registerDeploymentTools(
             "Must be set to true to confirm deletion. If false, the deletion will not proceed.",
           ),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: true },
+      annotations: DESTRUCTIVE_LIVE_WRITE,
     },
     async ({
       id,
@@ -478,7 +479,7 @@ export function registerDeploymentTools(
             "Must be set to true to confirm the day-2 action request. If false, the request will not be submitted.",
           ),
       }),
-      annotations: { readOnlyHint: false, destructiveHint: true },
+      annotations: DESTRUCTIVE_LIVE_WRITE,
     },
     async ({
       deploymentId,
