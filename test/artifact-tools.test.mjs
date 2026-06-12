@@ -57,7 +57,16 @@ test("action tools format detail responses and pass create payloads", async () =
   const detail = await handlers.get("get-action")({ id: "action-1" });
   assert.match(detail.content[0].text, /Action: getVmIp/);
   assert.match(detail.content[0].text, /Return type: string/);
-  assert.match(detail.content[0].text, /```javascript\nreturn vm\.ipAddress;/);
+  assert.match(detail.content[0].text, /Script: omitted/);
+  assert.match(detail.content[0].text, /sha256: [0-9a-f]{64}/);
+  assert.match(detail.content[0].text, /includeScript: true/);
+  assert.ok(!detail.content[0].text.includes("return vm.ipAddress;"));
+
+  const fullDetail = await handlers.get("get-action")({
+    id: "action-1",
+    includeScript: true,
+  });
+  assert.match(fullDetail.content[0].text, /```javascript\nreturn vm\.ipAddress;/);
 
   const created = await handlers.get("create-action")({
     moduleName: "com.example.actions",

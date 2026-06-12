@@ -528,7 +528,11 @@ export class WorkflowClient {
     const link = [...workflowsById.values()].sort((a, b) =>
       a.name.localeCompare(b.name),
     );
-    return { total: link.length, link };
+    return {
+      total: link.length,
+      link,
+      ...(rawCategories.truncated ? { truncated: true } : {}),
+    };
   }
 
   async listWorkflows(filter?: string): Promise<WorkflowList> {
@@ -539,6 +543,7 @@ export class WorkflowClient {
     let raw: {
       link: { attributes?: { name: string; value: string }[] }[];
       total?: number;
+      truncated?: boolean;
     };
     try {
       raw = await getAllVroPages<{
@@ -559,7 +564,11 @@ export class WorkflowClient {
         categoryName: a["categoryName"] ?? a["category-name"],
       };
     });
-    return { total: raw.total ?? link.length, link };
+    return {
+      total: raw.total ?? link.length,
+      link,
+      ...(raw.truncated ? { truncated: true } : {}),
+    };
   }
 
   async listWorkflowsByCategory(
@@ -641,7 +650,7 @@ export class WorkflowClient {
         value: { [p.type]: { value: p.value } },
       }));
     }
-    return this.http.post<WorkflowExecution>(
+    return this.http.startExecution<WorkflowExecution>(
       `/workflows/${encodeURIComponent(id)}/executions`,
       body,
     );

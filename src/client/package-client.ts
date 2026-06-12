@@ -42,7 +42,11 @@ export class PackageClient {
         version: a["version"],
       };
     });
-    return { total: raw.total ?? link.length, link };
+    return {
+      total: raw.total ?? link.length,
+      link,
+      ...(raw.truncated ? { truncated: true } : {}),
+    };
   }
 
   async getPackage(name: string): Promise<VroPackage> {

@@ -68,41 +68,66 @@ export interface CollectContextSnapshotResult {
 
 export interface ContextSnapshotClient {
   getContextDirectory(): string;
-  listWorkflows(filter?: string): Promise<{ link: Workflow[]; total?: number }>;
+  listWorkflows(filter?: string): Promise<{
+    link: Workflow[];
+    total?: number;
+    truncated?: boolean;
+  }>;
   getWorkflow(id: string): Promise<Workflow>;
-  listActions(filter?: string): Promise<{ link: Action[]; total?: number }>;
+  listActions(filter?: string): Promise<{
+    link: Action[];
+    total?: number;
+    truncated?: boolean;
+  }>;
   getAction(id: string): Promise<Action>;
   listConfigurations(filter?: string): Promise<{
     link: ConfigElement[];
     total?: number;
+    truncated?: boolean;
   }>;
   getConfiguration(id: string): Promise<ConfigElement>;
   listResources(filter?: string): Promise<{
     link: ResourceElement[];
     total?: number;
+    truncated?: boolean;
   }>;
   listCategories(
     categoryType: string,
     filter?: string,
-  ): Promise<{ link: Category[]; total?: number }>;
+  ): Promise<{ link: Category[]; total?: number; truncated?: boolean }>;
   listTemplates(search?: string, projectId?: string): Promise<{
     content: Template[];
     totalElements?: number;
+    truncated?: boolean;
   }>;
   getTemplate(id: string): Promise<Template>;
   listCatalogItems(search?: string): Promise<{
     content: CatalogItem[];
     totalElements?: number;
+    truncated?: boolean;
   }>;
   getCatalogItem(id: string): Promise<CatalogItem>;
-  listEventTopics(): Promise<{ content: EventTopic[]; totalElements?: number }>;
+  listEventTopics(): Promise<{
+    content: EventTopic[];
+    totalElements?: number;
+    truncated?: boolean;
+  }>;
   listSubscriptions(projectId?: string): Promise<{
     content: Subscription[];
     totalElements?: number;
+    truncated?: boolean;
   }>;
-  listPackages(filter?: string): Promise<{ link: VroPackage[]; total?: number }>;
+  listPackages(filter?: string): Promise<{
+    link: VroPackage[];
+    total?: number;
+    truncated?: boolean;
+  }>;
   getPackage(name: string): Promise<VroPackage>;
-  listPlugins(filter?: string): Promise<{ link: VroPlugin[]; total?: number }>;
+  listPlugins(filter?: string): Promise<{
+    link: VroPlugin[];
+    total?: number;
+    truncated?: boolean;
+  }>;
 }
 
 interface DomainStats {
@@ -115,6 +140,7 @@ interface ListStatsSource<T> {
   content?: T[];
   total?: number;
   totalElements?: number;
+  truncated?: boolean;
 }
 
 type SnapshotSection = unknown[] | Record<string, unknown[]>;
@@ -247,6 +273,7 @@ async function collectDomain(
       );
     case "resources": {
       const list = await client.listResources();
+      noteListTruncation("resources", list, warnings);
       const items = sortByNameAndId(list.link ?? []).slice(0, maxItems);
       return {
         data: items.map(summarizeResource),
@@ -279,6 +306,7 @@ async function collectDomain(
       );
     case "eventTopics": {
       const list = await client.listEventTopics();
+      noteListTruncation("eventTopics", list, warnings);
       const items = sortByNameAndId(list.content ?? []).slice(0, maxItems);
       return {
         data: items.map(summarizeEventTopic),
@@ -287,6 +315,7 @@ async function collectDomain(
     }
     case "subscriptions": {
       const list = await client.listSubscriptions();
+      noteListTruncation("subscriptions", list, warnings);
       const items = sortByNameAndId(list.content ?? []).slice(0, maxItems);
       return {
         data: items.map(summarizeSubscription),
@@ -305,6 +334,7 @@ async function collectDomain(
       );
     case "plugins": {
       const list = await client.listPlugins();
+      noteListTruncation("plugins", list, warnings);
       const items = sortByNameAndId(list.link ?? []).slice(0, maxItems);
       return {
         data: items.map(summarizePlugin),
@@ -325,6 +355,7 @@ async function collectListWithDetails<TListItem, TDetail>(
   listField: "link" | "content" = "link",
 ): Promise<{ data: unknown[]; stats: DomainStats }> {
   const list = await listFn();
+  noteListTruncation(domain, list, warnings);
   const rawItems = (list[listField] ?? []) as TListItem[];
   const items = sortByNameAndId(rawItems).slice(0, maxItems);
   const data: unknown[] = [];
@@ -355,6 +386,7 @@ async function collectBuiltInWorkflows(
   const libraryCategoryIds =
     await getLibraryWorkflowDescendantCategoryIds(client, warnings);
   const list = await client.listWorkflows();
+  noteListTruncation("workflows", list, warnings);
   const filtered = (list.link ?? []).filter((workflow) =>
     isLibraryWorkflow(workflow, libraryCategoryIds),
   );
@@ -375,6 +407,7 @@ async function collectBuiltInActions(
   warnings: string[],
 ): Promise<{ data: unknown[]; stats: DomainStats }> {
   const list = await client.listActions();
+  noteListTruncation("actions", list, warnings);
   const filtered = (list.link ?? []).filter((action) =>
     isVmwareActionModule(action.module),
   );
@@ -441,6 +474,7 @@ async function collectCategories(
   for (const categoryType of CATEGORY_TYPES) {
     try {
       const list = await client.listCategories(categoryType);
+      noteListTruncation(`categories (${categoryType})`, list, warnings);
       const raw = list.link ?? [];
       data[categoryType] = sortByNameAndId(raw)
         .slice(0, maxItems)
@@ -912,6 +946,17 @@ function boundedStatsFromTotal(
     count,
     skipped: Math.max(0, reportedTotal - count),
   };
+}
+
+function noteListTruncation(
+  domain: string,
+  list: { truncated?: boolean },
+  warnings: string[],
+): void {
+  if (!list.truncated) return;
+  warnings.push(
+    `${domain}: server-side list was truncated by the pagination request limit; counts and skipped totals may be incomplete`,
+  );
 }
 
 function sortByNameAndId<T>(items: T[]): T[] {

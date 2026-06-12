@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import type { VroClient } from "../vro-client.js";
+import { truncationNote } from "./truncation.js";
 
 export function registerCategoryTools(
   server: McpServer,
@@ -46,7 +47,7 @@ export function registerCategoryTools(
           content: [
             {
               type: "text",
-              text: `Found ${categories.length} ${type} category(ies):\n\n${lines.join("\n")}`,
+              text: `Found ${categories.length} ${type} category(ies):\n\n${lines.join("\n")}${truncationNote(result, categories.length, result.total)}`,
             },
           ],
         };

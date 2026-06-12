@@ -7,6 +7,7 @@ import type {
   DeploymentRequest,
 } from "../types.js";
 import type { VroClient } from "../vro-client.js";
+import { truncationNote } from "./truncation.js";
 import { DESTRUCTIVE_LIVE_WRITE } from "./annotations.js";
 import {
   guardExpectedFields,
@@ -136,7 +137,7 @@ export function registerDeploymentTools(
           content: [
             {
               type: "text",
-              text: `Found ${total} deployment(s):\n\n${lines.join("\n")}`,
+              text: `Found ${total} deployment(s):\n\n${lines.join("\n")}${truncationNote(result, items.length, result.totalElements)}`,
             },
           ],
         };

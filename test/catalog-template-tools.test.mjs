@@ -137,7 +137,16 @@ test("template tools create and delete with confirmation", async () => {
 
   const detail = await handlers.get("get-template")({ id: "template-1" });
   assert.match(detail.content[0].text, /Valid: true/);
-  assert.match(detail.content[0].text, /Content:\nformatVersion: 1/);
+  assert.match(detail.content[0].text, /Content: omitted/);
+  assert.match(detail.content[0].text, /sha256: [0-9a-f]{64}/);
+  assert.match(detail.content[0].text, /includeContent: true/);
+  assert.ok(!detail.content[0].text.includes("formatVersion: 1"));
+
+  const fullDetail = await handlers.get("get-template")({
+    id: "template-1",
+    includeContent: true,
+  });
+  assert.match(fullDetail.content[0].text, /Content:\nformatVersion: 1/);
 
   const created = await handlers.get("create-template")({
     name: "New VM",
