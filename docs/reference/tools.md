@@ -8,7 +8,7 @@ Tools are grouped by operating domain. Each tool carries an MCP annotation hint 
 
 Each tool lists its input schema in a collapsible parameters section. Required confirmation fields such as `confirm` must be set to `true` before the tool performs the write or destructive operation.
 
-Discovery list tools automatically follow server-side pagination for both vRO `/vco/api` list responses and VCF Automation service pages. Tool inputs stay focused on filters and selectors; callers do not need to provide page cursors for normal discovery.
+Discovery list tools automatically follow server-side pagination for both vRO `/vco/api` list responses and VCF Automation service pages. Tool inputs stay focused on filters and selectors; callers do not need to provide page cursors for normal discovery. If a listing stops at the pagination request cap before reaching the server's full total, the result carries a `truncated` flag and the tool output ends with a visible truncation warning (and context snapshots record a per-domain warning) instead of silently returning partial data.
 
 ## Two-Phase Confirmation Fields
 

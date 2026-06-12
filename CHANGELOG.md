@@ -5,19 +5,24 @@
 ### Security
 
 - `VCFA_IGNORE_TLS=true` no longer disables TLS certificate verification process-wide via `NODE_TLS_REJECT_UNAUTHORIZED`. TLS relaxation is now scoped to the client's own requests to the configured VCFA host through a dedicated HTTPS agent, so other HTTPS traffic in the same Node process keeps full certificate verification. The minimum supported Node.js version is now 18.17.
+- `get-configuration` now redacts `SecureString` attribute values instead of returning them in plain text (VCFO-048).
 
 ### Added
 
 - Added a Claude Code plugin (`vcfa-orchestrator`) and marketplace manifest under `.claude-plugin/`, bundling two skills in `skills/`: `vcfa-authoring` (discovery-first artifact lifecycle and package-first publishing) and `vcfa-operations` (running workflows and guided troubleshooting). The skills delegate to the server's existing `vcfa-*` prompts, resources, and tools rather than duplicating them, and `npm run validate:docs` now drift-checks the tool/prompt/resource names they reference.
 - Added `VroClient.close()` to release the client's network resources (the TLS-relaxed dispatcher); the server now calls it during graceful shutdown.
 - Added a local TLS integration test that runs the client against a self-signed HTTPS server, verifying `ignoreTls` completes a real handshake (and that strict mode still rejects) without touching `NODE_TLS_REJECT_UNAUTHORIZED`.
+- Added optional two-phase confirmation fields to high-risk live mutation tools: when expected target fields such as `expectedName`, `expectedCategoryId`/`expectedCategoryName`, `expectedPackageName`, `expectedWorkflowName`/`expectedInputNames`, or `expectedDeploymentName`/`expectedActionName` are supplied, the handler performs read-only discovery first and refuses to mutate if the live target does not match. Omitted fields keep existing `confirm: true` behavior unchanged.
+- Workflow tools now return `structuredContent` (structured workflow, execution, and execution-log shapes) alongside their text output.
 
 ### Changed
 
 - `get-template`, `get-action`, and `get-subscription` now summarize bulky content (blueprint YAML, action script, constraints JSON) as a sha256 + length line by default, consistent with context-snapshot redaction; the new `includeContent`, `includeScript`, and `includeConstraints` flags restore the full output (VCFO-055).
+- Tools that overwrite or delete live state — import, update, run, and delete tools, plus `rebuild-project-package` — now advertise `destructiveHint: true` in their MCP annotations so hosts can require heightened approval; additive creates and `add-*-to-project-package` tools do not (VCFO-051).
 
 ### Fixed
 
+- `run-workflow` now validates and type-normalizes caller-supplied inputs through the same shared preamble as `run-workflow-and-wait` instead of POSTing them to the live workflow unvalidated; the two handlers' drifted input schemas (`inputs[].type` required in one, optional in the other) are reconciled (VCFO-047).
 - Query parameter values containing `$` or `~` are no longer un-encoded by the pagination query serializer; the literal-`$` exemption now applies only to OData system query keys such as `$filter` and `$search` (VCFO-050).
 - Empty-body 2xx responses with a `Location` header no longer masquerade as a running workflow execution for non-execution endpoints; the synthetic `{ id, state: "running" }` shape is now scoped to the explicit workflow-execution start path (`startExecution`), and generic empty 2xx responses return `{}` (VCFO-052).
 - A 2xx response with a non-JSON body (for example an HTML error page from a load balancer or SSO interstitial) now throws a sanitized, contextualized error naming the method, path, and correlation ID instead of a bare `SyntaxError: Unexpected token` (VCFO-053).
