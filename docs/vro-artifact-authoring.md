@@ -228,7 +228,7 @@ npm test
 
 Before uploading local artifacts, run the matching preflight tool:
 
-- `preflight-workflow-file` checks `.workflow` ZIP structure, `workflow-info`, UTF-16 `workflow-content`, `input_form_` JSON when present, parameters, bindings, task flow, vRO type syntax, action references, and local import path safety.
+- `preflight-workflow-file` checks `.workflow` ZIP structure, `workflow-info`, UTF-16 `workflow-content`, UTF-16BE `input_form_` JSON when present, parameters, bindings, task flow, vRO type syntax, action references, and local import path safety.
 - `preflight-action-file` checks `.action` ZIP/path safety and parses recognizable XML metadata conservatively.
 - `preflight-configuration-file` checks `.vsoconf` ZIP/path safety and parses recognizable XML metadata conservatively.
 - `preflight-package` checks `.package`/`.zip` import safety, inspects nested `.workflow`, `.action`, and `.vsoconf` artifacts when they are present, and validates package element `input_form_` entries.

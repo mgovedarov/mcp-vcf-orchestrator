@@ -494,7 +494,7 @@ function validateGenericXmlArchive(
 ): void {
   let parsedXmlEntries = 0;
   for (const [name, content] of Object.entries(files)) {
-    const xml = decodeLikelyXml(content);
+    const xml = decodeLikelyXml(content, name, report);
     if (!xml) continue;
 
     const parsed = parseXml(xml, name, report);
@@ -520,7 +520,7 @@ function inspectActionArchiveFiles(
   const candidates: { score: number; action: ActionArtifactInspection }[] = [];
 
   for (const [name, content] of Object.entries(files)) {
-    const xml = decodeLikelyXml(content);
+    const xml = decodeLikelyXml(content, name, report);
     if (!xml) continue;
 
     const parsed = parseXml(xml, name, report);
@@ -605,7 +605,7 @@ function validateInputFormEntry(
   entryName: string,
   report: ArtifactPreflightReport,
 ): void {
-  const json = decodeUtf16TextWithBom(content, entryName, "JSON", report);
+  const json = decodeUtf16TextWithBom(content, entryName, "JSON", report, "be");
   if (!json) return;
 
   let parsed: unknown;
@@ -1186,11 +1186,14 @@ function decodeUtf16XmlWithBom(
   return decodeUtf16TextWithBom(content, entryName, "XML", report);
 }
 
+type Utf16Endianness = "le" | "be" | "any";
+
 function decodeUtf16TextWithBom(
   content: Uint8Array,
   entryName: string,
   label: string,
   report: ArtifactPreflightReport,
+  expected: Utf16Endianness = "any",
 ): string | null {
   if (content.length < 2) {
     report.errors.push(`${entryName} is empty`);
@@ -1199,27 +1202,57 @@ function decodeUtf16TextWithBom(
   const littleEndian = content[0] === 0xff && content[1] === 0xfe;
   const bigEndian = content[0] === 0xfe && content[1] === 0xff;
   if (!littleEndian && !bigEndian) {
-    report.errors.push(`${entryName} must be UTF-16 ${label} with a BOM`);
+    const expectedLabel =
+      expected === "any" ? "UTF-16" : `UTF-16${expected.toUpperCase()}`;
+    report.errors.push(`${entryName} must be ${expectedLabel} ${label} with a BOM`);
+    return null;
+  }
+  if (expected === "be" && littleEndian) {
+    report.errors.push(
+      `${entryName} must be UTF-16BE ${label} with a big-endian BOM (0xFE 0xFF); found a UTF-16LE BOM`,
+    );
+    return null;
+  }
+  if (expected === "le" && bigEndian) {
+    report.errors.push(
+      `${entryName} must be UTF-16LE ${label} with a little-endian BOM (0xFF 0xFE); found a UTF-16BE BOM`,
+    );
     return null;
   }
 
   const encoding = littleEndian ? "utf-16le" : "utf-16be";
   try {
-    return new TextDecoder(encoding).decode(content);
+    return new TextDecoder(encoding, { fatal: true }).decode(content);
   } catch (error) {
     report.errors.push(`${entryName} is not valid ${encoding} ${label}: ${errorMessage(error)}`);
     return null;
   }
 }
 
-function decodeLikelyXml(content: Uint8Array): string | null {
+function decodeLikelyXml(
+  content: Uint8Array,
+  entryName: string,
+  report: ArtifactPreflightReport,
+): string | null {
   if (content.length === 0) return null;
-  const xml = content[0] === 0xff && content[1] === 0xfe
-    ? new TextDecoder("utf-16le").decode(content)
-    : content[0] === 0xfe && content[1] === 0xff
-      ? new TextDecoder("utf-16be").decode(content)
-      : new TextDecoder("utf-8").decode(content);
-  return xml.trimStart().startsWith("<") ? xml : null;
+  const encoding =
+    content[0] === 0xff && content[1] === 0xfe
+      ? "utf-16le"
+      : content[0] === 0xfe && content[1] === 0xff
+        ? "utf-16be"
+        : "utf-8";
+  // Tentative non-fatal decode only to decide whether the entry looks like
+  // XML; genuinely binary entries are skipped silently as before.
+  const sniffed = new TextDecoder(encoding).decode(content);
+  if (!sniffed.trimStart().startsWith("<")) return null;
+  try {
+    return new TextDecoder(encoding, { fatal: true }).decode(content);
+  } catch (error) {
+    report.errors.push(
+      `${entryName} looks like XML but is not valid ${encoding}: ${errorMessage(error)}`,
+    );
+    return null;
+  }
 }
 
 function parseXml(

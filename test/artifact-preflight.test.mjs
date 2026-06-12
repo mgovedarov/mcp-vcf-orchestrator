@@ -304,6 +304,91 @@ test("preflightPackageFile rejects package input forms with invalid section fiel
   }
 });
 
+test("preflightPackageFile rejects input_form_ entries that are not UTF-16BE", async () => {
+  const packageDir = await mkdtemp(join(tmpdir(), "vcfa-preflight-packages-"));
+  const form = {
+    layout: { pages: [] },
+    schema: {},
+    options: { externalValidations: [] },
+  };
+  await writeFile(
+    join(packageDir, "le-form.package"),
+    zipSync({
+      "elements/workflow-1/input_form_": utf16LeWithBom(JSON.stringify(form)),
+      "manifest.xml": new TextEncoder().encode("<package />"),
+    }),
+  );
+
+  try {
+    const report = await preflightPackageFile(packageDir, "le-form.package");
+    assert.equal(report.valid, false);
+    assert.match(
+      report.errors.join("\n"),
+      /input_form_.*must be UTF-16BE.*found a UTF-16LE BOM/,
+    );
+  } finally {
+    await rm(packageDir, { recursive: true, force: true });
+  }
+});
+
+test("preflightPackageFile rejects corrupt UTF-16 bytes in input_form_", async () => {
+  const packageDir = await mkdtemp(join(tmpdir(), "vcfa-preflight-packages-"));
+  // BE BOM + "{" + unpaired high surrogate (U+D800): fatal utf-16be decode throws.
+  const corrupt = new Uint8Array([0xfe, 0xff, 0x00, 0x7b, 0xd8, 0x00]);
+  await writeFile(
+    join(packageDir, "corrupt-form.package"),
+    zipSync({
+      "elements/workflow-1/input_form_": corrupt,
+      "manifest.xml": new TextEncoder().encode("<package />"),
+    }),
+  );
+
+  try {
+    const report = await preflightPackageFile(
+      packageDir,
+      "corrupt-form.package",
+    );
+    assert.equal(report.valid, false);
+    assert.match(report.errors.join("\n"), /not valid utf-16be/);
+  } finally {
+    await rm(packageDir, { recursive: true, force: true });
+  }
+});
+
+test("preflightActionFile fails XML-looking entries with corrupt bytes and still skips binary entries", async () => {
+  const actionDir = await mkdtemp(join(tmpdir(), "vcfa-preflight-actions-"));
+  // "<a" followed by an invalid UTF-8 continuation sequence.
+  const corruptXml = new Uint8Array([0x3c, 0x61, 0xc3, 0x28]);
+  // Binary blob that does not decode to something starting with "<".
+  const binaryBlob = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x00, 0xc3, 0x28]);
+  await writeFile(
+    join(actionDir, "corrupt.action"),
+    zipSync({ "action.xml": corruptXml }),
+  );
+  const validXml = new TextEncoder().encode(
+    '<action id="action-1" name="echo" module="com.example.actions" fqn="com.example.actions.echo" version="1.0.0" output-type="string"><description>Echo</description><input-parameters></input-parameters><script><![CDATA[return message;]]></script></action>',
+  );
+  await writeFile(
+    join(actionDir, "binary-ok.action"),
+    zipSync({ "action.xml": validXml, "signature.bin": binaryBlob }),
+  );
+
+  try {
+    const corrupt = await preflightActionFile(actionDir, "corrupt.action");
+    assert.equal(corrupt.valid, false);
+    assert.match(
+      corrupt.errors.join("\n"),
+      /action\.xml looks like XML but is not valid utf-8/,
+    );
+
+    const binaryOk = await preflightActionFile(actionDir, "binary-ok.action");
+    assert.equal(binaryOk.valid, true);
+    assert.equal(binaryOk.errors.length, 0);
+  } finally {
+    await rm(actionDir, { recursive: true, force: true });
+  }
+});
+
 test("diffWorkflowArtifacts reports identical local workflow artifacts", () => {
   const model = inspectWorkflowArtifactBuffer(
     buildWorkflowArtifact(workflow),
