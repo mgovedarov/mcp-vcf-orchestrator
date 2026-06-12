@@ -720,6 +720,47 @@ test("generic bodyless 2xx responses with a Location header do not synthesize an
   assert.equal(calls.length, 2);
 });
 
+test("non-JSON 2xx responses throw a contextualized error", async () => {
+  const htmlBody = "<html><body>Maintenance</body></html>" + "x".repeat(300);
+  globalThis.fetch = async (url, init) => {
+    if (String(url).includes("/sessions")) return authResponse();
+    return new Response(htmlBody, {
+      status: 200,
+      headers: { "content-type": "text/html", "x-request-id": "req-42" },
+    });
+  };
+
+  const client = new VroClient(config());
+  await assert.rejects(
+    () => client.getWorkflow("workflow-1"),
+    (error) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /non-JSON response body \(200/);
+      assert.match(error.message, /GET \/workflows\/workflow-1/);
+      assert.match(error.message, /x-request-id: req-42/);
+      assert.ok(error.message.includes("…"), "excerpt should be truncated");
+      assert.ok(
+        !error.message.includes("x".repeat(250)),
+        "raw body tail must not leak into the error",
+      );
+      return true;
+    },
+  );
+});
+
+test("whitespace-only 2xx responses throw a contextualized error", async () => {
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/sessions")) return authResponse();
+    return new Response("   ", { status: 200 });
+  };
+
+  const client = new VroClient(config());
+  await assert.rejects(
+    () => client.getWorkflow("workflow-1"),
+    /non-JSON response body .*GET \/workflows\/workflow-1/s,
+  );
+});
+
 test("startExecution parses a JSON 2xx body", async () => {
   const calls = [];
   globalThis.fetch = async (url, init) => {
