@@ -250,7 +250,7 @@ Export a vRO workflow as a `.workflow` file under the configured workflow artifa
 
 ### `scaffold-workflow-file`
 
-Generate a local importable `.workflow` artifact under the configured workflow artifact directory from structured metadata, linear scriptable tasks, scripts, bindings, and a vRO-compatible `input_form_` for declared inputs. Use this scaffold when a scriptable task is appropriate, such as custom JavaScript logic, multiple action calls, or orchestration around an action. For a workflow step that only invokes one existing vRO action, prefer a native action workflow item in authored XML/package content. For reusable project content, publish the resulting workflow through the project package flow after preflight; use `import-workflow-file` only for narrow validation or explicitly requested one-off tests.
+Generate a local importable `.workflow` artifact under the configured workflow artifact directory from structured metadata, linear tasks, bindings, and a vRO-compatible `input_form_` for declared inputs. Each task is either a native vRO action workflow item (`kind: "action"`, for a step that only invokes one existing action) or a scriptable task (`kind: "script"`, the default, for custom JavaScript logic, multiple action calls, or orchestration). For reusable project content, publish the resulting workflow through the project package flow after preflight; use `import-workflow-file` only for narrow validation or explicitly requested one-off tests.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
@@ -264,7 +264,7 @@ Generate a local importable `.workflow` artifact under the configured workflow a
 | Field | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `name` | string | Yes | - | Workflow display name. |
-| `tasks` | array | Yes | - | Linear sequence of scriptable tasks. At least one task is required. Prefer native action workflow items outside this scaffold when a step only invokes one existing vRO action. |
+| `tasks` | array | Yes | - | Linear sequence of workflow items (native action items or scriptable tasks). At least one task is required. |
 | `id` | string | No | generated UUID | Workflow UUID. |
 | `description` | string | No | - | Workflow description. |
 | `version` | string | No | `1.0.0` | Workflow version metadata. |
@@ -287,20 +287,25 @@ Task object:
 
 | Field | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
-| `script` | string | Yes | - | JavaScript body of the scriptable task. |
+| `kind` | string | No | `script` | Task kind: `script` (scriptable task) or `action` (native vRO action workflow item). |
 | `displayName` | string | No | - | Task display name shown in the vRO UI. |
 | `name` | string | No | `itemN` | Internal workflow item name. |
 | `description` | string | No | - | Task description. |
-| `inBindings` | array | No | `[]` | Bind workflow inputs or attributes into script-local variables. |
-| `outBindings` | array | No | `[]` | Bind script-local variables back to workflow outputs or attributes. |
+| `script` | string | Yes for `kind: "script"` | - | JavaScript body of the scriptable task. Ignored for `kind: "action"` (generated automatically). |
+| `inBindings` | array | No | `[]` | Scriptable-task bindings: bind workflow inputs or attributes into script-local variables. |
+| `outBindings` | array | No | `[]` | Scriptable-task bindings: bind script-local variables back to workflow outputs or attributes. |
+| `module` | string | Yes for `kind: "action"` | - | Native action module name, e.g. `com.example.actions`. Discover with `get-action`; do not invent. |
+| `actionName` | string | Yes for `kind: "action"` | - | Native action name. Discover with `get-action`; do not invent. |
+| `inputs` | array | No | `[]` | `kind: "action"` only. Ordered action inputs (`{ name, type, source }`) mapped from workflow inputs/attributes, in action signature order. |
+| `resultBinding` | object | No | - | `kind: "action"` only. `{ name, type }` binding the action result (`actionResult`) to a workflow output/attribute. Omit for actions with no return value. |
 
-Binding object:
+Binding object (for `inBindings`/`outBindings` and `inputs`):
 
 | Field | Type | Required | Applies to | Description |
 | --- | --- | --- | --- | --- |
-| `name` | string | Yes | all bindings | Script-local variable name. |
+| `name` | string | Yes | all bindings | Script-local variable name (action parameter name for `inputs`). |
 | `type` | string | Yes | all bindings | vRO parameter type. Must match the referenced workflow parameter or attribute type. |
-| `source` | string | Yes | `inBindings` | Workflow input or attribute name to read from. |
+| `source` | string | Yes | `inBindings`, `inputs` | Workflow input or attribute name to read from. |
 | `target` | string | Yes | `outBindings` | Workflow output or attribute name to write to. |
 :::
 

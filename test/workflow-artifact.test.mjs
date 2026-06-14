@@ -134,6 +134,89 @@ test("buildWorkflowArtifact creates a .workflow zip with required entries", () =
   assert.deepEqual(inputForm.options, { externalValidations: [] });
 });
 
+const actionWorkflow = {
+  id: "workflow-action-1",
+  name: "Echo Message",
+  description: "Wrap the echo action",
+  inputs: [{ name: "message", type: "string", description: "Message to echo" }],
+  outputs: [{ name: "result", type: "string", description: "Echoed message" }],
+  tasks: [
+    {
+      kind: "action",
+      displayName: "Echo",
+      module: "com.example.actions",
+      actionName: "echo",
+      inputs: [{ name: "message", type: "string", source: "message" }],
+      resultBinding: { name: "result", type: "string" },
+    },
+  ],
+};
+
+test("buildWorkflowContent renders a native action workflow item", () => {
+  const xml = new TextDecoder("utf-16le").decode(
+    buildWorkflowContent(actionWorkflow),
+  );
+
+  assert.match(
+    xml,
+    /<workflow-item name="item1" type="task" script-module="com\.example\.actions\/echo" end-mode="1">/,
+  );
+  assert.match(
+    xml,
+    /<bind name="message" type="string" export-name="message" \/>/,
+  );
+  assert.match(
+    xml,
+    /<bind name="actionResult" type="string" export-name="result" \/>/,
+  );
+  assert.match(
+    xml,
+    /actionResult = System\.getModule\("com\.example\.actions"\)\.echo\(message\);/,
+  );
+});
+
+test("native action item with no resultBinding omits actionResult and out-binding", () => {
+  const xml = new TextDecoder("utf-16le").decode(
+    buildWorkflowContent({
+      ...actionWorkflow,
+      outputs: [],
+      tasks: [
+        {
+          kind: "action",
+          displayName: "Log",
+          module: "com.example.actions",
+          actionName: "logIt",
+          inputs: [{ name: "message", type: "string", source: "message" }],
+        },
+      ],
+    }),
+  );
+
+  assert.match(
+    xml,
+    /<workflow-item name="item1" type="task" script-module="com\.example\.actions\/logIt" end-mode="1">/,
+  );
+  assert.match(
+    xml,
+    /System\.getModule\("com\.example\.actions"\)\.logIt\(message\);/,
+  );
+  assert.doesNotMatch(xml, /actionResult/);
+  assert.match(xml, /<out-binding \/>/);
+});
+
+test("native action task requires module and actionName", () => {
+  assert.throws(
+    () =>
+      buildWorkflowContentXml({
+        name: "Bad action",
+        inputs: [],
+        outputs: [],
+        tasks: [{ kind: "action", displayName: "Broken" }],
+      }),
+    /missing a module[\s\S]*missing an actionName/,
+  );
+});
+
 test("buildWorkflowInputFormJson maps common vRO input types", () => {
   const inputForm = JSON.parse(
     buildWorkflowInputFormJson({

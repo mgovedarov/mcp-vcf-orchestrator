@@ -86,13 +86,41 @@ export interface WorkflowArtifactBinding {
   target?: string;
 }
 
+export interface WorkflowActionTaskInput {
+  name: string;
+  type: string;
+  source: string;
+}
+
+export interface WorkflowActionTaskResult {
+  name: string;
+  type: string;
+}
+
 export interface WorkflowArtifactTask {
   name?: string;
   displayName?: string;
   description?: string;
-  script: string;
+  /**
+   * Task kind. "script" (default) renders a scriptable task from `script`.
+   * "action" renders a native vRO action workflow item from `module`/`actionName`.
+   */
+  kind?: "script" | "action";
+  /** Scriptable task body. Required for `kind: "script"` (the default). */
+  script?: string;
   inBindings?: WorkflowArtifactBinding[];
   outBindings?: WorkflowArtifactBinding[];
+  /** Native action module name, e.g. com.example.actions. Required for `kind: "action"`. */
+  module?: string;
+  /** Native action name. Required for `kind: "action"`. */
+  actionName?: string;
+  /** Ordered action inputs mapped from workflow inputs/attributes. Used for `kind: "action"`. */
+  inputs?: WorkflowActionTaskInput[];
+  /**
+   * Workflow output/attribute that receives the action's return value (bound from `actionResult`).
+   * Omit for actions with no return value. Used for `kind: "action"`.
+   */
+  resultBinding?: WorkflowActionTaskResult;
 }
 
 export interface WorkflowArtifactSpec {

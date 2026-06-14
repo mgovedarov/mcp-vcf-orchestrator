@@ -21,9 +21,9 @@ const ARTIFACT_AUTHORING_URL = new URL(
 const WORKFLOW_SCAFFOLD_SCHEMA = {
   tool: "scaffold-workflow-file",
   purpose:
-    "Generate a local importable .workflow artifact from structured workflow metadata and linear scriptable tasks.",
+    "Generate a local importable .workflow artifact from structured workflow metadata and linear tasks.",
   scope:
-    "This scaffold contract emits scriptable task workflow items. When authoring a workflow that only executes one existing vRO action, prefer a native vRO action workflow item in the workflow XML/package instead of wrapping the action in a scriptable task. Use scriptable tasks when the workflow performs more than one action call or needs additional orchestration logic.",
+    'Each task is either a native vRO action workflow item (kind "action") or a scriptable task (kind "script", the default). When a workflow step only invokes one existing vRO action, use kind "action" with the discovered module/actionName so the scaffold emits a native action workflow item directly. Use kind "script" when the step needs custom logic, multiple action calls, or additional orchestration.',
   layout:
     "Prefer horizontal workflow layouts. Place sequential workflow items left-to-right by increasing x positions while keeping y positions stable unless a branch needs vertical separation.",
   fileSafety: {
@@ -63,7 +63,9 @@ const WORKFLOW_SCAFFOLD_SCHEMA = {
         name: "Optional internal workflow item name. Defaults to itemN.",
         displayName: "Optional visible task name.",
         description: "Optional task description.",
-        script: "Required vRO JavaScript scriptable task body.",
+        kind: 'Optional task kind. "script" (default) renders a scriptable task; "action" renders a native vRO action workflow item.',
+        script:
+          'Required vRO JavaScript scriptable task body for kind "script". Ignored for kind "action" (generated automatically).',
         inBindings: [
           {
             name: "Script variable name.",
@@ -78,11 +80,26 @@ const WORKFLOW_SCAFFOLD_SCHEMA = {
             target: "Workflow output or attribute name.",
           },
         ],
+        module:
+          'Native action module name for kind "action", e.g. com.example.actions. Discover with get-action; do not invent.',
+        actionName:
+          'Native action name for kind "action". Discover with get-action; do not invent.',
+        inputs: [
+          {
+            name: "Action input parameter name in action signature order.",
+            type: "Must match the source input or attribute type.",
+            source: "Workflow input or attribute name to pass in.",
+          },
+        ],
+        resultBinding: {
+          name: "Workflow output or attribute that receives the action result (actionResult). Omit for actions with no return value.",
+          type: "Must match the target output or attribute type.",
+        },
       },
     ],
   },
   validation:
-    "The scaffold validates required names, script identifier names, duplicate workflow parameter names, task presence, binding references, and binding type matches.",
+    'The scaffold validates required names, script identifier names, duplicate workflow parameter names, task presence, binding references, and binding type matches. For kind "action" it requires module and actionName and binds actionResult to the resultBinding target.',
   nextSteps: [
     "Run preflight-workflow-file on the generated artifact.",
     "Run diff-workflow-file when replacing an existing workflow.",
@@ -153,11 +170,11 @@ Implementation shape:
 - Use action parameter names and types exactly as discovered.
 - Prefer a native vRO action workflow item for a single action call. Do not wrap a single action in a scriptable task just to call \`System.getModule("<module>").<actionName>(...)\`.
 - Use a scriptable task only when the workflow item performs multiple action calls or additional orchestration logic beyond a single action invocation.
-- Exported native action items are represented as \`<workflow-item type="task" script-module="<module>/<actionName>">\` with a generated \`<script>\` that assigns the return value to \`actionResult\`, for example \`actionResult = System.getModule("<module>").<actionName>(...);\`. Preserve that generated script and bind \`actionResult\` to the workflow output.
-- Bind the action result to a workflow output with the discovered return type.
+- Scaffold the native action item directly: call \`scaffold-workflow-file\` with a task of \`kind: "action"\`, setting \`module\`, \`actionName\`, ordered \`inputs\` (mapped from workflow inputs/attributes), and \`resultBinding\` (the workflow output that receives the result). Omit \`resultBinding\` for an action with no return value.
+- The scaffold emits the exported native action shape automatically: \`<workflow-item type="task" script-module="<module>/<actionName>">\` with a generated \`<script>\` that assigns the return value to \`actionResult\` (for example \`actionResult = System.getModule("<module>").<actionName>(...);\`) and an \`out-binding\` from \`actionResult\` to the workflow output.
+- Bind the action result to a workflow output with the discovered return type via \`resultBinding\`.
 - Prefer horizontal workflow layout when authoring or editing XML/package content: start on the left, place the action item to the right of the start/root item, and place the end item further right.
-- The current \`scaffold-workflow-file\` contract emits scriptable task items. For a single-action wrapper that must use a native action item, author from an exported valid workflow/package shape or extend the artifact manually before package publishing.
-- Preserve or generate a valid \`input_form_\` when the wrapper has workflow inputs so it can be started from the vRO UI.
+- Preserve or generate a valid \`input_form_\` when the wrapper has workflow inputs so it can be started from the vRO UI (the scaffold generates this automatically).
 
 Validation flow:
 

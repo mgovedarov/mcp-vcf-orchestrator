@@ -77,6 +77,53 @@ test("preflightWorkflowFile accepts generated workflow artifacts and reports act
   }
 });
 
+const nativeActionWorkflow = {
+  id: "wf-native-1",
+  name: "Echo Wrapper",
+  inputs: [{ name: "message", type: "string" }],
+  outputs: [{ name: "result", type: "string" }],
+  tasks: [
+    {
+      kind: "action",
+      module: "com.example.actions",
+      actionName: "echo",
+      inputs: [{ name: "message", type: "string", source: "message" }],
+      resultBinding: { name: "result", type: "string" },
+    },
+  ],
+};
+
+test("preflightWorkflowFile recognizes native action workflow items", async () => {
+  const workflowDir = await mkdtemp(join(tmpdir(), "vcfa-preflight-"));
+  await writeFile(
+    join(workflowDir, "native-action.workflow"),
+    buildWorkflowArtifact(nativeActionWorkflow),
+  );
+
+  try {
+    const report = await preflightWorkflowFile(
+      workflowDir,
+      "native-action.workflow",
+    );
+
+    assert.equal(report.valid, true);
+    assert.equal(report.errors.length, 0);
+    assert.match(
+      report.metadata["native-action-items"],
+      /item1 -> com\.example\.actions\/echo/,
+    );
+    assert.deepEqual(report.actionReferences, [
+      {
+        module: "com.example.actions",
+        action: "echo",
+        expression: 'System.getModule("com.example.actions").echo(',
+      },
+    ]);
+  } finally {
+    await rm(workflowDir, { recursive: true, force: true });
+  }
+});
+
 test("preflightWorkflowFile reports malformed ZIPs, missing entries, and bad encoding", async () => {
   const workflowDir = await mkdtemp(join(tmpdir(), "vcfa-preflight-"));
   await writeFile(join(workflowDir, "bad.workflow"), "not a zip");
@@ -475,6 +522,40 @@ test("diffWorkflowArtifacts reports task add and remove", () => {
 
   const diff = diffWorkflowArtifacts(base, compare);
   assert.match(diff, /Added task item2/);
+});
+
+test("diffWorkflowArtifacts surfaces native action module changes", () => {
+  const base = inspectWorkflowArtifactBuffer(
+    buildWorkflowArtifact(nativeActionWorkflow),
+  );
+  const compare = inspectWorkflowArtifactBuffer(
+    buildWorkflowArtifact({
+      ...nativeActionWorkflow,
+      tasks: [{ ...nativeActionWorkflow.tasks[0], actionName: "upper" }],
+    }),
+  );
+
+  const diff = diffWorkflowArtifacts(base, compare);
+  assert.match(
+    diff,
+    /scriptModule: "com.example.actions\/echo" -> "com.example.actions\/upper"/,
+  );
+});
+
+test("diffWorkflowArtifacts labels added native action items distinctly", () => {
+  const base = inspectWorkflowArtifactBuffer(buildWorkflowArtifact(workflow));
+  const compare = inspectWorkflowArtifactBuffer(
+    buildWorkflowArtifact({
+      ...workflow,
+      tasks: [workflow.tasks[0], { ...nativeActionWorkflow.tasks[0], name: "item2" }],
+    }),
+  );
+
+  const diff = diffWorkflowArtifacts(base, compare);
+  assert.match(
+    diff,
+    /Added task item2 \(native action com\.example\.actions\/echo\)/,
+  );
 });
 
 test("diffActionArtifacts reports identical action artifacts", () => {

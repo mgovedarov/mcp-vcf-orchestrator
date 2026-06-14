@@ -90,6 +90,8 @@ export interface WorkflowArtifactInspectionFlow {
 export interface WorkflowArtifactInspectionItem {
   name: string;
   type: string;
+  /** `<module>/<actionName>` for native action items; empty for scriptable tasks. */
+  scriptModule: string;
   displayName: string;
   description: string;
   script: string;
@@ -823,14 +825,25 @@ function validateWorkflowModel(
     report.errors.push(`Workflow root-name references unknown item ${rootName}`);
   }
 
+  const nativeActionItems: string[] = [];
   for (const item of items) {
     validateWorkflowItemFlow(item, itemNames, report);
     if (stringValue(item.type) === "task") {
+      const itemName = stringValue(item.name) || "(unnamed)";
+      const scriptModule = stringValue(item["script-module"]);
+      if (scriptModule) {
+        const [module, action] = scriptModule.split("/");
+        if (!module || !action || scriptModule.split("/").length !== 2) {
+          report.errors.push(
+            `Native action item ${itemName} has an invalid script-module "${scriptModule}"; expected "<module>/<actionName>"`,
+          );
+        } else {
+          nativeActionItems.push(`${itemName} -> ${scriptModule}`);
+        }
+      }
       const script = getScriptText(item);
       if (!script.trim()) {
-        report.errors.push(
-          `Task ${stringValue(item.name) || "(unnamed)"} is missing script content`,
-        );
+        report.errors.push(`Task ${itemName} is missing script content`);
       }
       collectActionReferences(script, report);
     }
@@ -848,6 +861,9 @@ function validateWorkflowModel(
       outputOrAttributeTypes,
       report,
     );
+  }
+  if (nativeActionItems.length > 0) {
+    report.metadata["native-action-items"] = nativeActionItems.join("; ");
   }
 }
 
@@ -1332,6 +1348,7 @@ function buildWorkflowInspection(
       return {
         name: stringValue(item.name),
         type: stringValue(item.type),
+        scriptModule: stringValue(item["script-module"]),
         displayName: textValue(item["display-name"]).trim(),
         description: textValue(item.description).trim(),
         script,
@@ -1407,11 +1424,11 @@ function addItemDiff(
     const oldItem = baseByName.get(name);
     const newItem = compareByName.get(name);
     if (!oldItem && newItem) {
-      lines.push(`• Added task ${name} (${newItem.type})`);
+      lines.push(`• Added task ${name} (${itemKindLabel(newItem)})`);
       continue;
     }
     if (oldItem && !newItem) {
-      lines.push(`• Removed task ${name} (${oldItem.type})`);
+      lines.push(`• Removed task ${name} (${itemKindLabel(oldItem)})`);
       continue;
     }
     if (!oldItem || !newItem) continue;
@@ -1539,6 +1556,7 @@ function formatParameterChange(
 function itemSummary(item: WorkflowArtifactInspectionItem): Record<string, string> {
   return {
     type: item.type,
+    scriptModule: item.scriptModule,
     displayName: item.displayName,
     description: item.description,
     outName: item.flow.outName,
@@ -1546,6 +1564,12 @@ function itemSummary(item: WorkflowArtifactInspectionItem): Record<string, strin
     catchName: item.flow.catchName,
     endMode: item.flow.endMode,
   };
+}
+
+function itemKindLabel(item: WorkflowArtifactInspectionItem): string {
+  return item.scriptModule
+    ? `native action ${item.scriptModule}`
+    : item.type;
 }
 
 function formatBinding(binding: WorkflowArtifactInspectionBinding): string {

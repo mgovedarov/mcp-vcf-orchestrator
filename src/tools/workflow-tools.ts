@@ -1453,7 +1453,7 @@ export function registerWorkflowTools(
     {
       title: "Scaffold Workflow File",
       description:
-        "Generate a local importable .workflow artifact under the configured workflow artifact directory from structured metadata, linear scriptable tasks, scripts, and bindings. Use native action workflow items outside this scaffold for single-action workflow steps; use scriptable tasks for custom logic, multiple action calls, or orchestration. Publish reusable content through the project package path; use import-workflow-file only for validation or one-off tests.",
+        'Generate a local importable .workflow artifact under the configured workflow artifact directory from structured metadata, linear tasks, and bindings. Each task is either a native vRO action workflow item (kind "action", for a step that only invokes one existing action) or a scriptable task (kind "script", the default, for custom logic, multiple action calls, or orchestration). Publish reusable content through the project package path; use import-workflow-file only for validation or one-off tests.',
       inputSchema: z.object({
         fileName: z
           .string()
@@ -1516,7 +1516,18 @@ export function registerWorkflowTools(
                   .optional()
                   .describe("Task display name"),
                 description: z.string().optional(),
-                script: z.string().describe("Scriptable task JavaScript body"),
+                kind: z
+                  .enum(["script", "action"])
+                  .optional()
+                  .describe(
+                    'Task kind. "script" (default) renders a scriptable task from script. "action" renders a native vRO action workflow item from module/actionName.',
+                  ),
+                script: z
+                  .string()
+                  .optional()
+                  .describe(
+                    'Scriptable task JavaScript body. Required for kind "script" (the default); ignored for kind "action" (generated automatically).',
+                  ),
                 inBindings: z
                   .array(
                     z.object({
@@ -1539,11 +1550,54 @@ export function registerWorkflowTools(
                     }),
                   )
                   .optional(),
+                module: z
+                  .string()
+                  .optional()
+                  .describe(
+                    'Native action module name, e.g. com.example.actions. Required for kind "action". Discover with get-action; do not invent.',
+                  ),
+                actionName: z
+                  .string()
+                  .optional()
+                  .describe(
+                    'Native action name. Required for kind "action". Discover with get-action; do not invent.',
+                  ),
+                inputs: z
+                  .array(
+                    z.object({
+                      name: z
+                        .string()
+                        .describe(
+                          "Action input parameter name (action signature order)",
+                        ),
+                      type: z.string().describe("vRO parameter type"),
+                      source: z
+                        .string()
+                        .describe("Workflow input or attribute name to pass in"),
+                    }),
+                  )
+                  .optional()
+                  .describe(
+                    'Ordered action inputs mapped from workflow inputs/attributes. Used for kind "action".',
+                  ),
+                resultBinding: z
+                  .object({
+                    name: z
+                      .string()
+                      .describe(
+                        "Workflow output or attribute that receives the action result",
+                      ),
+                    type: z.string().describe("vRO parameter type"),
+                  })
+                  .optional()
+                  .describe(
+                    'Binds the action return value (actionResult) to a workflow output/attribute. Omit for actions with no return value. Used for kind "action".',
+                  ),
               }),
             )
             .min(1)
             .describe(
-              "Linear sequence of scriptable tasks. Prefer a native action workflow item outside this scaffold for a step that only invokes one existing vRO action.",
+              "Linear sequence of workflow items. Use kind \"action\" for a step that only invokes one existing vRO action (native action item); use kind \"script\" (default) for custom logic, multiple action calls, or orchestration.",
             ),
         }),
       }),

@@ -249,7 +249,7 @@ Workflow files are read from the `workflows` subdirectory of `VCFA_ARTIFACT_DIR`
 ## Common Pitfalls
 
 - `create-workflow` creates only an empty workflow shell; use authored artifacts and the project package publish flow for real reusable workflow content.
-- Do not use a plain scriptable task solely to invoke one action; use a native action workflow item for that case. In exported XML this is still a `type="task"` item, but it has `script-module="<module>/<actionName>"`, a generated `actionResult = System.getModule("<module>").<actionName>(...)` script, and an `out-binding` from `actionResult` to the workflow output.
+- Do not use a plain scriptable task solely to invoke one action; use a native action workflow item for that case. Scaffold it directly with `scaffold-workflow-file` by passing a task of `kind: "action"` (`module`, `actionName`, ordered `inputs`, and `resultBinding`). In exported XML this is still a `type="task"` item, but it has `script-module="<module>/<actionName>"`, a generated `actionResult = System.getModule("<module>").<actionName>(...)` script, and an `out-binding` from `actionResult` to the workflow output. Omit `resultBinding` for an action with no return value (the scaffold then emits the bare call with no `actionResult`).
 - Avoid vertical-only layouts for simple linear workflows; horizontal layouts are easier to scan and match project conventions.
 - Do not omit `input_form_` for workflows with user inputs that should be started from the vRO UI.
 - Do not add `title` to input form sections or unverified properties like `size` to fields; vRO can reject the start page with schema validation errors.
