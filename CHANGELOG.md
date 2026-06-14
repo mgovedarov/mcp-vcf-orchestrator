@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.2.1 - 2026-06-14
+
+This release completes and hardens scaffolded-workflow support so generated `.workflow` artifacts import, open in the editor, and run in live vRO 9.1, and lets the scaffolder emit native vRO action workflow items.
+
+### Added
+
+- `scaffold-workflow-file` can emit **native vRO action workflow items** via an optional `kind: "action"` task discriminator (`module`, `actionName`, ordered `inputs`, `resultBinding`), generating the `actionResult = System.getModule("<module>").<actionName>(...)` script and a `type="task" script-module="<module>/<actionName>"` item; void actions omit `resultBinding` and emit a bare call. Tasks without `kind` behave exactly as before. `preflight-workflow-file` validates the `<module>/<actionName>` form and `diff-workflow-file` surfaces native-action item changes (VCFO-046, VCFO-059).
+
+### Fixed
+
+- Scaffolded `.workflow` artifacts now **import, open in the VCF 9.x Orchestrate editor, and run** in live vRO 9.1. The builder emits `workflow-info` as a Java properties file (not XML), encodes `workflow-content` as UTF-16BE with a `UTF-8` XML declaration (the BOM drives decoding; the v2 editor returns 500 on a declaration saying `UTF-16`), chains an explicit terminal `<workflow-item type="end">` (replacing `end-mode="1"` on the last task), writes `input_form_` only when the workflow has inputs, drops the read-only `allowed-operations` marker that made the editor refuse to open the workflow, and gives every item a distinct `<position>` with bare `<param>` elements (VCFO-060).
+- `preflight-workflow-file` and `diff-workflow-file` now parse vRO's native repeated `<attrib name type read-only>` attribute shape (not just the scaffold's wrapped form), so scaffolds and real exports round-trip identically; binding type-match tolerates vRO's generic `Any`; and preflight parses `workflow-info` as properties, requires UTF-16BE content, and rejects the legacy `end-mode="1"` pattern (VCFO-061).
+
 ## 2.2.0 - 2026-06-12
 
 This release adds VCF Automation 9.1 support with automatic API version negotiation, provider/system administrator logins, and fixes workflow and configuration parameter payloads to use the canonical vRO type keys the REST API expects.
