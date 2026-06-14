@@ -59,7 +59,7 @@ test("preflightWorkflowFile accepts generated workflow artifacts and reports act
 
     assert.equal(report.valid, true);
     assert.equal(report.errors.length, 0);
-    assert.match(report.metadata.name, /Generated Workflow/);
+    assert.match(report.metadata["display-name"], /Generated Workflow/);
     assert.deepEqual(report.parameters, [
       { name: "message", type: "string", scope: "input" },
       { name: "result", type: "string", scope: "output" },
@@ -134,11 +134,12 @@ function nativeActionContentXml(scriptModule) {
     "  <output>",
     '    <param name="result" type="string" />',
     "  </output>",
-    `  <workflow-item name="item1" type="task" script-module="${scriptModule}" end-mode="1">`,
+    `  <workflow-item name="item1" type="task" script-module="${scriptModule}" out-name="end0">`,
     '    <in-binding><bind name="message" type="string" export-name="message" /></in-binding>',
     '    <out-binding><bind name="actionResult" type="string" export-name="result" /></out-binding>',
     '    <script>actionResult = System.getModule("com.example.actions").echo(message);</script>',
     "  </workflow-item>",
+    '  <workflow-item name="end0" type="end" end-mode="0" />',
     "</workflow>",
   ].join("\n");
 }
@@ -153,10 +154,8 @@ test("preflightWorkflowFile rejects malformed native action script-module values
     await writeFile(
       join(workflowDir, fileName),
       zipSync({
-        "workflow-info": new TextEncoder().encode(
-          '<workflow-info id="workflow-1" name="Bad Native Action" />',
-        ),
-        "workflow-content": utf16LeWithBom(nativeActionContentXml(scriptModule)),
+        "workflow-info": propertiesInfo(),
+        "workflow-content": utf16BeWithBom(nativeActionContentXml(scriptModule)),
       }),
     );
   }
@@ -187,17 +186,13 @@ test("preflightWorkflowFile reports malformed ZIPs, missing entries, and bad enc
   await writeFile(
     join(workflowDir, "missing.workflow"),
     zipSync({
-      "workflow-info": new TextEncoder().encode(
-        '<workflow-info id="workflow-1" name="Missing" />',
-      ),
+      "workflow-info": propertiesInfo(),
     }),
   );
   await writeFile(
     join(workflowDir, "utf8.workflow"),
     zipSync({
-      "workflow-info": new TextEncoder().encode(
-        '<workflow-info id="workflow-1" name="UTF8" />',
-      ),
+      "workflow-info": propertiesInfo(),
       "workflow-content": new TextEncoder().encode("<workflow />"),
     }),
   );
@@ -217,10 +212,8 @@ test("preflightWorkflowFile reports malformed ZIPs, missing entries, and bad enc
   await writeFile(
     join(workflowDir, "malformed.workflow"),
     zipSync({
-      "workflow-info": new TextEncoder().encode(
-        '<workflow-info id="workflow-1" name="Malformed" />',
-      ),
-      "workflow-content": utf16LeWithBom(malformedXml),
+      "workflow-info": propertiesInfo(),
+      "workflow-content": utf16BeWithBom(malformedXml),
     }),
   );
 
@@ -238,7 +231,7 @@ test("preflightWorkflowFile reports malformed ZIPs, missing entries, and bad enc
 
     const utf8 = await preflightWorkflowFile(workflowDir, "utf8.workflow");
     assert.equal(utf8.valid, false);
-    assert.match(utf8.errors.join("\n"), /UTF-16 XML with a BOM/);
+    assert.match(utf8.errors.join("\n"), /UTF-16BE XML with a BOM/);
 
     const malformed = await preflightWorkflowFile(
       workflowDir,
@@ -274,10 +267,8 @@ test("preflightWorkflowFile reports binding and parameter validation errors", as
   await writeFile(
     join(workflowDir, "invalid.workflow"),
     zipSync({
-      "workflow-info": new TextEncoder().encode(
-        '<workflow-info id="workflow-1" name="Invalid" />',
-      ),
-      "workflow-content": utf16LeWithBom(invalidXml),
+      "workflow-info": propertiesInfo(),
+      "workflow-content": utf16BeWithBom(invalidXml),
     }),
   );
 
@@ -291,6 +282,95 @@ test("preflightWorkflowFile reports binding and parameter validation errors", as
     assert.match(errors, /references unknown source unknown/);
     assert.match(errors, /type string does not match result type number/);
     assert.match(errors, /missing script content/);
+  } finally {
+    await rm(workflowDir, { recursive: true, force: true });
+  }
+});
+
+test("preflightWorkflowFile rejects the legacy scaffold container format", async () => {
+  const workflowDir = await mkdtemp(join(tmpdir(), "vcfa-preflight-"));
+  // Pre-VCFO-060 scaffold: XML workflow-info + UTF-16LE workflow-content.
+  const legacyXml = [
+    '<?xml version="1.0" encoding="UTF-16"?>',
+    '<workflow id="wf-legacy" root-name="item0">',
+    "  <input /><output /><attrib />",
+    '  <workflow-item name="item0" type="task" end-mode="1">',
+    "    <in-binding /><out-binding />",
+    "    <script>System.log('x');</script>",
+    "  </workflow-item>",
+    "</workflow>",
+  ].join("\n");
+  await writeFile(
+    join(workflowDir, "legacy.workflow"),
+    zipSync({
+      "workflow-info": new TextEncoder().encode(
+        '<workflow-info id="wf-legacy" name="Legacy" />',
+      ),
+      "workflow-content": utf16LeWithBom(legacyXml),
+    }),
+  );
+  // Properties info + BE content, but the terminal task still uses end-mode="1"
+  // instead of an explicit end item — should be flagged once it parses.
+  await writeFile(
+    join(workflowDir, "legacy-end.workflow"),
+    zipSync({
+      "workflow-info": propertiesInfo(),
+      "workflow-content": utf16BeWithBom(legacyXml),
+    }),
+  );
+
+  try {
+    const legacy = await preflightWorkflowFile(workflowDir, "legacy.workflow");
+    assert.equal(legacy.valid, false);
+    const legacyErrors = legacy.errors.join("\n");
+    assert.match(legacyErrors, /workflow-info must be a Java properties file/);
+    assert.match(legacyErrors, /must be UTF-16BE.*found a UTF-16LE BOM/);
+
+    const legacyEnd = await preflightWorkflowFile(
+      workflowDir,
+      "legacy-end.workflow",
+    );
+    assert.equal(legacyEnd.valid, false);
+    const endErrors = legacyEnd.errors.join("\n");
+    assert.match(endErrors, /unsupported end-mode attribute/);
+    assert.match(endErrors, /no terminal item/);
+  } finally {
+    await rm(workflowDir, { recursive: true, force: true });
+  }
+});
+
+test("preflightWorkflowFile accepts a real-export-shaped workflow container", async () => {
+  const workflowDir = await mkdtemp(join(tmpdir(), "vcfa-preflight-"));
+  // Mirrors vRO's own export: properties workflow-info, UTF-16BE content,
+  // explicit type="end" item, and no input_form_ entry.
+  const exportXml = [
+    '<?xml version="1.0" encoding="UTF-16"?>',
+    '<workflow xmlns="http://vmware.com/vco/workflow" root-name="item0" object-name="Workflow:name=generic" id="wf-export-1" version="1.0.0" api-version="6.0.0" allowed-operations="vf">',
+    "  <display-name><![CDATA[Export Shaped]]></display-name>",
+    '  <input><param name="message" type="string" /></input>',
+    '  <output><param name="result" type="string" /></output>',
+    "  <attrib />",
+    '  <workflow-item name="item0" type="task" out-name="end0">',
+    '    <in-binding><bind name="message" type="string" export-name="message" /></in-binding>',
+    '    <out-binding><bind name="result" type="string" export-name="result" /></out-binding>',
+    "    <script>result = message;</script>",
+    "  </workflow-item>",
+    '  <workflow-item name="end0" type="end" end-mode="0"><position y="0.0" x="0.0" /></workflow-item>',
+    "</workflow>",
+  ].join("\n");
+  await writeFile(
+    join(workflowDir, "export.workflow"),
+    zipSync({
+      "workflow-info": propertiesInfo(),
+      "workflow-content": utf16BeWithBom(exportXml),
+    }),
+  );
+
+  try {
+    const report = await preflightWorkflowFile(workflowDir, "export.workflow");
+    assert.equal(report.errors.join("\n"), "");
+    assert.equal(report.valid, true);
+    assert.match(report.metadata["display-name"], /Export Shaped/);
   } finally {
     await rm(workflowDir, { recursive: true, force: true });
   }
@@ -747,6 +827,12 @@ test("malformed imports fail preflight before authentication or upload", async (
   }
 });
 
+function propertiesInfo() {
+  return new TextEncoder().encode(
+    "#\nowner=\ncharset=UTF-16\ncreator=www.dunes.ch\nunicode=true\ntype=workflow\nversion=2.0\n",
+  );
+}
+
 function utf16LeWithBom(value) {
   return new Uint8Array([0xff, 0xfe, ...Buffer.from(value, "utf16le")]);
 }
@@ -773,18 +859,17 @@ function workflowArchiveWithFlow(outName) {
     "    <out-binding />",
     "    <script>System.log('one');</script>",
     "  </workflow-item>",
-    `  <workflow-item name="${outName}" type="task" end-mode="1">`,
+    `  <workflow-item name="${outName}" type="task" out-name="end0">`,
     "    <in-binding />",
     "    <out-binding />",
     "    <script>System.log('two');</script>",
     "  </workflow-item>",
+    '  <workflow-item name="end0" type="end" end-mode="0" />',
     "</workflow>",
   ].join("\n");
   return zipSync({
-    "workflow-info": new TextEncoder().encode(
-      '<workflow-info id="workflow-1" name="Flow" />',
-    ),
-    "workflow-content": utf16LeWithBom(xml),
+    "workflow-info": propertiesInfo(),
+    "workflow-content": utf16BeWithBom(xml),
   });
 }
 

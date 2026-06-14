@@ -469,18 +469,14 @@ function inspectWorkflowArchiveFiles(
   if (!content) report.errors.push("Missing required workflow-content entry");
   if (!info || !content) return null;
 
-  const infoXml = decodeUtf8Xml(info, "workflow-info", report);
-  if (infoXml) {
-    const parsed = parseXml(infoXml, "workflow-info", report);
-    const workflowInfo = getObject(parsed, "workflow-info");
-    if (workflowInfo) {
-      copyMetadata(workflowInfo, report, ["id", "name", "version"]);
-    } else {
-      report.errors.push("workflow-info does not contain a workflow-info root");
-    }
-  }
+  validateWorkflowInfoProperties(info, report);
 
-  const contentXml = decodeUtf16XmlWithBom(content, "workflow-content", report);
+  const contentXml = decodeUtf16XmlWithBom(
+    content,
+    "workflow-content",
+    report,
+    "be",
+  );
   if (!contentXml) return null;
 
   const model = parseWorkflowContent(contentXml, report);
@@ -488,6 +484,49 @@ function inspectWorkflowArchiveFiles(
 
   validateWorkflowModel(model, report);
   return buildWorkflowInspection(model.root, report.metadata);
+}
+
+/**
+ * vRO writes `workflow-info` as a Java properties file (not XML). The workflow
+ * identity lives in `workflow-content`; this entry carries fixed container
+ * metadata. Reject the legacy XML shape that earlier scaffolds emitted.
+ */
+function validateWorkflowInfoProperties(
+  info: Uint8Array,
+  report: ArtifactPreflightReport,
+): void {
+  const text = decodeUtf8Text(info, "workflow-info", report);
+  if (text === null) return;
+  if (text.trimStart().startsWith("<")) {
+    report.errors.push(
+      "workflow-info must be a Java properties file (type=workflow, charset, unicode, creator), not XML",
+    );
+    return;
+  }
+  const properties = parseJavaProperties(text);
+  if (properties["type"] !== "workflow") {
+    report.errors.push('workflow-info must declare type=workflow');
+  }
+  for (const key of ["charset", "unicode", "creator"]) {
+    if (!(key in properties)) {
+      report.errors.push(`workflow-info is missing required property ${key}`);
+    }
+  }
+}
+
+/** Minimal Java .properties reader: ignores blank/`#`/`!` comment lines. */
+function parseJavaProperties(text: string): Record<string, string> {
+  const properties: Record<string, string> = {};
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (line === "" || line.startsWith("#") || line.startsWith("!")) continue;
+    const separator = line.search(/[=:]/);
+    if (separator === -1) continue;
+    const key = line.slice(0, separator).trim();
+    const value = line.slice(separator + 1).trim();
+    if (key) properties[key] = value;
+  }
+  return properties;
 }
 
 function validateGenericXmlArchive(
@@ -770,6 +809,10 @@ function parseWorkflowContent(
     "root-name",
     "object-name",
   ]);
+  // The human-readable name lives in workflow-content (workflow-info is now a
+  // fixed properties file), so surface it on the report for consumers.
+  const displayName = textValue(root["display-name"]).trim();
+  if (displayName) report.metadata["display-name"] = displayName;
 
   return { root };
 }
@@ -825,6 +868,8 @@ function validateWorkflowModel(
     report.errors.push(`Workflow root-name references unknown item ${rootName}`);
   }
 
+  validateWorkflowTermination(items, report);
+
   const nativeActionItems: string[] = [];
   for (const item of items) {
     validateWorkflowItemFlow(item, itemNames, report);
@@ -865,6 +910,32 @@ function validateWorkflowModel(
   }
   if (nativeActionItems.length > 0) {
     report.metadata["native-action-items"] = nativeActionItems.join("; ");
+  }
+}
+
+/**
+ * vRO terminates a workflow with an explicit `<workflow-item type="end">`
+ * item. The legacy scaffold instead set `end-mode="1"` on the final task,
+ * which live import rejects. Require the explicit end item and flag the
+ * legacy pattern.
+ */
+function validateWorkflowTermination(
+  items: XmlObject[],
+  report: ArtifactPreflightReport,
+): void {
+  const hasEndItem = items.some((item) => stringValue(item.type) === "end");
+  if (!hasEndItem) {
+    report.errors.push(
+      'workflow-content has no terminal item; expected an explicit <workflow-item type="end" end-mode="0">',
+    );
+  }
+  for (const item of items) {
+    if (stringValue(item.type) === "task" && item["end-mode"] !== undefined) {
+      const itemName = stringValue(item.name) || "(unnamed)";
+      report.errors.push(
+        `Task ${itemName} uses the unsupported end-mode attribute; chain it via out-name to an explicit type="end" item instead`,
+      );
+    }
   }
 }
 
@@ -1182,7 +1253,7 @@ function getScriptText(item: XmlObject): string {
   return "";
 }
 
-function decodeUtf8Xml(
+function decodeUtf8Text(
   content: Uint8Array,
   entryName: string,
   report: ArtifactPreflightReport,
@@ -1190,7 +1261,7 @@ function decodeUtf8Xml(
   try {
     return new TextDecoder("utf-8", { fatal: true }).decode(content);
   } catch (error) {
-    report.errors.push(`${entryName} is not valid UTF-8 XML: ${errorMessage(error)}`);
+    report.errors.push(`${entryName} is not valid UTF-8: ${errorMessage(error)}`);
     return null;
   }
 }
@@ -1199,8 +1270,9 @@ function decodeUtf16XmlWithBom(
   content: Uint8Array,
   entryName: string,
   report: ArtifactPreflightReport,
+  expected: Utf16Endianness = "any",
 ): string | null {
-  return decodeUtf16TextWithBom(content, entryName, "XML", report);
+  return decodeUtf16TextWithBom(content, entryName, "XML", report, expected);
 }
 
 type Utf16Endianness = "le" | "be" | "any";

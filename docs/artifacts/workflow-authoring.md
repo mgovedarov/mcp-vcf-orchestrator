@@ -4,12 +4,13 @@ This page summarizes the repository's practical vRO workflow artifact knowledge.
 
 ## Workflow Artifact Format
 
-A `.workflow` file is a ZIP archive containing at least:
+A `.workflow` file is a ZIP archive containing:
 
-- `workflow-info`
+- `workflow-info` — a Java properties file (not XML) with fixed keys (`type=workflow`, `version=2.0`, `charset=UTF-16`, `unicode=true`, `creator=www.dunes.ch`, `owner=`).
 - `workflow-content`
+- `input_form_` — only when the workflow has UI-startable inputs.
 
-`workflow-content` is XML encoded as UTF-16 with a BOM. The XML root is a vRO workflow document with metadata such as `id`, `version`, and `api-version`.
+`workflow-content` is XML encoded as **UTF-16BE** with a big-endian BOM (`0xFE 0xFF`). The XML root is a vRO workflow document with metadata such as `id`, `version`, and `api-version`, plus `object-name="workflow:name=generic"` and `editor-version="2.0"`. Do **not** emit `allowed-operations` — it is the read-only marker on Library workflows and blocks the editor from opening an authored workflow. The workflow terminates in an explicit `<workflow-item type="end" end-mode="0">` chained from the last task's `out-name`.
 
 Workflow inputs live under `<input>` and outputs under `<output>`. Scriptable task logic lives in `<workflow-item type="task">` nodes.
 
@@ -83,7 +84,7 @@ Keep generated scripts readable because runtime errors often reference workflow 
 ## Common Pitfalls
 
 - `create-workflow` creates only an empty workflow shell; use `import-workflow-file` for real workflow content.
-- `.workflow` content must preserve UTF-16 encoding with BOM.
+- `.workflow` `workflow-content` must be UTF-16BE with a big-endian BOM, `workflow-info` must be the Java properties file, and the workflow must end in an explicit `<workflow-item type="end">`; otherwise live import fails with `400 "Not a valid workflow file"`.
 - Multipart imports break if `Content-Type` is set manually without the boundary.
 - Workflow execution is asynchronous; poll with `get-workflow-execution` or use `run-workflow-and-wait`.
 - Action imports use category/module name, while workflow and configuration imports use category IDs.
