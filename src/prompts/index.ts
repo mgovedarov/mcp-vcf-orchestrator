@@ -223,7 +223,7 @@ export function registerVcfaPrompts(server: McpServer): void {
           "Use list-actions with a focused filter, then get-action on the exact match (with includeScript set to true) to verify module, name, inputs, return type, and script behavior.",
           "Use list-categories for WorkflowCategory if the category is not already known.",
           ...discoveryGuardrails(),
-          "For a single-action wrapper, prefer a native vRO action workflow item in a horizontally arranged workflow. Use scaffold-workflow-file only when a scriptable task is appropriate, such as multiple action calls or additional orchestration logic. Publish reusable wrappers through the project package path.",
+          'For a single-action wrapper, scaffold a native vRO action workflow item: call scaffold-workflow-file with a task of kind "action", setting module, actionName, ordered inputs, and resultBinding from the discovered action contract, in a horizontally arranged workflow. Use kind "script" only when a scriptable task is appropriate, such as multiple action calls or additional orchestration logic. Publish reusable wrappers through the project package path.',
         ]),
       ),
   );

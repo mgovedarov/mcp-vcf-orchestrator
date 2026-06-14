@@ -10,13 +10,18 @@ import type {
 const DEFAULT_WORKFLOW_VERSION = "1.0.0";
 const DEFAULT_WORKFLOW_API_VERSION = "6.0.0";
 const IDENTIFIER_PATTERN = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+/** Dotted module name, e.g. com.example.actions; each segment is an identifier. */
+const MODULE_NAME_PATTERN = /^[A-Za-z_$][A-Za-z0-9_$]*(\.[A-Za-z_$][A-Za-z0-9_$]*)*$/;
 
 interface NormalizedWorkflowArtifactTask extends WorkflowArtifactTask {
   name: string;
   displayName: string;
   description: string;
+  script: string;
   inBindings: WorkflowArtifactBinding[];
   outBindings: WorkflowArtifactBinding[];
+  /** `<module>/<actionName>` for native action items; empty for scriptable tasks. */
+  scriptModule: string;
 }
 
 interface NormalizedSpec {
@@ -123,6 +128,20 @@ export function normalizeWorkflowArtifactSpec(
     }
     taskNames.add(taskName);
 
+    const normalizedCore = {
+      name: taskName,
+      displayName: nonEmpty(task.displayName) ?? taskName,
+      description: task.description ?? "",
+    };
+
+    if ((task.kind ?? "script") === "action") {
+      return normalizeActionTask(task, normalizedCore, {
+        inputOrAttributeTypes,
+        outputOrAttributeTypes,
+        errors,
+      });
+    }
+
     const script = task.script ?? "";
     if (!nonEmpty(script)) {
       errors.push(`Task ${taskName} script is required`);
@@ -145,12 +164,11 @@ export function normalizeWorkflowArtifactSpec(
 
     return {
       ...task,
-      name: taskName,
-      displayName: nonEmpty(task.displayName) ?? taskName,
-      description: task.description ?? "",
+      ...normalizedCore,
       script,
       inBindings,
       outBindings,
+      scriptModule: "",
     };
   });
 
@@ -256,6 +274,78 @@ function normalizeBindings(
   });
 }
 
+function normalizeActionTask(
+  task: WorkflowArtifactTask,
+  core: { name: string; displayName: string; description: string },
+  ctx: {
+    inputOrAttributeTypes: Map<string, string>;
+    outputOrAttributeTypes: Map<string, string>;
+    errors: string[];
+  },
+): NormalizedWorkflowArtifactTask {
+  const { name: taskName } = core;
+  const { errors } = ctx;
+  const module = nonEmpty(task.module);
+  const actionName = nonEmpty(task.actionName);
+  if (!module) {
+    errors.push(`Action task ${taskName} is missing a module`);
+  } else if (!MODULE_NAME_PATTERN.test(module)) {
+    errors.push(
+      `Action task ${taskName} module "${module}" must be a dotted module name (e.g. com.example.actions)`,
+    );
+  }
+  if (!actionName) {
+    errors.push(`Action task ${taskName} is missing an actionName`);
+  } else if (!IDENTIFIER_PATTERN.test(actionName)) {
+    errors.push(
+      `Action task ${taskName} actionName "${actionName}" must be a valid script identifier`,
+    );
+  }
+
+  const actionInputs = task.inputs ?? [];
+  const inBindings = normalizeBindings(
+    actionInputs.map((input) => ({
+      name: input.name,
+      type: input.type,
+      source: input.source,
+    })),
+    "input",
+    taskName,
+    ctx.inputOrAttributeTypes,
+    errors,
+  );
+
+  const resultBinding = task.resultBinding;
+  const outBindings = resultBinding
+    ? normalizeBindings(
+        [
+          {
+            name: "actionResult",
+            type: resultBinding.type,
+            target: resultBinding.name,
+          },
+        ],
+        "output",
+        taskName,
+        ctx.outputOrAttributeTypes,
+        errors,
+      )
+    : [];
+
+  const callArgs = inBindings.map((binding) => binding.name).join(", ");
+  const invocation = `System.getModule("${module ?? ""}").${actionName ?? ""}(${callArgs});`;
+  const script = resultBinding ? `actionResult = ${invocation}` : invocation;
+
+  return {
+    ...task,
+    ...core,
+    script,
+    inBindings,
+    outBindings,
+    scriptModule: module && actionName ? `${module}/${actionName}` : "",
+  };
+}
+
 function validateUniqueNames(
   label: string,
   values: { name?: string }[],
@@ -332,8 +422,11 @@ function renderTask(
   const flowAttrs = nextTaskName
     ? ` out-name="${escapeXmlAttribute(nextTaskName)}"`
     : ' end-mode="1"';
+  const scriptModuleAttr = task.scriptModule
+    ? ` script-module="${escapeXmlAttribute(task.scriptModule)}"`
+    : "";
   return [
-    `  <workflow-item name="${escapeXmlAttribute(task.name)}" type="task"${flowAttrs}>`,
+    `  <workflow-item name="${escapeXmlAttribute(task.name)}" type="task"${scriptModuleAttr}${flowAttrs}>`,
     `    <display-name>${cdata(task.displayName)}</display-name>`,
     `    <description>${cdata(task.description)}</description>`,
     renderBindings("in-binding", task.inBindings, "source"),

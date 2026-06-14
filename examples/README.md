@@ -5,6 +5,7 @@ These examples are current, import-safe patterns for using the MCP tools. They a
 ## Example Set
 
 - [Workflow Artifact](./workflow-artifact.md): collect context, scaffold a workflow, preflight, import, and test it.
+- [Native Action Wrapper](./native-action-wrapper.md): discover an action, scaffold a native action workflow item, preflight, import, and run it.
 - [Project Package](./project-package.md): reuse one project package, add content, rebuild, export, and inspect before import.
 - [Artifact Promotion](./artifact-promotion.md): preflight, diff, optional backup, and import recommendation.
 - [Workflow Execution Logs](./workflow-execution-logs.md): show, filter, and export execution syslogs from workflow runs.
