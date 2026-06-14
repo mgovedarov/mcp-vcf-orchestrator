@@ -832,8 +832,9 @@ function validateWorkflowModel(
       const itemName = stringValue(item.name) || "(unnamed)";
       const scriptModule = stringValue(item["script-module"]);
       if (scriptModule) {
-        const [module, action] = scriptModule.split("/");
-        if (!module || !action || scriptModule.split("/").length !== 2) {
+        const parts = scriptModule.split("/");
+        const [module, action] = parts;
+        if (parts.length !== 2 || !module || !action) {
           report.errors.push(
             `Native action item ${itemName} has an invalid script-module "${scriptModule}"; expected "<module>/<actionName>"`,
           );

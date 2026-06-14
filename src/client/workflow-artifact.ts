@@ -10,6 +10,8 @@ import type {
 const DEFAULT_WORKFLOW_VERSION = "1.0.0";
 const DEFAULT_WORKFLOW_API_VERSION = "6.0.0";
 const IDENTIFIER_PATTERN = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+/** Dotted module name, e.g. com.example.actions; each segment is an identifier. */
+const MODULE_NAME_PATTERN = /^[A-Za-z_$][A-Za-z0-9_$]*(\.[A-Za-z_$][A-Za-z0-9_$]*)*$/;
 
 interface NormalizedWorkflowArtifactTask extends WorkflowArtifactTask {
   name: string;
@@ -287,9 +289,17 @@ function normalizeActionTask(
   const actionName = nonEmpty(task.actionName);
   if (!module) {
     errors.push(`Action task ${taskName} is missing a module`);
+  } else if (!MODULE_NAME_PATTERN.test(module)) {
+    errors.push(
+      `Action task ${taskName} module "${module}" must be a dotted module name (e.g. com.example.actions)`,
+    );
   }
   if (!actionName) {
     errors.push(`Action task ${taskName} is missing an actionName`);
+  } else if (!IDENTIFIER_PATTERN.test(actionName)) {
+    errors.push(
+      `Action task ${taskName} actionName "${actionName}" must be a valid script identifier`,
+    );
   }
 
   const actionInputs = task.inputs ?? [];

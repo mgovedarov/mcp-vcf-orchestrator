@@ -55,3 +55,9 @@ list-workflows(filter: "Echo Wrapper")
 get-workflow(id: "<workflow-id>")
 run-workflow-and-wait(id: "<workflow-id>", inputs: [{ name: "message", value: "hello" }], timeoutSeconds: 60, pollIntervalSeconds: 2, confirm: true)
 ```
+
+> **Note (VCFO-060):** the scaffolded `.workflow` container is not yet accepted by live vRO import
+> (differences in the `workflow-info` format, content encoding, and the lack of an explicit end item).
+> Until that is resolved, treat the `import-workflow-file` and `run-workflow-and-wait` steps above as the
+> intended end-to-end flow rather than a working loop: use `preflight-workflow-file` / `diff-workflow-file`
+> for local validation and publish reusable content through the project package path.

@@ -68,14 +68,14 @@ const WORKFLOW_SCAFFOLD_SCHEMA = {
           'Required vRO JavaScript scriptable task body for kind "script". Ignored for kind "action" (generated automatically).',
         inBindings: [
           {
-            name: "Script variable name.",
+            name: 'Script variable name. For kind "script" only; ignored for kind "action" (bindings derive from inputs).',
             type: "Must match the source input or attribute type.",
             source: "Workflow input or attribute name.",
           },
         ],
         outBindings: [
           {
-            name: "Script variable name.",
+            name: 'Script variable name. For kind "script" only; ignored for kind "action" (bindings derive from resultBinding).',
             type: "Must match the target output or attribute type.",
             target: "Workflow output or attribute name.",
           },

@@ -217,6 +217,25 @@ test("native action task requires module and actionName", () => {
   );
 });
 
+test("native action task rejects malformed module and actionName", () => {
+  assert.throws(
+    () =>
+      buildWorkflowContentXml({
+        name: "Bad action",
+        inputs: [],
+        outputs: [],
+        tasks: [
+          {
+            kind: "action",
+            module: "com.example.actions/echo",
+            actionName: "echo it",
+          },
+        ],
+      }),
+    /module "com.example.actions\/echo" must be a dotted module name[\s\S]*actionName "echo it" must be a valid script identifier/,
+  );
+});
+
 test("buildWorkflowInputFormJson maps common vRO input types", () => {
   const inputForm = JSON.parse(
     buildWorkflowInputFormJson({

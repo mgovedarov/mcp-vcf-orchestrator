@@ -1538,7 +1538,10 @@ export function registerWorkflowTools(
                         .describe("Workflow input or attribute name"),
                     }),
                   )
-                  .optional(),
+                  .optional()
+                  .describe(
+                    'Scriptable task in-bindings for kind "script". Ignored for kind "action" (bindings are derived from inputs).',
+                  ),
                 outBindings: z
                   .array(
                     z.object({
@@ -1549,7 +1552,10 @@ export function registerWorkflowTools(
                         .describe("Workflow output or attribute name"),
                     }),
                   )
-                  .optional(),
+                  .optional()
+                  .describe(
+                    'Scriptable task out-bindings for kind "script". Ignored for kind "action" (bindings are derived from resultBinding).',
+                  ),
                 module: z
                   .string()
                   .optional()
