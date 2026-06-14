@@ -231,7 +231,7 @@ npm test
 
 Before uploading local artifacts, run the matching preflight tool:
 
-- `preflight-workflow-file` checks `.workflow` ZIP structure, the `workflow-info` properties file, UTF-16BE `workflow-content`, an explicit `type="end"` terminal item, UTF-16BE `input_form_` JSON when present, parameters, bindings, task flow, vRO type syntax, action references, and local import path safety.
+- `preflight-workflow-file` checks `.workflow` ZIP structure, the `workflow-info` properties file, UTF-16BE `workflow-content`, an explicit `type="end"` terminal item, UTF-16BE `input_form_` JSON when present, parameters, bindings, task flow, vRO type syntax, action references, and local import path safety. It also emits **warnings** (non-blocking) for shapes that import and run but make the VCF 9.x editor fail to *open* the workflow: an `encoding="UTF-16"` XML declaration, `<param>` `<description>` children, missing/overlapping item `<position>`s, an end item without `<in-binding/>`, and tasks without a `<description>`.
 - `preflight-action-file` checks `.action` ZIP/path safety and parses recognizable XML metadata conservatively.
 - `preflight-configuration-file` checks `.vsoconf` ZIP/path safety and parses recognizable XML metadata conservatively.
 - `preflight-package` checks `.package`/`.zip` import safety, inspects nested `.workflow`, `.action`, and `.vsoconf` artifacts when they are present, and validates package element `input_form_` entries.

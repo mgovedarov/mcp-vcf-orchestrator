@@ -479,6 +479,17 @@ function inspectWorkflowArchiveFiles(
   );
   if (!contentXml) return null;
 
+  // Editor-compatibility: vRO writes encoding='UTF-8' (the BOM drives
+  // decoding). The VCF 9.x editor fails to OPEN a workflow whose declaration
+  // says encoding="UTF-16", even though import and execution still work.
+  if (/^\s*<\?xml[^>]*encoding\s*=\s*["']UTF-16["']/i.test(contentXml)) {
+    report.warnings.push(
+      'workflow-content XML declaration uses encoding="UTF-16"; vRO writes ' +
+        "encoding='UTF-8' (the UTF-16BE BOM drives decoding) and the VCF 9.x " +
+        "Orchestrate editor returns a 500 when opening a workflow that declares UTF-16",
+    );
+  }
+
   const model = parseWorkflowContent(contentXml, report);
   if (!model) return null;
 
@@ -910,6 +921,71 @@ function validateWorkflowModel(
   }
   if (nativeActionItems.length > 0) {
     report.metadata["native-action-items"] = nativeActionItems.join("; ");
+  }
+
+  warnEditorCompatibility(model.root, items, report);
+}
+
+/**
+ * Surfaces shapes that import and run but make vRO's VCF 9.x editor fail to
+ * OPEN the workflow (warnings, not errors — they don't block import/run).
+ */
+function warnEditorCompatibility(
+  root: XmlObject,
+  items: XmlObject[],
+  report: ArtifactPreflightReport,
+): void {
+  // Parameters should be bare <param/>; a <description> child combined with the
+  // workflow-level <description> makes the editor fail to open the workflow.
+  for (const section of ["input", "output"] as const) {
+    for (const param of collectWorkflowParamNodes(root, section)) {
+      if (param.description !== undefined) {
+        report.warnings.push(
+          `${section} parameter ${stringValue(param.name) || "(unnamed)"} has a <description> child; vRO emits bare <param/> elements (descriptions belong in <presentation>/input_form_) and the editor can fail to open the workflow`,
+        );
+      }
+    }
+  }
+
+  // Every item needs a distinct <position>; missing/overlapping positions
+  // (all at 0,0) break the editor's schema view.
+  const coords: string[] = [];
+  const rootPosition = getObject(root, "position");
+  if (rootPosition) {
+    coords.push(`${stringValue(rootPosition.x)},${stringValue(rootPosition.y)}`);
+  }
+  for (const item of items) {
+    const name = stringValue(item.name) || "(unnamed)";
+    const position = getObject(item, "position");
+    if (!position) {
+      report.warnings.push(
+        `Workflow item ${name} has no <position>; items without positions overlap at 0,0 and break the editor schema view`,
+      );
+    } else {
+      coords.push(`${stringValue(position.x)},${stringValue(position.y)}`);
+    }
+  }
+  if (coords.length > 1 && new Set(coords).size === 1) {
+    report.warnings.push(
+      "All workflow items share the same <position>; give each item distinct coordinates or the editor schema view breaks",
+    );
+  }
+
+  for (const item of items) {
+    const name = stringValue(item.name) || "(unnamed)";
+    const type = stringValue(item.type);
+    // vRO's editor expects an (empty) in-binding on the terminal item.
+    if (type === "end" && item["in-binding"] === undefined) {
+      report.warnings.push(
+        `End item ${name} is missing an <in-binding/>; vRO's editor expects one on the terminal item`,
+      );
+    }
+    // vRO drops empty task descriptions on import; the editor then fails to open.
+    if (type === "task" && !textValue(item.description).trim()) {
+      report.warnings.push(
+        `Task ${name} has no <description>; vRO drops empty descriptions and the editor can fail to open the workflow`,
+      );
+    }
   }
 }
 

@@ -431,6 +431,48 @@ test("preflightWorkflowFile accepts vRO attribute and Any binding shapes", async
   }
 });
 
+test("preflightWorkflowFile warns about editor-incompatible shapes that still import", async () => {
+  const workflowDir = await mkdtemp(join(tmpdir(), "vcfa-preflight-"));
+  // Imports and runs, but the VCF 9.x editor would 500 on opening it:
+  // encoding="UTF-16" declaration, a <param> description child, no item
+  // positions, an empty task description, and an end item with no in-binding.
+  const xml = [
+    '<?xml version="1.0" encoding="UTF-16"?>',
+    '<workflow xmlns="http://vmware.com/vco/workflow" root-name="step" object-name="workflow:name=generic" id="wf-warn-1" version="1.0.0" api-version="6.0.0">',
+    "  <display-name><![CDATA[Warn WF]]></display-name>",
+    '  <input><param name="message" type="string"><description><![CDATA[Msg]]></description></param></input>',
+    '  <output><param name="result" type="string" /></output>',
+    '  <workflow-item name="step" type="task" out-name="end0">',
+    '    <in-binding><bind name="message" type="string" export-name="message" /></in-binding>',
+    '    <out-binding><bind name="result" type="string" export-name="result" /></out-binding>',
+    "    <script>result = message;</script>",
+    "  </workflow-item>",
+    '  <workflow-item name="end0" type="end" end-mode="0" />',
+    "</workflow>",
+  ].join("\n");
+  await writeFile(
+    join(workflowDir, "warn.workflow"),
+    zipSync({
+      "workflow-info": propertiesInfo(),
+      "workflow-content": utf16BeWithBom(xml),
+    }),
+  );
+
+  try {
+    const report = await preflightWorkflowFile(workflowDir, "warn.workflow");
+    // Editor-incompatibility is advisory: import/run still work, so it stays valid.
+    assert.equal(report.valid, true);
+    const warnings = report.warnings.join("\n");
+    assert.match(warnings, /declaration uses encoding="UTF-16"/);
+    assert.match(warnings, /input parameter message has a <description> child/);
+    assert.match(warnings, /item step has no <position>/);
+    assert.match(warnings, /End item end0 is missing an <in-binding\/>/);
+    assert.match(warnings, /Task step has no <description>/);
+  } finally {
+    await rm(workflowDir, { recursive: true, force: true });
+  }
+});
+
 test("preflightWorkflowFile rejects unsafe file and archive paths", async () => {
   const workflowDir = await mkdtemp(join(tmpdir(), "vcfa-preflight-"));
   const outsideFile = join(tmpdir(), `outside-${Date.now()}.workflow`);
