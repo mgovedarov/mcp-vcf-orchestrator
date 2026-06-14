@@ -79,7 +79,11 @@ test("buildWorkflowContent creates UTF-16BE workflow XML with metadata and bindi
   );
   assert.match(xml, /<param name="projectName" type="string">/);
   assert.match(xml, /<param name="vmCount" type="number">/);
-  assert.match(xml, /<param name="runningTotal" type="number" scope="local">/);
+  assert.match(
+    xml,
+    /<attrib name="runningTotal" type="number" read-only="false">/,
+  );
+  assert.match(xml, /<value encoded="n"><!\[CDATA\[__NULL__\]\]><\/value>/);
   assert.match(
     xml,
     /<workflow-item name="item1" type="task" out-name="finish">/,

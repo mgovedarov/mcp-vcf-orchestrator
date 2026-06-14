@@ -380,7 +380,7 @@ function renderWorkflowContentXml(spec: NormalizedSpec): string {
   const rootTaskName = spec.tasks[0]?.name ?? "item1";
   const taskNames = new Set(spec.tasks.map((task) => task.name));
   const endItemName = uniqueEndItemName(taskNames);
-  return [
+  const lines = [
     '<?xml version="1.0" encoding="UTF-16"?>',
     `<workflow xmlns="http://vmware.com/vco/workflow" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://vmware.com/vco/workflow http://vmware.com/vco/workflow/Workflow-v4.xsd" root-name="${escapeXmlAttribute(rootTaskName)}" object-name="workflow:name=generic" id="${escapeXmlAttribute(spec.id)}" version="${escapeXmlAttribute(spec.version)}" api-version="${escapeXmlAttribute(spec.apiVersion)}" editor-version="2.0" restartMode="1" resumeFromFailedMode="0">`,
     `  <display-name>${cdata(spec.name)}</display-name>`,
@@ -395,8 +395,8 @@ function renderWorkflowContentXml(spec: NormalizedSpec): string {
     renderPresentation(spec.inputs),
     "  <workflow-note />",
     "</workflow>",
-    "",
-  ].join("\n");
+  ].filter((line) => line !== "");
+  return `${lines.join("\n")}\n`;
 }
 
 /** Picks an end-item name that does not collide with any task name. */
@@ -437,18 +437,19 @@ function renderParameterSection(
 }
 
 function renderAttributes(attributes: WorkflowArtifactParameter[]): string {
-  if (attributes.length === 0) {
-    return "  <attrib />";
-  }
-
-  return [
-    "  <attrib>",
-    ...attributes.map(
-      (attribute) =>
-        `    <param name="${escapeXmlAttribute(attribute.name)}" type="${escapeXmlAttribute(attribute.type)}" scope="local"><description>${cdata(attribute.description ?? "")}</description></param>`,
-    ),
-    "  </attrib>",
-  ].join("\n");
+  // vRO exports each attribute as a top-level <attrib name type read-only>
+  // element with a <value> and <description>, not a <param> wrapped in
+  // <attrib>. Omit the section entirely when there are no attributes.
+  return attributes
+    .map((attribute) =>
+      [
+        `  <attrib name="${escapeXmlAttribute(attribute.name)}" type="${escapeXmlAttribute(attribute.type)}" read-only="false">`,
+        `    <value encoded="n">${cdata("__NULL__")}</value>`,
+        `    <description>${cdata(attribute.description ?? "")}</description>`,
+        "  </attrib>",
+      ].join("\n"),
+    )
+    .join("\n");
 }
 
 function renderTask(

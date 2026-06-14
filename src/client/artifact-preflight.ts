@@ -994,7 +994,14 @@ function validateBindings(
       report.errors.push(
         `${itemName} ${elementName} bind ${bindingName || "(unnamed)"} references unknown ${referenceLabel} ${exportName}`,
       );
-    } else if (bindingType && declaredType !== bindingType) {
+    } else if (
+      bindingType &&
+      declaredType !== bindingType &&
+      // vRO's generic actions return/accept `Any`, which is compatible with
+      // any concrete parameter type, so it is not a mismatch.
+      bindingType !== "Any" &&
+      declaredType !== "Any"
+    ) {
       report.errors.push(
         `${itemName} ${elementName} bind ${bindingName || "(unnamed)"} type ${bindingType} does not match ${exportName} type ${declaredType}`,
       );
@@ -1002,31 +1009,45 @@ function validateBindings(
   }
 }
 
+/**
+ * Returns the raw parameter nodes for a workflow section. Inputs and outputs
+ * wrap `<param>` children under `<input>`/`<output>`. Attributes have two
+ * shapes: vRO exports use repeated top-level `<attrib name type>` elements,
+ * while the scaffold historically wrapped a `<param>` inside `<attrib>`.
+ */
+function collectWorkflowParamNodes(
+  root: XmlObject,
+  sectionName: "input" | "output" | "attrib",
+): XmlObject[] {
+  if (sectionName === "attrib") {
+    const direct = asArray(root.attrib)
+      .filter(isObject)
+      .filter((node) => node.name !== undefined);
+    if (direct.length > 0) return direct;
+  }
+  const section = getObject(root, sectionName);
+  if (!section) return [];
+  return asArray(section.param).filter(isObject);
+}
+
 function collectWorkflowParams(
   root: XmlObject,
   sectionName: "input" | "output" | "attrib",
 ): ArtifactPreflightParameter[] {
-  const section = getObject(root, sectionName);
-  if (!section) return [];
-  return asArray(section.param)
-    .filter(isObject)
-    .map((param) => ({
-      name: stringValue(param.name),
-      type: stringValue(param.type),
-      scope: sectionName === "attrib" ? "attribute" : sectionName,
-    }));
+  return collectWorkflowParamNodes(root, sectionName).map((param) => ({
+    name: stringValue(param.name),
+    type: stringValue(param.type),
+    scope: sectionName === "attrib" ? "attribute" : sectionName,
+  }));
 }
 
 function collectWorkflowInspectionParams(
   root: XmlObject,
   sectionName: "input" | "output" | "attrib",
 ): WorkflowArtifactInspectionParameter[] {
-  const section = getObject(root, sectionName);
-  if (!section) return [];
   const scope: WorkflowArtifactInspectionParameter["scope"] =
     sectionName === "attrib" ? "attribute" : sectionName;
-  return asArray(section.param)
-    .filter(isObject)
+  return collectWorkflowParamNodes(root, sectionName)
     .map((param) => ({
       name: stringValue(param.name),
       type: stringValue(param.type),

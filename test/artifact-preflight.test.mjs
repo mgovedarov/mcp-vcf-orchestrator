@@ -376,6 +376,61 @@ test("preflightWorkflowFile accepts a real-export-shaped workflow container", as
   }
 });
 
+test("preflightWorkflowFile accepts vRO attribute and Any binding shapes", async () => {
+  const workflowDir = await mkdtemp(join(tmpdir(), "vcfa-preflight-"));
+  // Mirrors the createSnapshot reference export: attributes as repeated
+  // top-level <attrib name type> elements (referenced by item bindings), and a
+  // generic action returning type="Any" bound to a concretely typed output.
+  const exportXml = [
+    '<?xml version="1.0" encoding="UTF-16"?>',
+    '<workflow xmlns="http://vmware.com/vco/workflow" root-name="item0" object-name="Workflow:name=generic" id="wf-attr-1" version="1.0.0" api-version="6.0.0" allowed-operations="vf">',
+    "  <display-name><![CDATA[Attr Export Shaped]]></display-name>",
+    '  <input><param name="vm" type="VC:VirtualMachine" /></input>',
+    '  <output><param name="snapshot" type="VC:VirtualMachineSnapshot" /></output>',
+    '  <attrib name="task" type="VC:Task" read-only="false"><value encoded="n"><![CDATA[__NULL__]]></value></attrib>',
+    '  <attrib name="progress" type="boolean" read-only="false"><value encoded="n"><![CDATA[false]]></value></attrib>',
+    '  <workflow-item name="item0" out-name="item1" type="task" script-module="com.vmware.library.vc.vm.snapshot/createSnapshot">',
+    '    <in-binding><bind name="vm" type="VC:VirtualMachine" export-name="vm" /></in-binding>',
+    '    <out-binding><bind name="actionResult" type="VC:Task" export-name="task" /></out-binding>',
+    "    <script>actionResult = System.getModule(&quot;com.vmware.library.vc.vm.snapshot&quot;).createSnapshot(vm);</script>",
+    "  </workflow-item>",
+    '  <workflow-item name="item1" out-name="end0" type="task" script-module="com.vmware.library.vc.basic/vim3WaitTaskEnd">',
+    "    <in-binding>",
+    '      <bind name="task" type="VC:Task" export-name="task" />',
+    '      <bind name="progress" type="boolean" export-name="progress" />',
+    "    </in-binding>",
+    '    <out-binding><bind name="actionResult" type="Any" export-name="snapshot" /></out-binding>',
+    "    <script>actionResult = System.getModule(&quot;com.vmware.library.vc.basic&quot;).vim3WaitTaskEnd(task,progress);</script>",
+    "  </workflow-item>",
+    '  <workflow-item name="end0" type="end" end-mode="0" />',
+    "</workflow>",
+  ].join("\n");
+  await writeFile(
+    join(workflowDir, "attr-export.workflow"),
+    zipSync({
+      "workflow-info": propertiesInfo(),
+      "workflow-content": utf16BeWithBom(exportXml),
+    }),
+  );
+
+  try {
+    const report = await preflightWorkflowFile(
+      workflowDir,
+      "attr-export.workflow",
+    );
+    assert.equal(report.errors.join("\n"), "");
+    assert.equal(report.valid, true);
+    // Attributes parsed from the repeated <attrib> shape are reported.
+    const attrs = report.parameters
+      .filter((p) => p.scope === "attribute")
+      .map((p) => p.name)
+      .sort();
+    assert.deepEqual(attrs, ["progress", "task"]);
+  } finally {
+    await rm(workflowDir, { recursive: true, force: true });
+  }
+});
+
 test("preflightWorkflowFile rejects unsafe file and archive paths", async () => {
   const workflowDir = await mkdtemp(join(tmpdir(), "vcfa-preflight-"));
   const outsideFile = join(tmpdir(), `outside-${Date.now()}.workflow`);
