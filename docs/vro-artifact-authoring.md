@@ -5,17 +5,20 @@ These notes capture the practical details learned while adding workflow artifact
 ## Workflow Artifact Format
 
 - A `.workflow` file is a ZIP archive.
-- The archive contains at least:
-  - `workflow-info`
-  - `workflow-content`
-  - `input_form_` for generated artifacts with UI-startable inputs
-- `workflow-content` is XML encoded as UTF-16 with a BOM.
-- `input_form_` is JSON encoded as UTF-16BE with a BOM.
+- The archive contains:
+  - `workflow-info` — a Java **properties** file (not XML). vRO writes the fixed keys `type=workflow`, `version=2.0`, `charset=UTF-16`, `unicode=true`, `creator=www.dunes.ch`, and `owner=`. The workflow's own id/name/version live in `workflow-content`, **not** here.
+  - `workflow-content` — the workflow XML.
+  - `input_form_` — only present when the workflow exposes inputs (UI-startable). Inputless workflows omit it and rely on the in-workflow `<presentation>`.
+- `workflow-content` is XML encoded as **UTF-16BE** with a big-endian BOM (`0xFE 0xFF`). A little-endian BOM (`0xFF 0xFE`) is rejected by live import.
+- The `workflow-content` XML **declaration must be `<?xml version='1.0' encoding='UTF-8'?>`** (single quotes, `UTF-8`) — exactly what vRO writes, even though the bytes are UTF-16BE (the BOM drives decoding). The VCF 9.x Orchestrate **editor returns a 500 when opening** a workflow whose declaration says `encoding="UTF-16"`, even though import and execution succeed.
+- `input_form_` is JSON encoded as UTF-16BE with a BOM. It holds both the `layout` (form) and the `schema`; the schema mirrors the workflow inputs, so keep them in sync (the builder generates the schema from the inputs).
 - The XML root looks like:
-  - `<workflow xmlns="http://vmware.com/vco/workflow" ... id="..." version="..." api-version="6.0.0">`
-- User-facing inputs live under `<input>`.
-- Workflow outputs live under `<output>`.
-- Scriptable tasks are `<workflow-item type="task">` nodes with a `<script encoded="false"><![CDATA[...]]></script>` body.
+  - `<workflow xmlns="http://vmware.com/vco/workflow" ... root-name="..." object-name="workflow:name=generic" id="..." version="..." api-version="6.0.0" editor-version="2.0" ...>`
+  - Use `editor-version="2.0"` and do **not** emit `allowed-operations` on authored workflows. The value `allowed-operations="vf"` is vRO's read-only marker for locked Library workflows; emitting it makes the Orchestrate editor treat the workflow as locked, so it shows *Details* instead of *Open* and returns a 500 when opened. Set `object-name` to lowercase `workflow:name=generic`; vRO normalizes it on export.
+- User-facing inputs/outputs are **bare** `<param name="..." type="..."/>` elements (no `<description>` child — descriptions belong in `<presentation>`/`input_form_`; a `<param>` description combined with the workflow `<description>` breaks the editor). Inputs live under `<input>`, outputs under `<output>`.
+- Scriptable tasks are `<workflow-item type="task">` nodes with a non-empty `<description>` and a `<script encoded="false"><![CDATA[...]]></script>` body.
+- Every item — the start node, each task, and the end item — needs a **distinct `<position>`**. If items overlap (all at `0,0`, which happens when positions are omitted) the editor's schema renderer fails. Lay them out left-to-right with increasing `x`.
+- Flow is chained via `out-name`: each task points to the next item, and the final task points to an explicit terminal item `<workflow-item name="..." type="end" end-mode="0">` that carries an empty `<in-binding/>`. Do **not** put `end-mode="1"` on a task — live import rejects scaffolds that lack an explicit `type="end"` item.
 - Prefer native vRO action workflow items when a workflow step only executes one existing action. Avoid wrapping a single action in a scriptable task that only calls `System.getModule(...)`.
 - Use scriptable tasks when the item performs multiple action calls or additional orchestration logic such as validation, branching, input shaping, or result aggregation.
 - Prefer horizontal workflow layouts: arrange sequential items left-to-right with increasing `x` positions and stable `y` positions unless a branch needs vertical separation.
@@ -228,7 +231,7 @@ npm test
 
 Before uploading local artifacts, run the matching preflight tool:
 
-- `preflight-workflow-file` checks `.workflow` ZIP structure, `workflow-info`, UTF-16 `workflow-content`, UTF-16BE `input_form_` JSON when present, parameters, bindings, task flow, vRO type syntax, action references, and local import path safety.
+- `preflight-workflow-file` checks `.workflow` ZIP structure, the `workflow-info` properties file, UTF-16BE `workflow-content`, an explicit `type="end"` terminal item, UTF-16BE `input_form_` JSON when present, parameters, bindings, task flow, vRO type syntax, action references, and local import path safety. It also emits **warnings** (non-blocking) for shapes that import and run but make the VCF 9.x editor fail to *open* the workflow: an `encoding="UTF-16"` XML declaration, `<param>` `<description>` children, missing/overlapping item `<position>`s, an end item without `<in-binding/>`, and tasks without a `<description>`.
 - `preflight-action-file` checks `.action` ZIP/path safety and parses recognizable XML metadata conservatively.
 - `preflight-configuration-file` checks `.vsoconf` ZIP/path safety and parses recognizable XML metadata conservatively.
 - `preflight-package` checks `.package`/`.zip` import safety, inspects nested `.workflow`, `.action`, and `.vsoconf` artifacts when they are present, and validates package element `input_form_` entries.
@@ -253,7 +256,7 @@ Workflow files are read from the `workflows` subdirectory of `VCFA_ARTIFACT_DIR`
 - Avoid vertical-only layouts for simple linear workflows; horizontal layouts are easier to scan and match project conventions.
 - Do not omit `input_form_` for workflows with user inputs that should be started from the vRO UI.
 - Do not add `title` to input form sections or unverified properties like `size` to fields; vRO can reject the start page with schema validation errors.
-- `.workflow` content must preserve UTF-16 encoding with BOM.
+- `.workflow` `workflow-content` must be UTF-16BE with a big-endian BOM, `workflow-info` must be the Java properties file (not XML), and the workflow must terminate in an explicit `<workflow-item type="end">`; live import rejects any of these defects with `400 "Not a valid workflow file"`.
 - Multipart imports break if `Content-Type` is set manually without the boundary.
 - `VRA:Machine` inventory and VCFA deployments are not always a one-to-one match.
 - Workflow execution starts asynchronously; always poll `get-workflow-execution`.

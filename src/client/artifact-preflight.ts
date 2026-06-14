@@ -469,25 +469,75 @@ function inspectWorkflowArchiveFiles(
   if (!content) report.errors.push("Missing required workflow-content entry");
   if (!info || !content) return null;
 
-  const infoXml = decodeUtf8Xml(info, "workflow-info", report);
-  if (infoXml) {
-    const parsed = parseXml(infoXml, "workflow-info", report);
-    const workflowInfo = getObject(parsed, "workflow-info");
-    if (workflowInfo) {
-      copyMetadata(workflowInfo, report, ["id", "name", "version"]);
-    } else {
-      report.errors.push("workflow-info does not contain a workflow-info root");
-    }
-  }
+  validateWorkflowInfoProperties(info, report);
 
-  const contentXml = decodeUtf16XmlWithBom(content, "workflow-content", report);
+  const contentXml = decodeUtf16XmlWithBom(
+    content,
+    "workflow-content",
+    report,
+    "be",
+  );
   if (!contentXml) return null;
+
+  // Editor-compatibility: vRO writes encoding='UTF-8' (the BOM drives
+  // decoding). The VCF 9.x editor fails to OPEN a workflow whose declaration
+  // says encoding="UTF-16", even though import and execution still work.
+  if (/^\s*<\?xml[^>]*encoding\s*=\s*["']UTF-16["']/i.test(contentXml)) {
+    report.warnings.push(
+      'workflow-content XML declaration uses encoding="UTF-16"; vRO writes ' +
+        "encoding='UTF-8' (the UTF-16BE BOM drives decoding) and the VCF 9.x " +
+        "Orchestrate editor returns a 500 when opening a workflow that declares UTF-16",
+    );
+  }
 
   const model = parseWorkflowContent(contentXml, report);
   if (!model) return null;
 
   validateWorkflowModel(model, report);
   return buildWorkflowInspection(model.root, report.metadata);
+}
+
+/**
+ * vRO writes `workflow-info` as a Java properties file (not XML). The workflow
+ * identity lives in `workflow-content`; this entry carries fixed container
+ * metadata. Reject the legacy XML shape that earlier scaffolds emitted.
+ */
+function validateWorkflowInfoProperties(
+  info: Uint8Array,
+  report: ArtifactPreflightReport,
+): void {
+  const text = decodeUtf8Text(info, "workflow-info", report);
+  if (text === null) return;
+  if (text.trimStart().startsWith("<")) {
+    report.errors.push(
+      "workflow-info must be a Java properties file (type=workflow, charset, unicode, creator), not XML",
+    );
+    return;
+  }
+  const properties = parseJavaProperties(text);
+  if (properties["type"] !== "workflow") {
+    report.errors.push('workflow-info must declare type=workflow');
+  }
+  for (const key of ["charset", "unicode", "creator"]) {
+    if (!(key in properties)) {
+      report.errors.push(`workflow-info is missing required property ${key}`);
+    }
+  }
+}
+
+/** Minimal Java .properties reader: ignores blank/`#`/`!` comment lines. */
+function parseJavaProperties(text: string): Record<string, string> {
+  const properties: Record<string, string> = {};
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (line === "" || line.startsWith("#") || line.startsWith("!")) continue;
+    const separator = line.search(/[=:]/);
+    if (separator === -1) continue;
+    const key = line.slice(0, separator).trim();
+    const value = line.slice(separator + 1).trim();
+    if (key) properties[key] = value;
+  }
+  return properties;
 }
 
 function validateGenericXmlArchive(
@@ -770,6 +820,10 @@ function parseWorkflowContent(
     "root-name",
     "object-name",
   ]);
+  // The human-readable name lives in workflow-content (workflow-info is now a
+  // fixed properties file), so surface it on the report for consumers.
+  const displayName = textValue(root["display-name"]).trim();
+  if (displayName) report.metadata["display-name"] = displayName;
 
   return { root };
 }
@@ -825,6 +879,8 @@ function validateWorkflowModel(
     report.errors.push(`Workflow root-name references unknown item ${rootName}`);
   }
 
+  validateWorkflowTermination(items, report);
+
   const nativeActionItems: string[] = [];
   for (const item of items) {
     validateWorkflowItemFlow(item, itemNames, report);
@@ -865,6 +921,97 @@ function validateWorkflowModel(
   }
   if (nativeActionItems.length > 0) {
     report.metadata["native-action-items"] = nativeActionItems.join("; ");
+  }
+
+  warnEditorCompatibility(model.root, items, report);
+}
+
+/**
+ * Surfaces shapes that import and run but make vRO's VCF 9.x editor fail to
+ * OPEN the workflow (warnings, not errors — they don't block import/run).
+ */
+function warnEditorCompatibility(
+  root: XmlObject,
+  items: XmlObject[],
+  report: ArtifactPreflightReport,
+): void {
+  // Parameters should be bare <param/>; a <description> child combined with the
+  // workflow-level <description> makes the editor fail to open the workflow.
+  for (const section of ["input", "output"] as const) {
+    for (const param of collectWorkflowParamNodes(root, section)) {
+      if (param.description !== undefined) {
+        report.warnings.push(
+          `${section} parameter ${stringValue(param.name) || "(unnamed)"} has a <description> child; vRO emits bare <param/> elements (descriptions belong in <presentation>/input_form_) and the editor can fail to open the workflow`,
+        );
+      }
+    }
+  }
+
+  // Every item needs a distinct <position>; missing/overlapping positions
+  // (all at 0,0) break the editor's schema view.
+  const coords: string[] = [];
+  const rootPosition = getObject(root, "position");
+  if (rootPosition) {
+    coords.push(`${stringValue(rootPosition.x)},${stringValue(rootPosition.y)}`);
+  }
+  for (const item of items) {
+    const name = stringValue(item.name) || "(unnamed)";
+    const position = getObject(item, "position");
+    if (!position) {
+      report.warnings.push(
+        `Workflow item ${name} has no <position>; items without positions overlap at 0,0 and break the editor schema view`,
+      );
+    } else {
+      coords.push(`${stringValue(position.x)},${stringValue(position.y)}`);
+    }
+  }
+  if (coords.length > 1 && new Set(coords).size === 1) {
+    report.warnings.push(
+      "All workflow items share the same <position>; give each item distinct coordinates or the editor schema view breaks",
+    );
+  }
+
+  for (const item of items) {
+    const name = stringValue(item.name) || "(unnamed)";
+    const type = stringValue(item.type);
+    // vRO's editor expects an (empty) in-binding on the terminal item.
+    if (type === "end" && item["in-binding"] === undefined) {
+      report.warnings.push(
+        `End item ${name} is missing an <in-binding/>; vRO's editor expects one on the terminal item`,
+      );
+    }
+    // vRO drops empty task descriptions on import; the editor then fails to open.
+    if (type === "task" && !textValue(item.description).trim()) {
+      report.warnings.push(
+        `Task ${name} has no <description>; vRO drops empty descriptions and the editor can fail to open the workflow`,
+      );
+    }
+  }
+}
+
+/**
+ * vRO terminates a workflow with an explicit `<workflow-item type="end">`
+ * item. The legacy scaffold instead set `end-mode="1"` on the final task,
+ * which live import rejects. Require the explicit end item and flag the
+ * legacy pattern.
+ */
+function validateWorkflowTermination(
+  items: XmlObject[],
+  report: ArtifactPreflightReport,
+): void {
+  const hasEndItem = items.some((item) => stringValue(item.type) === "end");
+  if (!hasEndItem) {
+    report.errors.push(
+      'workflow-content has no terminal item; expected an explicit <workflow-item type="end" end-mode="0">',
+    );
+  }
+  for (const item of items) {
+    if (stringValue(item.type) === "task" && item["end-mode"] !== undefined) {
+      const itemName = stringValue(item.name) || "(unnamed)";
+      report.errors.push(
+        `Task ${itemName} uses the unsupported end-mode attribute; chain it via out-name to an explicit type="end" item instead`,
+      );
+    }
   }
 }
 
@@ -923,7 +1070,14 @@ function validateBindings(
       report.errors.push(
         `${itemName} ${elementName} bind ${bindingName || "(unnamed)"} references unknown ${referenceLabel} ${exportName}`,
       );
-    } else if (bindingType && declaredType !== bindingType) {
+    } else if (
+      bindingType &&
+      declaredType !== bindingType &&
+      // vRO's generic actions return/accept `Any`, which is compatible with
+      // any concrete parameter type, so it is not a mismatch.
+      bindingType !== "Any" &&
+      declaredType !== "Any"
+    ) {
       report.errors.push(
         `${itemName} ${elementName} bind ${bindingName || "(unnamed)"} type ${bindingType} does not match ${exportName} type ${declaredType}`,
       );
@@ -931,31 +1085,45 @@ function validateBindings(
   }
 }
 
+/**
+ * Returns the raw parameter nodes for a workflow section. Inputs and outputs
+ * wrap `<param>` children under `<input>`/`<output>`. Attributes have two
+ * shapes: vRO exports use repeated top-level `<attrib name type>` elements,
+ * while the scaffold historically wrapped a `<param>` inside `<attrib>`.
+ */
+function collectWorkflowParamNodes(
+  root: XmlObject,
+  sectionName: "input" | "output" | "attrib",
+): XmlObject[] {
+  if (sectionName === "attrib") {
+    const direct = asArray(root.attrib)
+      .filter(isObject)
+      .filter((node) => node.name !== undefined);
+    if (direct.length > 0) return direct;
+  }
+  const section = getObject(root, sectionName);
+  if (!section) return [];
+  return asArray(section.param).filter(isObject);
+}
+
 function collectWorkflowParams(
   root: XmlObject,
   sectionName: "input" | "output" | "attrib",
 ): ArtifactPreflightParameter[] {
-  const section = getObject(root, sectionName);
-  if (!section) return [];
-  return asArray(section.param)
-    .filter(isObject)
-    .map((param) => ({
-      name: stringValue(param.name),
-      type: stringValue(param.type),
-      scope: sectionName === "attrib" ? "attribute" : sectionName,
-    }));
+  return collectWorkflowParamNodes(root, sectionName).map((param) => ({
+    name: stringValue(param.name),
+    type: stringValue(param.type),
+    scope: sectionName === "attrib" ? "attribute" : sectionName,
+  }));
 }
 
 function collectWorkflowInspectionParams(
   root: XmlObject,
   sectionName: "input" | "output" | "attrib",
 ): WorkflowArtifactInspectionParameter[] {
-  const section = getObject(root, sectionName);
-  if (!section) return [];
   const scope: WorkflowArtifactInspectionParameter["scope"] =
     sectionName === "attrib" ? "attribute" : sectionName;
-  return asArray(section.param)
-    .filter(isObject)
+  return collectWorkflowParamNodes(root, sectionName)
     .map((param) => ({
       name: stringValue(param.name),
       type: stringValue(param.type),
@@ -1182,7 +1350,7 @@ function getScriptText(item: XmlObject): string {
   return "";
 }
 
-function decodeUtf8Xml(
+function decodeUtf8Text(
   content: Uint8Array,
   entryName: string,
   report: ArtifactPreflightReport,
@@ -1190,7 +1358,7 @@ function decodeUtf8Xml(
   try {
     return new TextDecoder("utf-8", { fatal: true }).decode(content);
   } catch (error) {
-    report.errors.push(`${entryName} is not valid UTF-8 XML: ${errorMessage(error)}`);
+    report.errors.push(`${entryName} is not valid UTF-8: ${errorMessage(error)}`);
     return null;
   }
 }
@@ -1199,8 +1367,9 @@ function decodeUtf16XmlWithBom(
   content: Uint8Array,
   entryName: string,
   report: ArtifactPreflightReport,
+  expected: Utf16Endianness = "any",
 ): string | null {
-  return decodeUtf16TextWithBom(content, entryName, "XML", report);
+  return decodeUtf16TextWithBom(content, entryName, "XML", report, expected);
 }
 
 type Utf16Endianness = "le" | "be" | "any";

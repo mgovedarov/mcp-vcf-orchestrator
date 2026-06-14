@@ -57,28 +57,65 @@ const workflow = {
   ],
 };
 
-test("buildWorkflowContent creates UTF-16LE workflow XML with metadata and bindings", () => {
+test("buildWorkflowContent creates UTF-16BE workflow XML with metadata and bindings", () => {
   const content = buildWorkflowContent(workflow);
-  assert.equal(content[0], 0xff);
-  assert.equal(content[1], 0xfe);
+  assert.equal(content[0], 0xfe);
+  assert.equal(content[1], 0xff);
 
-  const xml = new TextDecoder("utf-16le").decode(content);
+  const xml = new TextDecoder("utf-16be").decode(content);
+  // vRO writes encoding='UTF-8' (single quotes) even though the bytes are
+  // UTF-16BE; the v2 editor refuses to open a workflow declaring UTF-16.
+  assert.match(xml, /^<\?xml version='1\.0' encoding='UTF-8'\?>/);
   assert.match(xml, /<workflow /);
   assert.match(xml, /id="workflow-1"/);
   assert.match(xml, /version="1\.0\.0"/);
   assert.match(xml, /api-version="6\.0\.0"/);
+  // Editable user workflow: lowercase object-name, editor-version, and NO
+  // allowed-operations (that flag marks read-only Library workflows and makes
+  // the vRO editor refuse to open the workflow).
+  assert.match(xml, /object-name="workflow:name=generic"/);
+  assert.match(xml, /editor-version="2\.0"/);
+  assert.doesNotMatch(xml, /allowed-operations/);
   assert.match(
     xml,
     /<display-name><!\[CDATA\[Provision <VM>\]\]><\/display-name>/,
   );
-  assert.match(xml, /<param name="projectName" type="string">/);
-  assert.match(xml, /<param name="vmCount" type="number">/);
-  assert.match(xml, /<param name="runningTotal" type="number" scope="local">/);
+  // Parameters are bare <param/> elements (descriptions live in presentation /
+  // input_form_); a <description> child here breaks the v2 editor.
+  assert.match(xml, /<param name="projectName" type="string" \/>/);
+  assert.match(xml, /<param name="vmCount" type="number" \/>/);
+  assert.doesNotMatch(xml, /<param[^>]*>\s*<description>/);
+  assert.match(
+    xml,
+    /<attrib name="runningTotal" type="number" read-only="false">/,
+  );
+  assert.match(xml, /<value encoded="n"><!\[CDATA\[__NULL__\]\]><\/value>/);
   assert.match(
     xml,
     /<workflow-item name="item1" type="task" out-name="finish">/,
   );
-  assert.match(xml, /<workflow-item name="finish" type="task" end-mode="1">/);
+  // Last task chains to an explicit end item; no end-mode on tasks.
+  assert.match(
+    xml,
+    /<workflow-item name="finish" type="task" out-name="item_end">/,
+  );
+  assert.doesNotMatch(xml, /type="task"[^>]*end-mode/);
+  assert.match(
+    xml,
+    /<workflow-item name="item_end" type="end" end-mode="0">/,
+  );
+  // The v2 editor requires the end item to carry an empty in-binding, and
+  // every item needs a distinct position (overlapping at 0,0 breaks the
+  // editor's schema renderer).
+  assert.match(
+    xml,
+    /<workflow-item name="item_end" type="end" end-mode="0">\s*<in-binding \/>/,
+  );
+  const positions = [...xml.matchAll(/<position y="[^"]*" x="([^"]*)" \/>/g)].map(
+    (m) => m[1],
+  );
+  assert.equal(positions.length, 4); // start + 2 tasks + end
+  assert.equal(new Set(positions).size, 4); // all distinct
   assert.match(
     xml,
     /<bind name="projectName" type="string" export-name="projectName" \/>/,
@@ -94,13 +131,19 @@ test("buildWorkflowArtifact creates a .workflow zip with required entries", () =
   assert.ok(files["workflow-content"]);
   assert.ok(files["input_form_"]);
 
+  // workflow-info is a Java properties file, not XML; identity lives in content.
   const info = new TextDecoder().decode(files["workflow-info"]);
-  assert.match(info, /workflow-info id="workflow-1"/);
+  assert.match(info, /^type=workflow$/m);
+  assert.match(info, /^version=2\.0$/m);
+  assert.match(info, /^charset=UTF-16$/m);
+  assert.match(info, /^unicode=true$/m);
+  assert.match(info, /^creator=www\.dunes\.ch$/m);
+  assert.doesNotMatch(info, /</);
 
   const content = files["workflow-content"];
-  assert.equal(content[0], 0xff);
-  assert.equal(content[1], 0xfe);
-  const xml = new TextDecoder("utf-16le").decode(content);
+  assert.equal(content[0], 0xfe);
+  assert.equal(content[1], 0xff);
+  const xml = new TextDecoder("utf-16be").decode(content);
   assert.match(xml, /<script encoded="false"><!\[CDATA\[/);
   assert.match(xml, /<presentation>/);
 
@@ -134,6 +177,19 @@ test("buildWorkflowArtifact creates a .workflow zip with required entries", () =
   assert.deepEqual(inputForm.options, { externalValidations: [] });
 });
 
+test("buildWorkflowArtifact omits input_form_ when the workflow has no inputs", () => {
+  const files = unzipSync(
+    buildWorkflowArtifact({
+      name: "Inputless",
+      tasks: [{ name: "only", script: "x = 1;" }],
+    }),
+  );
+
+  assert.ok(files["workflow-info"]);
+  assert.ok(files["workflow-content"]);
+  assert.equal(files["input_form_"], undefined);
+});
+
 const actionWorkflow = {
   id: "workflow-action-1",
   name: "Echo Message",
@@ -153,13 +209,13 @@ const actionWorkflow = {
 };
 
 test("buildWorkflowContent renders a native action workflow item", () => {
-  const xml = new TextDecoder("utf-16le").decode(
+  const xml = new TextDecoder("utf-16be").decode(
     buildWorkflowContent(actionWorkflow),
   );
 
   assert.match(
     xml,
-    /<workflow-item name="item1" type="task" script-module="com\.example\.actions\/echo" end-mode="1">/,
+    /<workflow-item name="item1" type="task" script-module="com\.example\.actions\/echo" out-name="item_end">/,
   );
   assert.match(
     xml,
@@ -176,7 +232,7 @@ test("buildWorkflowContent renders a native action workflow item", () => {
 });
 
 test("native action item with no resultBinding omits actionResult and out-binding", () => {
-  const xml = new TextDecoder("utf-16le").decode(
+  const xml = new TextDecoder("utf-16be").decode(
     buildWorkflowContent({
       ...actionWorkflow,
       outputs: [],
@@ -194,7 +250,7 @@ test("native action item with no resultBinding omits actionResult and out-bindin
 
   assert.match(
     xml,
-    /<workflow-item name="item1" type="task" script-module="com\.example\.actions\/logIt" end-mode="1">/,
+    /<workflow-item name="item1" type="task" script-module="com\.example\.actions\/logIt" out-name="item_end">/,
   );
   assert.match(
     xml,
@@ -260,17 +316,17 @@ test("buildWorkflowInputFormJson maps common vRO input types", () => {
   assert.equal(inputForm.layout.pages[0].sections[0].fields[2].display, "passwordField");
 });
 
-test("buildWorkflowArtifact reuses generated workflow ID across archive entries", () => {
+test("buildWorkflowArtifact generates a workflow ID in workflow-content", () => {
   const archive = buildWorkflowArtifact({ ...workflow, id: undefined });
   const files = unzipSync(archive);
-  const info = new TextDecoder().decode(files["workflow-info"]);
-  const xml = new TextDecoder("utf-16le").decode(files["workflow-content"]);
+  const xml = new TextDecoder("utf-16be").decode(files["workflow-content"]);
 
-  const infoId = info.match(/id="([^"]+)"/)?.[1];
   const contentId = xml.match(/ id="([^"]+)"/)?.[1];
 
-  assert.ok(infoId);
-  assert.equal(contentId, infoId);
+  assert.match(
+    contentId ?? "",
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+  );
 });
 
 test("workflow artifact builder rejects structural validation errors", () => {
