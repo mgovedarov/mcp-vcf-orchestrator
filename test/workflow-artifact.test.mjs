@@ -63,6 +63,9 @@ test("buildWorkflowContent creates UTF-16BE workflow XML with metadata and bindi
   assert.equal(content[1], 0xff);
 
   const xml = new TextDecoder("utf-16be").decode(content);
+  // vRO writes encoding='UTF-8' (single quotes) even though the bytes are
+  // UTF-16BE; the v2 editor refuses to open a workflow declaring UTF-16.
+  assert.match(xml, /^<\?xml version='1\.0' encoding='UTF-8'\?>/);
   assert.match(xml, /<workflow /);
   assert.match(xml, /id="workflow-1"/);
   assert.match(xml, /version="1\.0\.0"/);
@@ -77,8 +80,11 @@ test("buildWorkflowContent creates UTF-16BE workflow XML with metadata and bindi
     xml,
     /<display-name><!\[CDATA\[Provision <VM>\]\]><\/display-name>/,
   );
-  assert.match(xml, /<param name="projectName" type="string">/);
-  assert.match(xml, /<param name="vmCount" type="number">/);
+  // Parameters are bare <param/> elements (descriptions live in presentation /
+  // input_form_); a <description> child here breaks the v2 editor.
+  assert.match(xml, /<param name="projectName" type="string" \/>/);
+  assert.match(xml, /<param name="vmCount" type="number" \/>/);
+  assert.doesNotMatch(xml, /<param[^>]*>\s*<description>/);
   assert.match(
     xml,
     /<attrib name="runningTotal" type="number" read-only="false">/,
@@ -98,6 +104,18 @@ test("buildWorkflowContent creates UTF-16BE workflow XML with metadata and bindi
     xml,
     /<workflow-item name="item_end" type="end" end-mode="0">/,
   );
+  // The v2 editor requires the end item to carry an empty in-binding, and
+  // every item needs a distinct position (overlapping at 0,0 breaks the
+  // editor's schema renderer).
+  assert.match(
+    xml,
+    /<workflow-item name="item_end" type="end" end-mode="0">\s*<in-binding \/>/,
+  );
+  const positions = [...xml.matchAll(/<position y="[^"]*" x="([^"]*)" \/>/g)].map(
+    (m) => m[1],
+  );
+  assert.equal(positions.length, 4); // start + 2 tasks + end
+  assert.equal(new Set(positions).size, 4); // all distinct
   assert.match(
     xml,
     /<bind name="projectName" type="string" export-name="projectName" \/>/,

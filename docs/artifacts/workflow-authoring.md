@@ -10,7 +10,7 @@ A `.workflow` file is a ZIP archive containing:
 - `workflow-content`
 - `input_form_` — only when the workflow has UI-startable inputs.
 
-`workflow-content` is XML encoded as **UTF-16BE** with a big-endian BOM (`0xFE 0xFF`). The XML root is a vRO workflow document with metadata such as `id`, `version`, and `api-version`, plus `object-name="workflow:name=generic"` and `editor-version="2.0"`. Do **not** emit `allowed-operations` — it is the read-only marker on Library workflows and blocks the editor from opening an authored workflow. The workflow terminates in an explicit `<workflow-item type="end" end-mode="0">` chained from the last task's `out-name`.
+`workflow-content` is XML encoded as **UTF-16BE** with a big-endian BOM (`0xFE 0xFF`), and its **declaration must be `<?xml version='1.0' encoding='UTF-8'?>`** (single quotes, `UTF-8`) — vRO writes it that way and the VCF 9.x editor 500s on opening a workflow that declares `encoding="UTF-16"` (import/run still work). The XML root carries `id`, `version`, `api-version`, `object-name="workflow:name=generic"`, and `editor-version="2.0"`. Do **not** emit `allowed-operations` — it is the read-only marker on Library workflows and blocks the editor from opening an authored workflow. Params are bare `<param name type/>` (no `<description>` child); each item (start, tasks, end) needs a distinct `<position>`; tasks carry a non-empty `<description>`; and the workflow terminates in an explicit `<workflow-item type="end" end-mode="0">` with an empty `<in-binding/>`, chained from the last task's `out-name`.
 
 Workflow inputs live under `<input>` and outputs under `<output>`. Scriptable task logic lives in `<workflow-item type="task">` nodes.
 

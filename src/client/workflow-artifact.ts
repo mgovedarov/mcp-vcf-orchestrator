@@ -381,22 +381,37 @@ function renderWorkflowContentXml(spec: NormalizedSpec): string {
   const taskNames = new Set(spec.tasks.map((task) => task.name));
   const endItemName = uniqueEndItemName(taskNames);
   const lines = [
-    '<?xml version="1.0" encoding="UTF-16"?>',
+    // vRO writes this exact declaration (encoding='UTF-8' with single quotes)
+    // even though the bytes are UTF-16BE — the BOM drives decoding. The v2
+    // editor refuses to open a workflow whose declaration says encoding="UTF-16".
+    "<?xml version='1.0' encoding='UTF-8'?>",
     `<workflow xmlns="http://vmware.com/vco/workflow" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://vmware.com/vco/workflow http://vmware.com/vco/workflow/Workflow-v4.xsd" root-name="${escapeXmlAttribute(rootTaskName)}" object-name="workflow:name=generic" id="${escapeXmlAttribute(spec.id)}" version="${escapeXmlAttribute(spec.version)}" api-version="${escapeXmlAttribute(spec.apiVersion)}" editor-version="2.0" restartMode="1" resumeFromFailedMode="0">`,
     `  <display-name>${cdata(spec.name)}</display-name>`,
     `  <description>${cdata(spec.description)}</description>`,
+    // Start-node position. Items are laid out left-to-right; vRO's editor
+    // rejects workflows whose items overlap (all at 0,0), so emit distinct
+    // coordinates for the start node, each task, and the end item.
+    `  ${position(itemX(-1))}`,
     renderParameterSection("input", spec.inputs),
     renderParameterSection("output", spec.outputs),
     renderAttributes(spec.attributes),
     ...spec.tasks.map((task, index) =>
-      renderTask(task, spec.tasks[index + 1]?.name ?? endItemName),
+      renderTask(task, spec.tasks[index + 1]?.name ?? endItemName, index),
     ),
-    renderEndItem(endItemName),
+    renderEndItem(endItemName, spec.tasks.length),
     renderPresentation(spec.inputs),
-    "  <workflow-note />",
     "</workflow>",
   ].filter((line) => line !== "");
   return `${lines.join("\n")}\n`;
+}
+
+/** Horizontal layout: start node, tasks, then the end item, left to right. */
+function itemX(index: number): number {
+  return 60 + (index + 1) * 130;
+}
+
+function position(x: number): string {
+  return `<position y="60.0" x="${x.toFixed(1)}" />`;
 }
 
 /** Picks an end-item name that does not collide with any task name. */
@@ -410,10 +425,13 @@ function uniqueEndItemName(taskNames: Set<string>): string {
   return candidate;
 }
 
-function renderEndItem(name: string): string {
+function renderEndItem(name: string, taskCount: number): string {
   return [
     `  <workflow-item name="${escapeXmlAttribute(name)}" type="end" end-mode="0">`,
-    '    <position y="0.0" x="0.0" />',
+    // vRO's v2 editor requires the end item to carry an (empty) in-binding;
+    // without it the workflow imports and runs but fails to open in the editor.
+    "    <in-binding />",
+    `    ${position(itemX(taskCount))}`,
     "  </workflow-item>",
   ].join("\n");
 }
@@ -426,11 +444,15 @@ function renderParameterSection(
     return `  <${elementName} />`;
   }
 
+  // Emit bare <param> elements like vRO's editor does. A <description> child
+  // here, combined with the workflow-level <description>, makes the v2 editor
+  // fail to open the workflow; the parameter description is carried by the
+  // <presentation> and input_form_ instead.
   return [
     `  <${elementName}>`,
     ...parameters.map(
       (parameter) =>
-        `    <param name="${escapeXmlAttribute(parameter.name)}" type="${escapeXmlAttribute(parameter.type)}"><description>${cdata(parameter.description ?? "")}</description></param>`,
+        `    <param name="${escapeXmlAttribute(parameter.name)}" type="${escapeXmlAttribute(parameter.type)}" />`,
     ),
     `  </${elementName}>`,
   ].join("\n");
@@ -455,18 +477,23 @@ function renderAttributes(attributes: WorkflowArtifactParameter[]): string {
 function renderTask(
   task: NormalizedWorkflowArtifactTask,
   nextItemName: string,
+  index: number,
 ): string {
   const flowAttrs = ` out-name="${escapeXmlAttribute(nextItemName)}"`;
   const scriptModuleAttr = task.scriptModule
     ? ` script-module="${escapeXmlAttribute(task.scriptModule)}"`
     : "";
+  // vRO's editor drops an empty task description on import, and then the v2
+  // editor fails to open the workflow. Always emit a non-empty description.
+  const taskDescription = nonEmpty(task.description) ?? task.displayName;
   return [
     `  <workflow-item name="${escapeXmlAttribute(task.name)}" type="task"${scriptModuleAttr}${flowAttrs}>`,
     `    <display-name>${cdata(task.displayName)}</display-name>`,
-    `    <description>${cdata(task.description)}</description>`,
+    `    <description>${cdata(taskDescription)}</description>`,
     renderBindings("in-binding", task.inBindings, "source"),
     renderBindings("out-binding", task.outBindings, "target"),
     `    <script encoded="false">${cdata(task.script)}</script>`,
+    `    ${position(itemX(index))}`,
     "  </workflow-item>",
   ].join("\n");
 }
