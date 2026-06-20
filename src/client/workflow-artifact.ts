@@ -40,6 +40,15 @@ interface InputFormType {
   dataType: string;
   referenceType?: string;
   itemType?: InputFormType;
+  /** complex types (e.g. Properties) carry a repeating key/value field set. */
+  isMultiple?: boolean;
+  fields?: InputFormComplexField[];
+}
+
+interface InputFormComplexField {
+  id: string;
+  type: InputFormType;
+  label: string;
 }
 
 export interface InputFormMapping {
@@ -573,20 +582,35 @@ function renderWorkflowInputFormJson(spec: NormalizedSpec): string {
 /**
  * Verified vRO input-form mappings for scalar workflow input types. `dataType`
  * fills `input_form_` schema entries; `display` fills the layout field
- * component. Each entry is confirmed against vRO-exported `input_form_`
- * artifacts (covered by tests).
+ * component. Each entry is confirmed against a vRO-authored `input_form_`
+ * (read back via package export, which — unlike workflow content export —
+ * preserves the form) and covered by tests.
  *
- * Additional scalar types (e.g. `Date`, `Properties`, `any`, plugin scalar
- * types without a namespace `:`) are intentionally absent until their
- * `dataType`/`display` can be verified against a live vRO export. Add a verified
- * row here to support one — unsupported types fail scaffold/preflight rather
- * than silently becoming `string` fields.
+ * Types not listed here (plugin scalar types without a namespace `:`, etc.) are
+ * intentionally absent until their `dataType`/`display` can be verified against
+ * a live vRO form. Add a verified row to support one — unsupported types fail
+ * scaffold/preflight rather than silently becoming `string` fields.
  */
 const SCALAR_INPUT_FORM_MAPPINGS: Record<string, InputFormMapping> = {
   string: { type: { dataType: "string" }, display: "textField" },
   boolean: { type: { dataType: "boolean" }, display: "checkbox" },
   number: { type: { dataType: "decimal" }, display: "decimalField" },
   SecureString: { type: { dataType: "secureString" }, display: "passwordField" },
+  Date: { type: { dataType: "dateTime" }, display: "dateTime" },
+  // Properties renders as a repeating key/value datagrid.
+  Properties: {
+    type: {
+      dataType: "complex",
+      isMultiple: true,
+      fields: [
+        { id: "key", type: { dataType: "string" }, label: "key" },
+        { id: "value", type: { dataType: "string" }, label: "value" },
+      ],
+    },
+    display: "datagrid",
+  },
+  // vRO models an Any input as a reference to the "Any" type, shown as text.
+  Any: { type: { dataType: "reference", referenceType: "Any" }, display: "textField" },
 };
 
 /**

@@ -343,17 +343,50 @@ test("buildWorkflowInputFormJson maps string, number, and array input types", ()
   );
 });
 
+test("buildWorkflowInputFormJson maps Date, Properties, and Any input types", () => {
+  const inputForm = JSON.parse(
+    buildWorkflowInputFormJson({
+      ...workflow,
+      inputs: [
+        { name: "when", type: "Date", description: "When" },
+        { name: "props", type: "Properties", description: "Props" },
+        { name: "anything", type: "Any", description: "Anything" },
+      ],
+      outputs: [],
+      attributes: [],
+      tasks: [{ script: "System.log('form only');" }],
+    }),
+  );
+  const fields = inputForm.layout.pages[0].sections[0].fields;
+
+  // Date -> dateTime (verified against a vRO-authored form, not "date").
+  assert.equal(inputForm.schema.when.type.dataType, "dateTime");
+  assert.equal(fields[0].display, "dateTime");
+  // Properties -> repeating key/value complex datagrid.
+  assert.equal(inputForm.schema.props.type.dataType, "complex");
+  assert.equal(inputForm.schema.props.type.isMultiple, true);
+  assert.deepEqual(
+    inputForm.schema.props.type.fields.map((f) => f.id),
+    ["key", "value"],
+  );
+  assert.equal(fields[1].display, "datagrid");
+  // Any -> reference to the "Any" type, shown as text.
+  assert.equal(inputForm.schema.anything.type.dataType, "reference");
+  assert.equal(inputForm.schema.anything.type.referenceType, "Any");
+  assert.equal(fields[2].display, "textField");
+});
+
 test("workflow artifact builder rejects unsupported input-form types", () => {
   assert.throws(
     () =>
       buildWorkflowInputFormJson({
         ...workflow,
-        inputs: [{ name: "when", type: "Date", description: "When" }],
+        inputs: [{ name: "thing", type: "NoSuchType", description: "Thing" }],
         outputs: [],
         attributes: [],
         tasks: [{ script: "System.log('form only');" }],
       }),
-    /unsupported input-form type Date/,
+    /unsupported input-form type NoSuchType/,
   );
 });
 
@@ -362,12 +395,12 @@ test("workflow artifact builder rejects arrays of unsupported input-form types",
     () =>
       buildWorkflowInputFormJson({
         ...workflow,
-        inputs: [{ name: "dates", type: "Array/Date", description: "Dates" }],
+        inputs: [{ name: "things", type: "Array/NoSuchType", description: "Things" }],
         outputs: [],
         attributes: [],
         tasks: [{ script: "System.log('form only');" }],
       }),
-    /unsupported input-form type Array\/Date/,
+    /unsupported input-form type Array\/NoSuchType/,
   );
 });
 

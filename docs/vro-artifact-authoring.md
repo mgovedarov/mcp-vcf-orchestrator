@@ -84,10 +84,13 @@ The scaffold builder maps each workflow input type to a verified `schema.<id>.ty
 | `boolean` | `boolean` | `checkbox` |
 | `number` | `decimal` | `decimalField` |
 | `SecureString` | `secureString` | `passwordField` |
+| `Date` | `dateTime` | `dateTime` |
+| `Properties` | `complex` (repeating `key`/`value` strings, `isMultiple: true`) | `datagrid` |
+| `Any` | `reference` (`referenceType: "Any"`) | `textField` |
 | Reference type (contains `:`, e.g. `VC:VirtualMachine`) | `reference` (with `referenceType`) | `valuePickerTree` |
 | `Array/<supported>` (element must itself be supported) | `array` (with `itemType`) | `multiValuePicker` |
 
-Other types (for example `Date`, `Properties`, `any`, and namespace-less plugin scalar types) are not yet mapped: they fail preflight until a verified `dataType`/`display` is added to the table in `src/client/workflow-artifact.ts`. Do not work around a rejection by changing the input type to `string`.
+The non-obvious rows (`Date` → `dateTime`, `Properties` → `complex`/`datagrid`, `Any` → `reference`) were read back from a vRO-authored form via **package** export — workflow content export drops `input_form_`, but package export preserves it. Other types (namespace-less plugin scalar types, etc.) are not yet mapped: they fail preflight until a verified `dataType`/`display` is added to the table in `src/client/workflow-artifact.ts`. Do not work around a rejection by changing the input type to `string`.
 
 ### Form ↔ input cross-check
 
