@@ -42,6 +42,11 @@ interface InputFormType {
   itemType?: InputFormType;
 }
 
+export interface InputFormMapping {
+  type: InputFormType;
+  display: string;
+}
+
 export function buildWorkflowArtifact(spec: WorkflowArtifactSpec): Uint8Array {
   const normalized = normalizeWorkflowArtifactSpec(spec);
   const entries: Record<string, Uint8Array> = {
@@ -119,6 +124,11 @@ export function normalizeWorkflowArtifactSpec(
     [...inputs, ...outputs, ...attributes],
     errors,
   );
+
+  // Inputs drive input_form_ generation, so every input type must map to a
+  // supported vRO input-form type. Reject unsupported types instead of silently
+  // emitting a mismatched string field.
+  validateInputFormTypes(inputs, errors);
 
   const inputOrAttributeTypes = new Map<string, string>();
   for (const parameter of [...inputs, ...attributes]) {
@@ -560,44 +570,86 @@ function renderWorkflowInputFormJson(spec: NormalizedSpec): string {
   })}\n`;
 }
 
-function inputFormType(type: string): InputFormType {
+/**
+ * Verified vRO input-form mappings for scalar workflow input types. `dataType`
+ * fills `input_form_` schema entries; `display` fills the layout field
+ * component. Each entry is confirmed against vRO-exported `input_form_`
+ * artifacts (covered by tests).
+ *
+ * Additional scalar types (e.g. `Date`, `Properties`, `any`, plugin scalar
+ * types without a namespace `:`) are intentionally absent until their
+ * `dataType`/`display` can be verified against a live vRO export. Add a verified
+ * row here to support one — unsupported types fail scaffold/preflight rather
+ * than silently becoming `string` fields.
+ */
+const SCALAR_INPUT_FORM_MAPPINGS: Record<string, InputFormMapping> = {
+  string: { type: { dataType: "string" }, display: "textField" },
+  boolean: { type: { dataType: "boolean" }, display: "checkbox" },
+  number: { type: { dataType: "decimal" }, display: "decimalField" },
+  SecureString: { type: { dataType: "secureString" }, display: "passwordField" },
+};
+
+/**
+ * Resolves a vRO workflow input type to its input-form mapping, or `null` when
+ * the type has no verified mapping. `Array/<itemType>` resolves recursively
+ * (its element type must also be supported); namespaced reference types (those
+ * containing `:`, e.g. `VC:VirtualMachine`) map to a reference picker.
+ */
+export function resolveInputFormType(type: string): InputFormMapping | null {
   const arrayItemType = type.match(/^Array\/(.+)$/)?.[1];
   if (arrayItemType) {
-    return { dataType: "array", itemType: inputFormType(arrayItemType) };
+    const item = resolveInputFormType(arrayItemType);
+    if (!item) return null;
+    return {
+      type: { dataType: "array", itemType: item.type },
+      display: "multiValuePicker",
+    };
   }
 
   if (type.includes(":")) {
-    return { dataType: "reference", referenceType: type };
+    return {
+      type: { dataType: "reference", referenceType: type },
+      display: "valuePickerTree",
+    };
   }
 
-  switch (type) {
-    case "boolean":
-      return { dataType: "boolean" };
-    case "number":
-      return { dataType: "decimal" };
-    case "SecureString":
-      return { dataType: "secureString" };
-    case "string":
-    default:
-      return { dataType: "string" };
+  return SCALAR_INPUT_FORM_MAPPINGS[type] ?? null;
+}
+
+/** Human-readable summary of the supported input-form types, for error text. */
+export function describeSupportedInputFormTypes(): string {
+  return `${Object.keys(SCALAR_INPUT_FORM_MAPPINGS).join(
+    ", ",
+  )}, Array/<supported>, or reference types containing ':'`;
+}
+
+function validateInputFormTypes(
+  inputs: WorkflowArtifactParameter[],
+  errors: string[],
+): void {
+  for (const input of inputs) {
+    if (input.type && !resolveInputFormType(input.type)) {
+      errors.push(
+        `input parameter ${input.name} has unsupported input-form type ${input.type}; supported types: ${describeSupportedInputFormTypes()}`,
+      );
+    }
   }
 }
 
-function inputFormDisplay(type: string): string {
-  if (type.startsWith("Array/")) return "multiValuePicker";
-  if (type.includes(":")) return "valuePickerTree";
-
-  switch (type) {
-    case "boolean":
-      return "checkbox";
-    case "number":
-      return "decimalField";
-    case "SecureString":
-      return "passwordField";
-    case "string":
-    default:
-      return "textField";
+function inputFormType(type: string): InputFormType {
+  const mapping = resolveInputFormType(type);
+  if (!mapping) {
+    throw new Error(`Unsupported input-form type: ${type}`);
   }
+  return mapping.type;
+}
+
+function inputFormDisplay(type: string): string {
+  const mapping = resolveInputFormType(type);
+  if (!mapping) {
+    throw new Error(`Unsupported input-form type: ${type}`);
+  }
+  return mapping.display;
 }
 
 function renderBindings(

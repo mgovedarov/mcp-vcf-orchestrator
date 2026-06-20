@@ -73,8 +73,31 @@ Important compatibility notes:
 - Section objects must contain only `id` and `fields`; put the visible title on the page, not the section.
 - Field objects should use `id`, `display`, `signpostPosition`, and `state`. Avoid unverified properties such as `size`.
 - Field IDs must match keys in `schema`.
-- Use `textField` for string, `passwordField` for `SecureString`, `checkbox` for boolean, `decimalField` for number, and `valuePickerTree` for vRO reference types such as `VC:VirtualMachine`.
-- `preflight-workflow-file` and `preflight-package` validate `input_form_` entries and fail on the section/field shapes known to break the vRO start page.
+
+### Supported input-form type mapping
+
+The scaffold builder maps each workflow input type to a verified `schema.<id>.type.dataType` and layout `display`. Types outside this table are **rejected** by `scaffold-workflow-file` and `preflight-workflow-file` rather than silently becoming a `string`/`textField` (which would mismatch `workflow-content` and break the start page).
+
+| vRO input type | `type.dataType` | `display` |
+| --- | --- | --- |
+| `string` | `string` | `textField` |
+| `boolean` | `boolean` | `checkbox` |
+| `number` | `decimal` | `decimalField` |
+| `SecureString` | `secureString` | `passwordField` |
+| Reference type (contains `:`, e.g. `VC:VirtualMachine`) | `reference` (with `referenceType`) | `valuePickerTree` |
+| `Array/<supported>` (element must itself be supported) | `array` (with `itemType`) | `multiValuePicker` |
+
+Other types (for example `Date`, `Properties`, `any`, and namespace-less plugin scalar types) are not yet mapped: they fail preflight until a verified `dataType`/`display` is added to the table in `src/client/workflow-artifact.ts`. Do not work around a rejection by changing the input type to `string`.
+
+### Form ↔ input cross-check
+
+`preflight-workflow-file` (and `preflight-package` for `input_form_` entries nested inside a `.workflow`) compares the form against the inputs declared in `workflow-content`:
+
+- A form schema key / field with no matching workflow input is an **error** (a stale or hand-edited form).
+- A declared workflow input with no form field is a **warning** (the form may be intentionally partial).
+- A form `type.dataType` that disagrees with the input's expected mapping is a **warning**.
+
+`preflight-workflow-file` and `preflight-package` also validate `input_form_` entries and fail on the section/field shapes known to break the vRO start page.
 
 ## Import And Export Endpoints
 

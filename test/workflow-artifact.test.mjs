@@ -316,6 +316,61 @@ test("buildWorkflowInputFormJson maps common vRO input types", () => {
   assert.equal(inputForm.layout.pages[0].sections[0].fields[2].display, "passwordField");
 });
 
+test("buildWorkflowInputFormJson maps string, number, and array input types", () => {
+  const inputForm = JSON.parse(
+    buildWorkflowInputFormJson({
+      ...workflow,
+      inputs: [
+        { name: "label", type: "string", description: "Label" },
+        { name: "count", type: "number", description: "Count" },
+        { name: "tags", type: "Array/string", description: "Tags" },
+      ],
+      outputs: [],
+      attributes: [],
+      tasks: [{ script: "System.log('form only');" }],
+    }),
+  );
+
+  assert.equal(inputForm.schema.label.type.dataType, "string");
+  assert.equal(inputForm.layout.pages[0].sections[0].fields[0].display, "textField");
+  assert.equal(inputForm.schema.count.type.dataType, "decimal");
+  assert.equal(inputForm.layout.pages[0].sections[0].fields[1].display, "decimalField");
+  assert.equal(inputForm.schema.tags.type.dataType, "array");
+  assert.equal(inputForm.schema.tags.type.itemType.dataType, "string");
+  assert.equal(
+    inputForm.layout.pages[0].sections[0].fields[2].display,
+    "multiValuePicker",
+  );
+});
+
+test("workflow artifact builder rejects unsupported input-form types", () => {
+  assert.throws(
+    () =>
+      buildWorkflowInputFormJson({
+        ...workflow,
+        inputs: [{ name: "when", type: "Date", description: "When" }],
+        outputs: [],
+        attributes: [],
+        tasks: [{ script: "System.log('form only');" }],
+      }),
+    /unsupported input-form type Date/,
+  );
+});
+
+test("workflow artifact builder rejects arrays of unsupported input-form types", () => {
+  assert.throws(
+    () =>
+      buildWorkflowInputFormJson({
+        ...workflow,
+        inputs: [{ name: "dates", type: "Array/Date", description: "Dates" }],
+        outputs: [],
+        attributes: [],
+        tasks: [{ script: "System.log('form only');" }],
+      }),
+    /unsupported input-form type Array\/Date/,
+  );
+});
+
 test("buildWorkflowArtifact generates a workflow ID in workflow-content", () => {
   const archive = buildWorkflowArtifact({ ...workflow, id: undefined });
   const files = unzipSync(archive);

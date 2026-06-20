@@ -8,6 +8,7 @@ import {
   rejectSymlink,
   resolveFileInDirectory,
 } from "./files.js";
+import { resolveInputFormType } from "./workflow-artifact.js";
 
 const IDENTIFIER_PATTERN = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const TYPE_PATTERN =
@@ -455,7 +456,18 @@ function validateWorkflowArchive(
 ): void {
   inspectWorkflowArchiveFiles(files, report);
   if (files["input_form_"]) {
-    validateInputFormEntry(files["input_form_"], "input_form_", report);
+    // inspectWorkflowArchiveFiles has already pushed this workflow's declared
+    // inputs onto report.parameters, so the form can be cross-checked against
+    // the inputs it is meant to render.
+    const declaredInputs = report.parameters.filter(
+      (parameter) => parameter.scope === "input",
+    );
+    validateInputFormEntry(
+      files["input_form_"],
+      "input_form_",
+      report,
+      declaredInputs,
+    );
   }
 }
 
@@ -656,6 +668,7 @@ function validateInputFormEntry(
   content: Uint8Array,
   entryName: string,
   report: ArtifactPreflightReport,
+  declaredInputs?: ArtifactPreflightParameter[],
 ): void {
   const json = decodeUtf16TextWithBom(content, entryName, "JSON", report, "be");
   if (!json) return;
@@ -775,6 +788,10 @@ function validateInputFormEntry(
     }
   }
 
+  if (declaredInputs) {
+    crossCheckInputFormAgainstInputs(entryName, schema, declaredInputs, report);
+  }
+
   const options = getObject(parsed, "options");
   if (!options || !Array.isArray(options.externalValidations)) {
     report.warnings.push(
@@ -784,6 +801,55 @@ function validateInputFormEntry(
 
   report.metadata.inputForms =
     (typeof report.metadata.inputForms === "number" ? report.metadata.inputForms : 0) + 1;
+}
+
+/**
+ * Compares an input_form_ schema against the workflow inputs it is meant to
+ * render. A schema key with no matching declared input is a stale/broken form
+ * (error); a declared input with no field is a possibly-intentional partial
+ * form (warning); a dataType that disagrees with the input's expected mapping is
+ * a warning.
+ */
+function crossCheckInputFormAgainstInputs(
+  entryName: string,
+  schema: XmlObject,
+  declaredInputs: ArtifactPreflightParameter[],
+  report: ArtifactPreflightReport,
+): void {
+  const inputsByName = new Map(
+    declaredInputs.map((input) => [input.name, input]),
+  );
+  const schemaKeys = Object.keys(schema);
+
+  for (const key of schemaKeys) {
+    const input = inputsByName.get(key);
+    if (!input) {
+      report.errors.push(
+        `${entryName} schema.${key} does not match any declared workflow input`,
+      );
+      continue;
+    }
+    const definition = schema[key];
+    if (!isObject(definition)) continue;
+    const actualDataType = isObject(definition.type)
+      ? stringValue(definition.type.dataType)
+      : "";
+    const expected = input.type ? resolveInputFormType(input.type) : null;
+    if (expected && actualDataType && actualDataType !== expected.type.dataType) {
+      report.warnings.push(
+        `${entryName} schema.${key} type.dataType "${actualDataType}" does not match workflow input ${key} (${input.type} -> ${expected.type.dataType})`,
+      );
+    }
+  }
+
+  const schemaKeySet = new Set(schemaKeys);
+  for (const input of declaredInputs) {
+    if (!schemaKeySet.has(input.name)) {
+      report.warnings.push(
+        `${entryName} has no field for declared workflow input ${input.name}`,
+      );
+    }
+  }
 }
 
 function reportUnknownInputFormKeys(
