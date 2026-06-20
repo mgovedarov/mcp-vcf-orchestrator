@@ -273,14 +273,14 @@ Generate a local importable `.workflow` artifact under the configured workflow a
 | `outputs` | array | No | `[]` | Workflow output parameters. |
 | `attributes` | array | No | `[]` | Workflow-scoped attributes. |
 
-The generated `input_form_` is UTF-16BE JSON with a BOM. It places workflow inputs on a `page_general` page, uses section objects with only `id` and `fields`, maps common vRO types to compatible controls, and includes `options.externalValidations: []` for vRO UI compatibility.
+The generated `input_form_` is UTF-16BE JSON with a BOM. It places workflow inputs on a `page_general` page, uses section objects with only `id` and `fields`, maps each input type to a verified control via the [supported input-form type mapping](../vro-artifact-authoring.md#supported-input-form-type-mapping), and includes `options.externalValidations: []` for vRO UI compatibility. Inputs whose type is outside that table are **rejected** (scaffold fails) rather than silently becoming a `string`/`textField` field, which would mismatch `workflow-content`.
 
 Workflow parameter object, used for `inputs`, `outputs`, and `attributes`:
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `name` | string | Yes | Script-safe parameter name. |
-| `type` | string | Yes | vRO parameter type, such as `string`, `number`, `boolean`, `Array/string`, or `Properties`. |
+| `type` | string | Yes | vRO parameter type, such as `string`, `number`, `boolean`, `Array/string`, or `Properties`. For `inputs`, the type must be in the [supported input-form type mapping](../vro-artifact-authoring.md#supported-input-form-type-mapping); unsupported input types are rejected. |
 | `description` | string | No | Optional parameter description. |
 
 Task object:

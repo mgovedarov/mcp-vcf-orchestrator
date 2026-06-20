@@ -660,10 +660,20 @@ function validateInputFormTypes(
   }
 }
 
+// inputFormType/inputFormDisplay run after normalizeWorkflowArtifactSpec has
+// already rejected unsupported types via validateInputFormTypes, so these
+// throws are a defensive invariant. They reuse the same phrasing as that
+// validation so the two paths can't diverge into different error text.
+function unsupportedInputFormType(type: string): Error {
+  return new Error(
+    `unsupported input-form type ${type}; supported types: ${describeSupportedInputFormTypes()}`,
+  );
+}
+
 function inputFormType(type: string): InputFormType {
   const mapping = resolveInputFormType(type);
   if (!mapping) {
-    throw new Error(`Unsupported input-form type: ${type}`);
+    throw unsupportedInputFormType(type);
   }
   return mapping.type;
 }
@@ -671,7 +681,7 @@ function inputFormType(type: string): InputFormType {
 function inputFormDisplay(type: string): string {
   const mapping = resolveInputFormType(type);
   if (!mapping) {
-    throw new Error(`Unsupported input-form type: ${type}`);
+    throw unsupportedInputFormType(type);
   }
   return mapping.display;
 }
