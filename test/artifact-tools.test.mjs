@@ -44,6 +44,7 @@ test("action tools format detail responses and pass create payloads", async () =
       ],
       script: "return vm.ipAddress;",
     }),
+    listActions: async () => ({ link: [] }),
     createAction: async (params) => {
       createParams = params;
       return {
@@ -94,6 +95,106 @@ test("action tools format detail responses and pass create payloads", async () =
   });
   assert.equal(createParams, undefined);
   assert.match(refused.content[0].text, /setting confirm to true/);
+});
+
+test("create-action blocks a duplicate module/name and points to update-action", async () => {
+  let createCalled = false;
+  const handlers = registeredTools(registerActionTools, {
+    listActions: async () => ({
+      link: [
+        { id: "existing-1", name: "getVmIp", module: "com.example.actions" },
+      ],
+    }),
+    createAction: async () => {
+      createCalled = true;
+      return { id: "should-not-happen" };
+    },
+  });
+
+  const result = await handlers.get("create-action")({
+    moduleName: "com.example.actions",
+    name: "getVmIp",
+    script: "return 1;",
+    confirm: true,
+  });
+
+  assert.equal(createCalled, false);
+  assert.equal(result.isError, true);
+  assert.match(result.content[0].text, /already exists \(id: existing-1\)/);
+  assert.match(result.content[0].text, /update-action/);
+});
+
+test("update-action guards, requires a change, and updates in place", async () => {
+  let updateArgs;
+  const client = {
+    getAction: async (id) => ({
+      id,
+      name: "getVmIp",
+      module: "com.example.actions",
+    }),
+    updateAction: async (id, params) => {
+      updateArgs = { id, params };
+      return { id, name: "getVmIp", module: "com.example.actions" };
+    },
+  };
+  const handlers = registeredTools(registerActionTools, client);
+
+  // No mutable field supplied -> error, no call.
+  const noop = await handlers.get("update-action")({
+    id: "action-1",
+    confirm: true,
+  });
+  assert.equal(noop.isError, true);
+  assert.match(noop.content[0].text, /Provide at least one of/);
+  assert.equal(updateArgs, undefined);
+
+  // confirm:false -> no mutation.
+  const unconfirmed = await handlers.get("update-action")({
+    id: "action-1",
+    script: "return 2;",
+    confirm: false,
+  });
+  assert.match(unconfirmed.content[0].text, /setting confirm to true/);
+  assert.equal(updateArgs, undefined);
+
+  // expected-field mismatch -> blocked before mutating.
+  const mismatch = await handlers.get("update-action")({
+    id: "action-1",
+    script: "return 2;",
+    expectedName: "somethingElse",
+    confirm: true,
+  });
+  assert.equal(mismatch.isError, true);
+  assert.equal(updateArgs, undefined);
+
+  // happy path -> delegates with the changed fields.
+  const ok = await handlers.get("update-action")({
+    id: "action-1",
+    script: "return 2;",
+    returnType: "number",
+    expectedName: "getVmIp",
+    expectedModule: "com.example.actions",
+    confirm: true,
+  });
+  assert.equal(ok.isError, undefined);
+  assert.match(ok.content[0].text, /Action updated successfully/);
+  assert.match(ok.content[0].text, /ID: action-1/);
+  assert.deepEqual(updateArgs, {
+    id: "action-1",
+    params: {
+      script: "return 2;",
+      inputParameters: undefined,
+      returnType: "number",
+    },
+  });
+});
+
+test("update-action is annotated as a destructive live write", async () => {
+  const { configs } = registeredToolsWithConfigs(registerActionTools, {});
+  assert.equal(
+    configs.get("update-action").annotations.readOnlyHint,
+    false,
+  );
 });
 
 test("configuration tools format attributes and guard imports and deletes", async () => {
@@ -466,7 +567,7 @@ test("action import and delete expected guards stop mismatched mutations", async
   const importMismatch = await handlers.get("import-action-file")({
     categoryName: "com.example.actions",
     fileName: "getVmIp.action",
-    expectedCategoryId: "category-2",
+    expectedCategoryName: "com.other.actions",
     confirm: true,
   });
   assert.equal(importMismatch.isError, true);

@@ -120,6 +120,9 @@ Use the official vRO content endpoints:
 - Import action artifact:
   - `POST /vco/api/actions`
   - Body is multipart `FormData` with `file` and `categoryName`.
+- Update an action in place:
+  - `PUT /vco/api/actions/{actionId}`
+  - JSON body is the full action representation (`name`, `module`, `script`, `output-type`, `input-parameters`). The response is a validation envelope (`{ "errors": [] }`), not the action, so re-fetch with `GET` to read the updated action. Verified against vRO 9.1.
 - Export configuration artifact:
   - `GET /vco/api/configurations/{id}`
   - Save as `.vsoconf`.
@@ -135,6 +138,7 @@ The MCP tools implemented for this are:
 - `export-action-file`
 - `import-action-file`
 - `preflight-action-file`
+- `update-action` (in-place change of an existing action; see below)
 - `export-configuration-file`
 - `import-configuration-file`
 - `preflight-configuration-file`
@@ -189,6 +193,13 @@ Do not reuse live IDs from historical notes. Action details must be rediscovered
 
 - `list-actions` with a filter
 - `get-action` by ID
+
+### Action create / update / discovery
+
+- To author a brand-new action use `create-action`. To change an existing one, prefer `update-action` (it edits in place via `PUT /actions/{id}`, preserving the ID); `create-action` refuses a duplicate `module`/`name` and points you to `update-action`. Use the export → edit `.action` → `import-action-file` round-trip when you need a file-level change or to move an artifact between environments.
+- vRO does not expose action modules as queryable categories: `list-categories` with `type: "ActionCategory"` returns nothing. Discover existing modules from the `module` column of `list-actions` instead. For `import-action-file`, `categoryName` is the target module name (a new module is created on import).
+- The exported `.action` artifact (`action-content`) does **not** carry the module — only `name`, `result-type`, and `id`. The module is set by the `categoryName` you pass to `import-action-file`, so the same artifact can be imported into any module. (`get-action` reports the resulting module authoritatively.)
+- The `/actions` list endpoint returns only `id`, `name`, `description`, `fqn`, and `version` — no `module` attribute — and ignores server-side `conditions`/`maxResult` query parameters. So `list-actions` retrieves the full set, applies the name `filter` client-side, and derives each `module` from the `fqn`, which is `"<module>/<name>"` (slash-separated, e.g. `com.vmware.library.snmp/createSnmpQuery`).
 
 ## Robust vRO Script Helpers
 

@@ -47,7 +47,7 @@ Use the exact registered tool names. Start with list/get tools unless the user h
 
 - Context and promotion: `collect-context-snapshot`, `prepare-artifact-promotion`
 - Workflows: `list-workflows`, `list-workflows-by-category`, `get-workflow`, `create-workflow`, `run-workflow`, `run-workflow-and-wait`, `list-workflow-executions`, `get-workflow-execution`, `get-workflow-execution-logs`, `export-workflow-file`, `scaffold-workflow-file`, `preflight-workflow-file`, `diff-workflow-file`, `import-workflow-file`, `delete-workflow`
-- Actions: `list-actions`, `get-action`, `create-action`, `export-action-file`, `preflight-action-file`, `diff-action-file`, `import-action-file`, `delete-action`
+- Actions: `list-actions`, `get-action`, `create-action`, `update-action`, `export-action-file`, `preflight-action-file`, `diff-action-file`, `import-action-file`, `delete-action`
 - Configuration elements: `list-configurations`, `get-configuration`, `create-configuration`, `update-configuration`, `export-configuration-file`, `preflight-configuration-file`, `import-configuration-file`, `delete-configuration`
 - Resource elements: `list-resource-elements`, `export-resource-element`, `import-resource-element`, `update-resource-element`, `delete-resource-element`
 - Packages: `list-packages`, `get-package`, `create-package`, `ensure-project-package`, `add-workflow-to-project-package`, `add-action-to-project-package`, `add-configuration-to-project-package`, `add-resource-to-project-package`, `rebuild-project-package`, `export-package`, `export-project-package`, `preflight-package`, `get-package-import-details`, `get-project-package-import-details`, `import-package`, `import-project-package`, `delete-package`

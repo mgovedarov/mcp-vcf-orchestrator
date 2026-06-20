@@ -38,6 +38,7 @@ const DESTRUCTIVE_TOOLS = new Set([
   "run-deployment-action",
   "run-workflow",
   "run-workflow-and-wait",
+  "update-action",
   "update-configuration",
   "update-resource-element",
   "update-subscription",

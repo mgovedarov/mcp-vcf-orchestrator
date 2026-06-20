@@ -412,6 +412,19 @@ export class VroClient {
     return this.actions.createAction(params);
   }
 
+  updateAction(
+    id: string,
+    params: {
+      script?: string;
+      inputParameters?: { name: string; type: string; description?: string }[];
+      returnType?: string;
+      name?: string;
+      moduleName?: string;
+    },
+  ): Promise<Action> {
+    return this.actions.updateAction(id, params);
+  }
+
   deleteAction(id: string): Promise<void> {
     return this.actions.deleteAction(id);
   }

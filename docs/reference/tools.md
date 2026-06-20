@@ -377,7 +377,7 @@ Get detailed information about a specific action including its parameters. The s
 
 ### `create-action`
 
-Create a new action in VCF Automation Orchestrator.
+Create a new action in VCF Automation Orchestrator. If an action with the same `moduleName`/`name` already exists, the tool refuses and points to `update-action` rather than creating a duplicate.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
@@ -388,6 +388,30 @@ Create a new action in VCF Automation Orchestrator.
 | `inputParameters` | array | No | `[]` | Input parameter definitions for the action. |
 | `returnType` | string | No | - | Return type, for example `string`, `void`, or `Array/string`. |
 | `confirm` | boolean | Yes | - | Must be `true` to confirm creation. If `false`, the action is not created. |
+
+`inputParameters` array item:
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | string | Yes | Action input parameter name. |
+| `type` | string | Yes | vRO parameter type. |
+| `description` | string | No | Optional parameter description. |
+:::
+
+### `update-action`
+
+Update an existing action in place via its ID (`PUT /actions/{id}`). Provide at least one of `script`, `inputParameters`, or `returnType`; unspecified fields are preserved from the live action. Inspect the action with `get-action` first, and pass `expectedName`/`expectedModule` to bind the update to the action you inspected.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `id` | string | Yes | - | Action ID to update. |
+| `script` | string | No | - | New script content. Omit to keep the current script. |
+| `inputParameters` | array | No | - | Replacement input parameter definitions (replaces the existing set). Omit to keep the current parameters. |
+| `returnType` | string | No | - | New return type, for example `string`, `void`, or `Array/string`. Omit to keep the current return type. |
+| `expectedName` | string | No | - | Expected live action name to verify before updating. |
+| `expectedModule` | string | No | - | Expected live action module to verify before updating. |
+| `confirm` | boolean | Yes | - | Must be `true` to confirm the update. If `false`, the action is not modified. |
 
 `inputParameters` array item:
 
@@ -440,15 +464,14 @@ Both `base` and `compare` are discriminated unions selected by `source`:
 
 ### `import-action-file`
 
-Import a `.action` file from the configured action artifact directory into an action category. Use this direct import path for narrow validation or explicitly requested one-off tests; publish reusable project content through the project package tools.
+Import a `.action` file from the configured action artifact directory into an action module. The `categoryName` is the target module (for example `com.example.myactions`); discover existing modules from the module column of `list-actions` — vRO does not expose action modules through `list-categories` (the `ActionCategory` type returns nothing). Use this direct import path for narrow validation or explicitly requested one-off tests; publish reusable project content through the project package tools.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
-| `categoryName` | string | Yes | - | Action category or module name to import into. |
+| `categoryName` | string | Yes | - | Action module to import into, for example `com.example.myactions`. A new module name is created on import. |
 | `fileName` | string | Yes | - | Plain `.action` file name under the configured action artifact directory to import. |
-| `expectedCategoryName` | string | No | - | Expected action category/module name; must match `categoryName` before import. |
-| `expectedCategoryId` | string | No | - | Expected action category ID to verify before import. |
+| `expectedCategoryName` | string | No | - | Expected module name; must match `categoryName` before import. |
 | `confirm` | boolean | Yes | - | Must be `true` to confirm import. If `false`, import is not performed. |
 :::
 

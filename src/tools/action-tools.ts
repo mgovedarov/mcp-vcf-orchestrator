@@ -197,6 +197,25 @@ export function registerActionTools(
       }
 
       try {
+        // Guard against silently creating a second action with the same
+        // module/name. vRO allows duplicate module/name pairs, so check first
+        // and route the caller to update-action instead.
+        const existing = await client.listActions(name);
+        const duplicate = (existing.link ?? []).find(
+          (a) => a.name === name && a.module === moduleName,
+        );
+        if (duplicate) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Action ${moduleName}/${name} already exists (id: ${duplicate.id}). To change it, use update-action with id ${duplicate.id} instead of creating a duplicate.`,
+              },
+            ],
+            isError: true,
+          };
+        }
+
         const action = await client.createAction({
           moduleName,
           name,
@@ -210,7 +229,7 @@ export function registerActionTools(
           content: [
             {
               type: "text",
-              text: `Action created successfully.\nName: ${action.name}\nID: ${action.id}\nModule: ${action.module}`,
+              text: `Action created successfully.\nName: ${action.name}\nID: ${action.id}\nModule: ${action.module}${action.version ? `\nVersion: ${action.version}` : ""}`,
             },
           ],
         };
@@ -220,6 +239,142 @@ export function registerActionTools(
             {
               type: "text",
               text: `Failed to create action: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  server.registerTool(
+    "update-action",
+    {
+      title: "Update Action",
+      description:
+        "Update an existing action (scriptable task) in place in VCF Automation Orchestrator via its ID. Provide at least one of script, inputParameters, or returnType; unspecified fields are preserved from the live action. Use get-action first to inspect the current contract, and pass expectedName/expectedModule to bind the update to the action you inspected. Set confirm to true to proceed.",
+      inputSchema: z.object({
+        id: z.string().describe("The action ID to update"),
+        script: z
+          .string()
+          .optional()
+          .describe("New JavaScript/TypeScript script content for the action"),
+        inputParameters: z
+          .array(
+            z.object({
+              name: z.string().describe("Parameter name"),
+              type: z
+                .string()
+                .describe("Parameter type (e.g. string, number, boolean)"),
+              description: z
+                .string()
+                .optional()
+                .describe("Parameter description"),
+            }),
+          )
+          .optional()
+          .describe(
+            "Replacement input parameters for the action (replaces the existing set)",
+          ),
+        returnType: z
+          .string()
+          .optional()
+          .describe("New return type (e.g. string, void, Array/string)"),
+        expectedName: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected action name verified against the live action before updating",
+          ),
+        expectedModule: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected action module verified against the live action before updating",
+          ),
+        confirm: z
+          .boolean()
+          .describe(
+            "Must be set to true to confirm the update. If false, the action will not be modified.",
+          ),
+      }),
+      annotations: DESTRUCTIVE_LIVE_WRITE,
+    },
+    async ({
+      id,
+      script,
+      inputParameters,
+      returnType,
+      expectedName,
+      expectedModule,
+      confirm,
+    }): Promise<CallToolResult> => {
+      if (
+        script === undefined &&
+        inputParameters === undefined &&
+        returnType === undefined
+      ) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Nothing to update for action ${id}. Provide at least one of script, inputParameters, or returnType.`,
+            },
+          ],
+          isError: true,
+        };
+      }
+      if (!confirm) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Confirm update of action ${id} by setting confirm to true.`,
+            },
+          ],
+        };
+      }
+      try {
+        if (hasAnyExpectedValue({ expectedName, expectedModule })) {
+          const existing = await client.getAction(id);
+          const guard = guardExpectedFields(`action ${id}`, [
+            {
+              label: "action name",
+              expected: expectedName,
+              actual: existing.name,
+            },
+            {
+              label: "module",
+              expected: expectedModule,
+              actual: existing.module,
+            },
+          ]);
+          if (guard) return guard;
+        }
+
+        const action = await client.updateAction(id, {
+          script,
+          inputParameters: inputParameters as
+            | { name: string; type: string; description?: string }[]
+            | undefined,
+          returnType,
+        });
+        return {
+          content: [
+            {
+              type: "text",
+              text: appendGuardGuidance(
+                `Action updated successfully.\nName: ${action.name}\nID: ${action.id}\nModule: ${action.module}`,
+              ),
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to update action: ${error instanceof Error ? error.message : String(error)}`,
             },
           ],
           isError: true,
@@ -346,7 +501,7 @@ export function registerActionTools(
     {
       title: "Import Action File",
       description:
-        "Import a .action file from the configured action artifact directory into an action category. Use list-categories with type ActionCategory to find the category name first. Set confirm to true to proceed.",
+        "Import a .action file from the configured action artifact directory into an action module. The categoryName is the target module (e.g. com.example.myactions). Discover existing modules from the module column of list-actions (vRO does not expose action modules through list-categories — ActionCategory returns nothing); a new module name creates it on import. Set confirm to true to proceed.",
       inputSchema: z.object({
         categoryName: z
           .string()
@@ -358,13 +513,7 @@ export function registerActionTools(
           .string()
           .optional()
           .describe(
-            "Optional expected action category/module name; must match categoryName before import",
-          ),
-        expectedCategoryId: z
-          .string()
-          .optional()
-          .describe(
-            "Optional expected action category ID verified before import",
+            "Optional expected action module name; must match categoryName before import",
           ),
         confirm: z
           .boolean()
@@ -378,7 +527,6 @@ export function registerActionTools(
       categoryName,
       fileName,
       expectedCategoryName,
-      expectedCategoryId,
       confirm,
     }): Promise<CallToolResult> => {
       if (!confirm) {
@@ -396,34 +544,13 @@ export function registerActionTools(
           `action import target ${categoryName}`,
           [
             {
-              label: "category name",
+              label: "module name",
               expected: expectedCategoryName,
               actual: categoryName,
             },
           ],
         );
         if (categoryNameGuard) return categoryNameGuard;
-
-        if (expectedCategoryId !== undefined) {
-          const categories = await client.listCategories(
-            "ActionCategory",
-            categoryName,
-          );
-          const category = categories.link?.find(
-            (candidate) => candidate.name === categoryName,
-          );
-          const categoryIdGuard = guardExpectedFields(
-            `action import target ${categoryName}`,
-            [
-              {
-                label: "category ID",
-                expected: expectedCategoryId,
-                actual: category?.id,
-              },
-            ],
-          );
-          if (categoryIdGuard) return categoryIdGuard;
-        }
 
         await client.importActionFile(categoryName, fileName);
         return {

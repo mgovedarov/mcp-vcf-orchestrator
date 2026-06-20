@@ -25,29 +25,104 @@ function isNotFoundError(error: unknown): boolean {
   );
 }
 
+export interface ActionParameterInput {
+  name: string;
+  type: string;
+  description?: string;
+}
+
+/**
+ * Derives an action's module from a /actions list entry. That endpoint does not
+ * return a `module` attribute — only `fqn`, which on vRO is `"<module>/<name>"`
+ * (e.g. `com.vmware.library.snmp/createSnmpQuery`). Splitting on `.` truncates
+ * the last module segment, so strip the known `name` suffix and split on the
+ * `/` separator, tolerating a legacy dotted `"<module>.<name>"` form.
+ */
+function deriveActionModule(attrs: Record<string, string | undefined>): string {
+  const direct = attrs["module"] ?? attrs["@module"];
+  if (direct) return direct;
+  const fqn = attrs["fqn"] ?? attrs["@fqn"];
+  if (!fqn) return "";
+  const name = attrs["name"] ?? attrs["@name"];
+  if (name && fqn.endsWith(`/${name}`)) {
+    return fqn.slice(0, -(name.length + 1));
+  }
+  if (fqn.includes("/")) {
+    return fqn.slice(0, fqn.lastIndexOf("/"));
+  }
+  if (name && fqn.endsWith(`.${name}`)) {
+    return fqn.slice(0, -(name.length + 1));
+  }
+  return fqn.split(".").slice(0, -1).join(".");
+}
+
+/**
+ * Builds the vRO action JSON representation shared by create (POST /actions)
+ * and update (PUT /actions/{id}). Keeping this in one place ensures the two
+ * paths can never diverge in how they shape `output-type`/`input-parameters`.
+ */
+function buildActionBody(params: {
+  id?: string;
+  name: string;
+  module: string;
+  script: string;
+  version?: string;
+  returnType?: string;
+  inputParameters?: ActionParameterInput[];
+}): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    name: params.name,
+    module: params.module,
+    script: params.script,
+  };
+  if (params.id) {
+    body["id"] = params.id;
+  }
+  if (params.version) {
+    body["version"] = params.version;
+  }
+  if (params.returnType) {
+    body["output-type"] = params.returnType;
+  }
+  if (params.inputParameters && params.inputParameters.length > 0) {
+    body["input-parameters"] = params.inputParameters.map((p) => ({
+      name: p.name,
+      type: p.type,
+      description: p.description ?? "",
+    }));
+  }
+  return body;
+}
+
 export class ActionClient {
   constructor(private http: VroHttpClient) {}
 
   async listActions(filter?: string): Promise<ActionList> {
-    const params = new URLSearchParams();
-    if (filter) {
-      params.set("conditions", `name~${filter}`);
-    }
-    const raw = await getAllVroPages<AttributeLink>(this.http, "/actions", params);
-    const link: Action[] = (raw.link ?? []).map((item) => {
+    // The vRO /actions endpoint ignores `conditions`/`maxResult` query params
+    // (verified against vRO 9.1: it always returns the full list), so the name
+    // filter must be applied client-side rather than relying on the server.
+    const raw = await getAllVroPages<AttributeLink>(
+      this.http,
+      "/actions",
+      new URLSearchParams(),
+    );
+    let link: Action[] = (raw.link ?? []).map((item) => {
       const a = getLinkAttrs(item);
       return {
         id: a["id"] ?? a["@id"],
         name: a["name"] ?? a["@name"],
         description: a["description"],
-        module:
-          a["module"] ?? a["fqn"]?.split(".").slice(0, -1).join(".") ?? "",
+        module: deriveActionModule(a),
         version: a["version"],
         fqn: a["fqn"],
       };
     });
+    if (filter) {
+      const needle = filter.toLowerCase();
+      link = link.filter((a) => (a.name ?? "").toLowerCase().includes(needle));
+    }
     return {
-      total: raw.total ?? link.length,
+      total: link.length,
       link,
       ...(raw.truncated ? { truncated: true } : {}),
     };
@@ -254,25 +329,59 @@ export class ActionClient {
     moduleName: string;
     name: string;
     script: string;
-    inputParameters?: { name: string; type: string; description?: string }[];
+    inputParameters?: ActionParameterInput[];
     returnType?: string;
   }): Promise<Action> {
-    const body: Record<string, unknown> = {
+    const body = buildActionBody({
       name: params.name,
       module: params.moduleName,
       script: params.script,
-    };
-    if (params.returnType) {
-      body["output-type"] = params.returnType;
-    }
-    if (params.inputParameters && params.inputParameters.length > 0) {
-      body["input-parameters"] = params.inputParameters.map((p) => ({
-        name: p.name,
-        type: p.type,
-        description: p.description ?? "",
-      }));
-    }
+      returnType: params.returnType,
+      inputParameters: params.inputParameters,
+    });
     return this.http.post<Action>("/actions", body);
+  }
+
+  /**
+   * Update an existing action in place. The current representation is fetched
+   * first so unspecified fields (name, module, version, script, parameters,
+   * return type) are preserved; only the provided fields are overlaid before
+   * the whole representation is PUT back to /actions/{id}.
+   */
+  async updateAction(
+    id: string,
+    params: {
+      script?: string;
+      inputParameters?: ActionParameterInput[];
+      returnType?: string;
+      name?: string;
+      moduleName?: string;
+    },
+  ): Promise<Action> {
+    const current = await this.getAction(id);
+    const actionId = current.id ?? id;
+    const body = buildActionBody({
+      id: actionId,
+      name: params.name ?? current.name,
+      module: params.moduleName ?? current.module,
+      version: current.version,
+      script: params.script ?? current.script ?? "",
+      returnType: params.returnType ?? current["output-type"],
+      inputParameters:
+        params.inputParameters ??
+        (current["input-parameters"] ?? []).map((p) => ({
+          name: p.name,
+          type: p.type,
+          description: p.description,
+        })),
+    });
+    // PUT returns a validation envelope ({ "errors": [] }) rather than the
+    // updated action, so re-fetch to return the authoritative representation.
+    await this.http.put<{ errors?: unknown[] }>(
+      `/actions/${encodeURIComponent(actionId)}`,
+      body,
+    );
+    return this.getAction(actionId);
   }
 
   async deleteAction(id: string): Promise<void> {
