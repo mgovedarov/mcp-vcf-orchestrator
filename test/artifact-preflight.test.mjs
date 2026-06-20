@@ -1,4 +1,4 @@
-import { zipSync } from "fflate";
+import { unzipSync, zipSync } from "fflate";
 import assert from "node:assert/strict";
 import {
   mkdtemp,
@@ -43,6 +43,88 @@ const workflow = {
     },
   ],
 };
+
+const twoInputWorkflow = {
+  ...workflow,
+  inputs: [
+    { name: "message", type: "string" },
+    { name: "count", type: "number" },
+  ],
+  tasks: [
+    {
+      script: "result = message;",
+      inBindings: [
+        { name: "message", type: "string", source: "message" },
+        { name: "count", type: "number", source: "count" },
+      ],
+      outBindings: [{ name: "result", type: "string", target: "result" }],
+    },
+  ],
+};
+
+test("preflightWorkflowFile flags input_form_ fields that do not match a workflow input", async () => {
+  const workflowDir = await mkdtemp(join(tmpdir(), "vcfa-preflight-"));
+  await writeFile(
+    join(workflowDir, "stale.workflow"),
+    workflowArtifactWithForm(workflow, inputFormFor([{ id: "wrongName" }])),
+  );
+
+  try {
+    const report = await preflightWorkflowFile(workflowDir, "stale.workflow");
+    assert.equal(report.valid, false);
+    assert.match(
+      report.errors.join("\n"),
+      /schema\.wrongName does not match any declared workflow input/,
+    );
+    assert.match(
+      report.warnings.join("\n"),
+      /no field for declared workflow input message/,
+    );
+  } finally {
+    await rm(workflowDir, { recursive: true, force: true });
+  }
+});
+
+test("preflightWorkflowFile warns when a workflow input has no input_form_ field", async () => {
+  const workflowDir = await mkdtemp(join(tmpdir(), "vcfa-preflight-"));
+  await writeFile(
+    join(workflowDir, "partial.workflow"),
+    workflowArtifactWithForm(twoInputWorkflow, inputFormFor([{ id: "message" }])),
+  );
+
+  try {
+    const report = await preflightWorkflowFile(workflowDir, "partial.workflow");
+    assert.equal(report.valid, true);
+    assert.match(
+      report.warnings.join("\n"),
+      /no field for declared workflow input count/,
+    );
+  } finally {
+    await rm(workflowDir, { recursive: true, force: true });
+  }
+});
+
+test("preflightWorkflowFile warns when an input_form_ dataType disagrees with the workflow input", async () => {
+  const workflowDir = await mkdtemp(join(tmpdir(), "vcfa-preflight-"));
+  await writeFile(
+    join(workflowDir, "mismatch.workflow"),
+    workflowArtifactWithForm(
+      workflow,
+      inputFormFor([{ id: "message", dataType: "boolean", display: "checkbox" }]),
+    ),
+  );
+
+  try {
+    const report = await preflightWorkflowFile(workflowDir, "mismatch.workflow");
+    assert.equal(report.valid, true);
+    assert.match(
+      report.warnings.join("\n"),
+      /schema\.message type\.dataType "boolean" does not match workflow input message \(string -> string\)/,
+    );
+  } finally {
+    await rm(workflowDir, { recursive: true, force: true });
+  }
+});
 
 test("preflightWorkflowFile accepts generated workflow artifacts and reports action references", async () => {
   const workflowDir = await mkdtemp(join(tmpdir(), "vcfa-preflight-"));
@@ -928,6 +1010,50 @@ function propertiesInfo() {
   return new TextEncoder().encode(
     "#\nowner=\ncharset=UTF-16\ncreator=www.dunes.ch\nunicode=true\ntype=workflow\nversion=2.0\n",
   );
+}
+
+function inputFormFor(fields) {
+  return {
+    layout: {
+      pages: [
+        {
+          id: "page_general",
+          sections: [
+            {
+              id: "section_inputs",
+              fields: fields.map((field) => ({
+                id: field.id,
+                display: field.display ?? "textField",
+                signpostPosition: "right-middle",
+                state: { visible: true, "read-only": false },
+              })),
+            },
+          ],
+          title: "General",
+        },
+      ],
+    },
+    schema: Object.fromEntries(
+      fields.map((field) => [
+        field.id,
+        {
+          id: field.id,
+          type: { dataType: field.dataType ?? "string" },
+          label: field.id,
+        },
+      ]),
+    ),
+    options: { externalValidations: [] },
+    itemId: "",
+  };
+}
+
+// Builds a valid workflow artifact, then swaps in a hand-crafted input_form_ so
+// the preflight cross-check can be exercised against mismatched forms.
+function workflowArtifactWithForm(spec, form) {
+  const files = unzipSync(buildWorkflowArtifact(spec));
+  files["input_form_"] = utf16BeWithBom(JSON.stringify(form));
+  return zipSync(files);
 }
 
 function utf16LeWithBom(value) {
