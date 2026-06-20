@@ -185,18 +185,135 @@ test("vRO list clients aggregate multiple startIndex pages and preserve filters"
   };
 
   const client = new VroClient(config());
-  const actions = await client.listActions("deploy vm");
+  const configs = await client.listConfigurations("deploy vm");
 
-  assert.equal(actions.total, 101);
-  assert.equal(actions.link.length, 101);
+  assert.equal(configs.total, 101);
+  assert.equal(configs.link.length, 101);
   assert.equal(
     calls[1].url,
-    "https://vcfa.example.test/vco/api/actions?conditions=name~deploy%20vm&maxResult=100&startIndex=0&queryCount=true",
+    "https://vcfa.example.test/vco/api/configurations?conditions=name~deploy%20vm&maxResult=100&startIndex=0&queryCount=true",
   );
   assert.equal(
     calls[2].url,
-    "https://vcfa.example.test/vco/api/actions?conditions=name~deploy%20vm&maxResult=100&startIndex=100&queryCount=true",
+    "https://vcfa.example.test/vco/api/configurations?conditions=name~deploy%20vm&maxResult=100&startIndex=100&queryCount=true",
   );
+});
+
+test("listActions ignores the server-side filter and filters by name client-side", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    const startIndex = Number(
+      new URL(String(url)).searchParams.get("startIndex"),
+    );
+    const count = startIndex === 0 ? 100 : 1;
+    return Response.json({
+      start: startIndex,
+      total: 101,
+      link: Array.from({ length: count }, (_, index) => ({
+        attributes: [
+          { name: "id", value: `action-${startIndex + index}` },
+          { name: "name", value: `Action ${startIndex + index}` },
+          { name: "module", value: "com.example" },
+        ],
+      })),
+    });
+  };
+
+  const client = new VroClient(config());
+
+  // No filter: aggregates all pages, and never sends a conditions param (the
+  // vRO /actions endpoint ignores it).
+  const all = await client.listActions();
+  assert.equal(all.link.length, 101);
+  assert.equal(
+    calls[1].url,
+    "https://vcfa.example.test/vco/api/actions?maxResult=100&startIndex=0&queryCount=true",
+  );
+  assert.ok(!calls[1].url.includes("conditions"));
+
+  // Filter: applied client-side, case-insensitively, against the name.
+  const filtered = await client.listActions("action 1");
+  assert.ok(filtered.link.length > 0);
+  assert.ok(
+    filtered.link.every((a) => a.name.toLowerCase().includes("action 1")),
+  );
+  assert.equal(filtered.total, filtered.link.length);
+});
+
+test("listActions derives module from the slash-separated fqn when the list omits module", async () => {
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/login") || String(url).includes("/sessions")) {
+      return authResponse();
+    }
+    // Mirror the real vRO /actions list shape: fqn only, no `module` attribute.
+    return Response.json({
+      total: 3,
+      link: [
+        {
+          attributes: [
+            { name: "id", value: "a1" },
+            { name: "name", value: "createSnmpQuery" },
+            { name: "fqn", value: "com.vmware.library.snmp/createSnmpQuery" },
+          ],
+        },
+        {
+          attributes: [
+            { name: "id", value: "a2" },
+            { name: "name", value: "probeImport" },
+            { name: "fqn", value: "com.evoila.mcptest/probeImport" },
+          ],
+        },
+        {
+          // Legacy dotted fqn (no slash) must still strip the trailing name.
+          attributes: [
+            { name: "id", value: "a3" },
+            { name: "name", value: "legacy" },
+            { name: "fqn", value: "com.old.module.legacy" },
+          ],
+        },
+      ],
+    });
+  };
+
+  const client = new VroClient(config());
+  const actions = await client.listActions();
+  const byId = Object.fromEntries(actions.link.map((a) => [a.id, a.module]));
+  assert.equal(byId.a1, "com.vmware.library.snmp");
+  assert.equal(byId.a2, "com.evoila.mcptest");
+  assert.equal(byId.a3, "com.old.module");
+});
+
+test("updateAction sends an empty input-parameters array to clear all parameters", async () => {
+  let putBody;
+  const current = {
+    id: "action-1",
+    name: "getVmIp",
+    module: "com.example.actions",
+    version: "1.0.0",
+    script: "return 1;",
+    "output-type": "string",
+    "input-parameters": [{ name: "vm", type: "VC:VirtualMachine" }],
+  };
+  globalThis.fetch = async (url, init) => {
+    const u = String(url);
+    if (u.includes("/login") || u.includes("/sessions")) return authResponse();
+    if (init?.method === "PUT") {
+      putBody = JSON.parse(String(init.body));
+      return Response.json({ errors: [] });
+    }
+    // Both the initial fetch and the re-fetch return the current action.
+    return Response.json(current);
+  };
+
+  const client = new VroClient(config());
+  await client.updateAction("action-1", { inputParameters: [] });
+
+  assert.deepEqual(putBody["input-parameters"], []);
+  // Unspecified fields are preserved from the live action.
+  assert.equal(putBody.script, "return 1;");
+  assert.equal(putBody["output-type"], "string");
 });
 
 test("formatQuery preserves $ and ~ in values while keeping OData $-keys literal", () => {
@@ -223,11 +340,11 @@ test("vRO conditions values containing $ are percent-encoded", async () => {
   };
 
   const client = new VroClient(config());
-  await client.listActions("cost$center ~v2");
+  await client.listConfigurations("cost$center ~v2");
 
   assert.equal(
     calls[1].url,
-    "https://vcfa.example.test/vco/api/actions?conditions=name~cost%24center%20~v2&maxResult=100&startIndex=0&queryCount=true",
+    "https://vcfa.example.test/vco/api/configurations?conditions=name~cost%24center%20~v2&maxResult=100&startIndex=0&queryCount=true",
   );
 });
 
