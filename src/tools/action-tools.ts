@@ -199,11 +199,9 @@ export function registerActionTools(
       try {
         // Guard against silently creating a second action with the same
         // module/name. vRO allows duplicate module/name pairs, so check first
-        // and route the caller to update-action instead.
-        const existing = await client.listActions(name);
-        const duplicate = (existing.link ?? []).find(
-          (a) => a.name === name && a.module === moduleName,
-        );
+        // (via the targeted GET /actions/{module}/{name} lookup) and route the
+        // caller to update-action instead.
+        const duplicate = await client.findAction(moduleName, name);
         if (duplicate) {
           return {
             content: [
@@ -274,7 +272,7 @@ export function registerActionTools(
           )
           .optional()
           .describe(
-            "Replacement input parameters for the action (replaces the existing set)",
+            "Replacement input parameters for the action (replaces the existing set); pass an empty array to clear all parameters. Omit to keep the current parameters.",
           ),
         returnType: z
           .string()

@@ -418,11 +418,13 @@ export class VroClient {
       script?: string;
       inputParameters?: { name: string; type: string; description?: string }[];
       returnType?: string;
-      name?: string;
-      moduleName?: string;
     },
   ): Promise<Action> {
     return this.actions.updateAction(id, params);
+  }
+
+  findAction(moduleName: string, name: string): Promise<Action | null> {
+    return this.actions.findAction(moduleName, name);
   }
 
   deleteAction(id: string): Promise<void> {

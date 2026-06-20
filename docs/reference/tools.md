@@ -407,7 +407,7 @@ Update an existing action in place via its ID (`PUT /actions/{id}`). Provide at 
 | --- | --- | --- | --- | --- |
 | `id` | string | Yes | - | Action ID to update. |
 | `script` | string | No | - | New script content. Omit to keep the current script. |
-| `inputParameters` | array | No | - | Replacement input parameter definitions (replaces the existing set). Omit to keep the current parameters. |
+| `inputParameters` | array | No | - | Replacement input parameter definitions (replaces the existing set); pass an empty array to clear all parameters. Omit to keep the current parameters. |
 | `returnType` | string | No | - | New return type, for example `string`, `void`, or `Array/string`. Omit to keep the current return type. |
 | `expectedName` | string | No | - | Expected live action name to verify before updating. |
 | `expectedModule` | string | No | - | Expected live action module to verify before updating. |

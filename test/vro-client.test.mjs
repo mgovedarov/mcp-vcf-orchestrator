@@ -285,6 +285,37 @@ test("listActions derives module from the slash-separated fqn when the list omit
   assert.equal(byId.a3, "com.old.module");
 });
 
+test("updateAction sends an empty input-parameters array to clear all parameters", async () => {
+  let putBody;
+  const current = {
+    id: "action-1",
+    name: "getVmIp",
+    module: "com.example.actions",
+    version: "1.0.0",
+    script: "return 1;",
+    "output-type": "string",
+    "input-parameters": [{ name: "vm", type: "VC:VirtualMachine" }],
+  };
+  globalThis.fetch = async (url, init) => {
+    const u = String(url);
+    if (u.includes("/login") || u.includes("/sessions")) return authResponse();
+    if (init?.method === "PUT") {
+      putBody = JSON.parse(String(init.body));
+      return Response.json({ errors: [] });
+    }
+    // Both the initial fetch and the re-fetch return the current action.
+    return Response.json(current);
+  };
+
+  const client = new VroClient(config());
+  await client.updateAction("action-1", { inputParameters: [] });
+
+  assert.deepEqual(putBody["input-parameters"], []);
+  // Unspecified fields are preserved from the live action.
+  assert.equal(putBody.script, "return 1;");
+  assert.equal(putBody["output-type"], "string");
+});
+
 test("formatQuery preserves $ and ~ in values while keeping OData $-keys literal", () => {
   assert.equal(
     formatQuery(new URLSearchParams({ $filter: "projectId eq 'a$b~c'" })),

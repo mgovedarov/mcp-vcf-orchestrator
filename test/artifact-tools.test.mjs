@@ -44,7 +44,7 @@ test("action tools format detail responses and pass create payloads", async () =
       ],
       script: "return vm.ipAddress;",
     }),
-    listActions: async () => ({ link: [] }),
+    findAction: async () => null,
     createAction: async (params) => {
       createParams = params;
       return {
@@ -100,10 +100,10 @@ test("action tools format detail responses and pass create payloads", async () =
 test("create-action blocks a duplicate module/name and points to update-action", async () => {
   let createCalled = false;
   const handlers = registeredTools(registerActionTools, {
-    listActions: async () => ({
-      link: [
-        { id: "existing-1", name: "getVmIp", module: "com.example.actions" },
-      ],
+    findAction: async (moduleName, name) => ({
+      id: "existing-1",
+      name,
+      module: moduleName,
     }),
     createAction: async () => {
       createCalled = true;

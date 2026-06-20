@@ -84,7 +84,10 @@ function buildActionBody(params: {
   if (params.returnType) {
     body["output-type"] = params.returnType;
   }
-  if (params.inputParameters && params.inputParameters.length > 0) {
+  // Emit `input-parameters` whenever an array is supplied — including an empty
+  // one — so an update can clear every parameter. `create` passes `undefined`
+  // when no parameters are given, which omits the field entirely.
+  if (params.inputParameters) {
     body["input-parameters"] = params.inputParameters.map((p) => ({
       name: p.name,
       type: p.type,
@@ -343,6 +346,21 @@ export class ActionClient {
   }
 
   /**
+   * Looks up a single action by its `module`/`name` via the dedicated
+   * `GET /actions/{module}/{name}` endpoint, returning `null` when none exists.
+   * Used as a cheap existence check so callers don't have to page the full
+   * action list (the `/actions` list endpoint ignores server-side filters).
+   */
+  async findAction(moduleName: string, name: string): Promise<Action | null> {
+    try {
+      return await this.getAction(`${moduleName}/${name}`);
+    } catch (error) {
+      if (isNotFoundError(error)) return null;
+      throw error;
+    }
+  }
+
+  /**
    * Update an existing action in place. The current representation is fetched
    * first so unspecified fields (name, module, version, script, parameters,
    * return type) are preserved; only the provided fields are overlaid before
@@ -354,16 +372,14 @@ export class ActionClient {
       script?: string;
       inputParameters?: ActionParameterInput[];
       returnType?: string;
-      name?: string;
-      moduleName?: string;
     },
   ): Promise<Action> {
     const current = await this.getAction(id);
     const actionId = current.id ?? id;
     const body = buildActionBody({
       id: actionId,
-      name: params.name ?? current.name,
-      module: params.moduleName ?? current.module,
+      name: current.name,
+      module: current.module,
       version: current.version,
       script: params.script ?? current.script ?? "",
       returnType: params.returnType ?? current["output-type"],
