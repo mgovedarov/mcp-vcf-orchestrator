@@ -21,6 +21,10 @@ export class CategoryClient {
     const link: Category[] = (raw.link ?? []).map((item) => {
       const a = parseAttrs(item.attributes);
       const category: Category = {
+        // The "" fallbacks satisfy the required string type for malformed
+        // entries that omit id/name, but they mask missing data — and an empty
+        // id could collide with another malformed entry in downstream
+        // find-by-id lookups. In practice live categories always carry both.
         id: a["id"] ?? a["@id"] ?? "",
         name: a["name"] ?? a["@name"] ?? "",
         description: a["description"],

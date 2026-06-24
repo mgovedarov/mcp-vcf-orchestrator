@@ -512,7 +512,7 @@ export function registerActionTools(
           .string()
           .optional()
           .describe(
-            "Optional expected action module name. Must match categoryName and is verified against the live module set from list-actions; if the module does not yet exist the import proceeds and reports that a new module was created.",
+            "Optional expected action module name. Must match categoryName and is verified against the live module set from list-actions; if the module does not yet exist the import proceeds and reports that a new module was created. The new-module note is only reported when this argument is provided (the live check runs only then).",
           ),
         confirm: z
           .boolean()
@@ -548,6 +548,9 @@ export function registerActionTools(
         if (guard) return guard;
 
         await client.importActionFile(categoryName, fileName);
+        // moduleIsNew is only ever true when expectedCategoryName was supplied
+        // (the guard skips the live list-actions check otherwise), so this note
+        // appears only on imports that passed an expected module name.
         const importedText = moduleIsNew
           ? `Action imported successfully from: ${fileName}\n\nNote: module "${categoryName}" did not exist before this import; a new module was created.`
           : `Action imported successfully from: ${fileName}`;

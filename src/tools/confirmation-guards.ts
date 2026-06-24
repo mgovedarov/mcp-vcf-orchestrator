@@ -121,6 +121,11 @@ export async function guardExpectedCategory(
  * the caller-supplied `moduleName` and (b) reports whether the module already
  * exists live. A not-yet-existing module is not an error — vRO creates the module
  * on import — but the caller should surface that a new module will be created.
+ *
+ * When `expectedModuleName` is omitted this returns early with
+ * `moduleIsNew: false` and performs no live `listActions` call (conservative: no
+ * extra round-trip on every import). As a result the "new module" signal is only
+ * available when the caller passes the expected name.
  */
 export async function guardExpectedActionModule(
   target: string,
