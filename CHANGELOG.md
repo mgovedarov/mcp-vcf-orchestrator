@@ -8,6 +8,7 @@ This release applies follow-up polish from the VCFO-063 review. No public tool, 
 
 - `list-workflows-by-category` now **surfaces category-list truncation for the `categoryName` selector** too: when no category matches the requested name and the live category list was truncated at the page-request cap, the error explains the category may exist beyond the returned page instead of asserting it does not exist — matching the existing `categoryId`/`categoryPath` behavior (VCFO-063).
 - Server shutdown now wraps transport/HTTP-dispatcher teardown in `try/finally` so the process still exits if `server.close()` or `client.close()` throws, preventing a hung close from keeping the server alive under a process-manager `SIGTERM` (VCFO-063).
+- The `SIGINT`/`SIGTERM` handlers are now registered **before** the stdio transport connects, so a signal arriving during or immediately after startup is caught by the graceful-shutdown handler instead of the default terminate disposition (VCFO-063).
 
 ### Docs
 

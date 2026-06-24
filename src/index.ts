@@ -134,14 +134,11 @@ async function main(): Promise<void> {
   registerVcfaResources(server, client);
   registerVcfaPrompts(server);
 
-  // Connect via stdio transport
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error("[vcfa-server] MCP server started (stdio transport)");
-
-  // Graceful shutdown. Process managers and MCP clients commonly terminate the
-  // server with SIGTERM as well as SIGINT, so both must tear down the transport
-  // and the client's HTTP dispatcher.
+  // Register graceful-shutdown handlers BEFORE connecting the transport so a
+  // signal that arrives during/right after startup is always caught by our
+  // handler rather than the default "terminate" disposition. Process managers
+  // and MCP clients commonly stop the server with SIGTERM as well as SIGINT, so
+  // both must tear down the transport and the client's HTTP dispatcher.
   let shuttingDown = false;
   const shutdown = async (signal: string) => {
     if (shuttingDown) return;
@@ -160,6 +157,11 @@ async function main(): Promise<void> {
   };
   process.on("SIGINT", () => void shutdown("SIGINT"));
   process.on("SIGTERM", () => void shutdown("SIGTERM"));
+
+  // Connect via stdio transport
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+  console.error("[vcfa-server] MCP server started (stdio transport)");
 }
 
 function normalizeTargetPlatform(
