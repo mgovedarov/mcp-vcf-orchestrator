@@ -49,6 +49,11 @@ export class ResourceClient {
     const result = await this.listResources();
     const element = result.link.find((item) => item.id === id);
     if (!element) {
+      if (result.truncated) {
+        throw new Error(
+          `Resource element ${id} was not found in the first ${result.link.length} resources, but the live resource list was truncated at the page-request cap, so it may exist beyond the returned page. Narrow the listing or retry rather than treating it as missing.`,
+        );
+      }
       throw new Error(`Resource element not found: ${id}`);
     }
     return element;

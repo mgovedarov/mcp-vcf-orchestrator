@@ -19,6 +19,9 @@ export function parseAttrs(
 ): Record<string, string> {
   const obj: Record<string, string> = {};
   for (const a of attrs ?? []) {
+    // Guard against malformed attribute entries (missing/non-string name) so a
+    // bad element can't pollute the map with an "undefined" key.
+    if (typeof a?.name !== "string") continue;
     obj[a.name] = a.value;
   }
   return obj;

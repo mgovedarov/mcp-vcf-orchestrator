@@ -154,6 +154,7 @@ export async function getAllAutomationPages<T>(
   const content: T[] = [];
   let reportedTotal: number | undefined;
   let totalPages: number | undefined;
+  const seenPageSignatures = new Set<string>();
 
   let pageNumber = 0;
   for (; pageNumber < maxPageRequests; pageNumber += 1) {
@@ -168,6 +169,16 @@ export async function getAllAutomationPages<T>(
     const items = page.content ?? [];
     if (page.totalElements !== undefined) reportedTotal = page.totalElements;
     if (page.totalPages !== undefined) totalPages = page.totalPages;
+
+    if (items.length > 0) {
+      const signature = JSON.stringify(items);
+      if (seenPageSignatures.has(signature)) {
+        throw new Error(
+          `Automation pagination did not advance for ${path}; received a repeated page at page=${pageNumber}`,
+        );
+      }
+      seenPageSignatures.add(signature);
+    }
 
     content.push(...items);
 

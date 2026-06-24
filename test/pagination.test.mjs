@@ -71,6 +71,25 @@ test("getAllAutomationPages flags truncation when the page request cap is reache
   assert.equal(result.truncated, true);
 });
 
+test("getAllAutomationPages throws when the server repeats a page without advancing", async () => {
+  // Server always returns the same non-empty page and never reports `last` or
+  // totals, so only the non-advancement guard can stop the loop.
+  const repeatingStub = {
+    get: async () => ({ content: [{ id: "stuck" }] }),
+  };
+
+  await assert.rejects(
+    getAllAutomationPages(
+      repeatingStub,
+      "/things",
+      "https://example.test",
+      undefined,
+      { pageSize: 1, maxPageRequests: 100 },
+    ),
+    /Automation pagination did not advance/,
+  );
+});
+
 test("getAllAutomationPages omits truncated when the server reports the last page", async () => {
   const result = await getAllAutomationPages(
     automationHttpStub(3),

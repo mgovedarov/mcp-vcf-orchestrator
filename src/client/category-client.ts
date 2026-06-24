@@ -21,8 +21,8 @@ export class CategoryClient {
     const link: Category[] = (raw.link ?? []).map((item) => {
       const a = parseAttrs(item.attributes);
       const category: Category = {
-        id: a["id"] ?? a["@id"],
-        name: a["name"] ?? a["@name"],
+        id: a["id"] ?? a["@id"] ?? "",
+        name: a["name"] ?? a["@name"] ?? "",
         description: a["description"],
         type: a["type"] ?? categoryType,
         path: a["path"],
