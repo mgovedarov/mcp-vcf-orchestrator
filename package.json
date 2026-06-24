@@ -42,10 +42,6 @@
     "extensibility"
   ],
   "license": "Apache-2.0",
-  "funding": {
-    "type": "github",
-    "url": "https://github.com/sponsors/mgovedarov"
-  },
   "repository": {
     "type": "git",
     "url": "https://github.com/mgovedarov/mcp-vcf-orchestrator.git"
