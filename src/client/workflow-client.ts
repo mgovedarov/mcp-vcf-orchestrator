@@ -386,6 +386,11 @@ export function resolveWorkflowCategoryFromList(
     (candidate) => candidate.name === params.categoryName,
   );
   if (matches.length === 0) {
+    if (truncated) {
+      throw new Error(
+        `No WorkflowCategory found with name: ${params.categoryName} in the first ${categories.length} categories, but the live category list was truncated at the page-request cap, so it may exist beyond the returned page. Narrow the listing or retry rather than treating it as missing.`,
+      );
+    }
     throw new Error(`No WorkflowCategory found with name: ${params.categoryName}`);
   }
   if (matches.length > 1) {

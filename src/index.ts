@@ -147,9 +147,16 @@ async function main(): Promise<void> {
     if (shuttingDown) return;
     shuttingDown = true;
     console.error(`[vcfa-server] Shutting down (${signal})...`);
-    await server.close();
-    await client.close();
-    process.exit(0);
+    try {
+      await server.close();
+      await client.close();
+    } catch (error) {
+      // Surface teardown failures but still exit, so a hung or throwing close()
+      // can't keep the process alive under a process-manager SIGTERM.
+      console.error("[vcfa-server] Error during shutdown:", error);
+    } finally {
+      process.exit(0);
+    }
   };
   process.on("SIGINT", () => void shutdown("SIGINT"));
   process.on("SIGTERM", () => void shutdown("SIGTERM"));

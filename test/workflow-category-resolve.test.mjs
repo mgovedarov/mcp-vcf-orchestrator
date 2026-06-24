@@ -35,3 +35,31 @@ test("resolveWorkflowCategoryFromList flags truncation when an absent id may lie
     /truncated at the page-request cap/,
   );
 });
+
+test("resolveWorkflowCategoryFromList reports a plain name not-found when the list is complete", () => {
+  assert.throws(
+    () =>
+      resolveWorkflowCategoryFromList(
+        categories,
+        { categoryName: "missing" },
+        false,
+      ),
+    (error) => {
+      assert.match(error.message, /No WorkflowCategory found with name: missing/);
+      assert.doesNotMatch(error.message, /truncated/);
+      return true;
+    },
+  );
+});
+
+test("resolveWorkflowCategoryFromList flags truncation when an absent name may lie beyond the page cap", () => {
+  assert.throws(
+    () =>
+      resolveWorkflowCategoryFromList(
+        categories,
+        { categoryName: "missing" },
+        true,
+      ),
+    /truncated at the page-request cap/,
+  );
+});

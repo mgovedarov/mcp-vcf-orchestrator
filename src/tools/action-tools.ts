@@ -512,7 +512,7 @@ export function registerActionTools(
           .string()
           .optional()
           .describe(
-            "Optional expected action module name. Must match categoryName and is verified against the live module set from list-actions; if the module does not yet exist the import proceeds and reports that a new module was created. The new-module note is only reported when this argument is provided (the live check runs only then).",
+            "Optional expected action module name. Must match categoryName and is verified against the live module set from list-actions; if the module does not yet exist the import proceeds and reports that a new module was created. The new-module note is only reported when this argument is provided (the live check runs only then); omitting it imports without the live check, so a genuinely new module is created without the note.",
           ),
         confirm: z
           .boolean()

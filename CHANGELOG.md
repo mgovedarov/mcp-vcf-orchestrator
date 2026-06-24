@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.2.3 - 2026-06-24
+
+This release applies follow-up polish from the VCFO-063 review. No public tool, prompt, or resource names changed.
+
+### Fixed
+
+- `list-workflows-by-category` now **surfaces category-list truncation for the `categoryName` selector** too: when no category matches the requested name and the live category list was truncated at the page-request cap, the error explains the category may exist beyond the returned page instead of asserting it does not exist — matching the existing `categoryId`/`categoryPath` behavior (VCFO-063).
+- Server shutdown now wraps transport/HTTP-dispatcher teardown in `try/finally` so the process still exits if `server.close()` or `client.close()` throws, preventing a hung close from keeping the server alive under a process-manager `SIGTERM` (VCFO-063).
+
+### Docs
+
+- Clarified the `import-action-file` `expectedCategoryName` documentation: omitting the argument skips the live `list-actions` check, so a genuinely new module is created without the "new module" note (VCFO-063).
+
+### Tests
+
+- Added `resolveWorkflowCategoryFromList` coverage for the truncation-aware and plain not-found `categoryName` paths (VCFO-063).
+
 ## 2.2.2 - 2026-06-24
 
 This release resolves correctness, safety, and robustness findings from a full code review (VCFO-063). No public tool, prompt, or resource names changed.

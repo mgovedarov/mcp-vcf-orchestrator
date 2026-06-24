@@ -471,7 +471,7 @@ Import a `.action` file from the configured action artifact directory into an ac
 | --- | --- | --- | --- | --- |
 | `categoryName` | string | Yes | - | Action module to import into, for example `com.example.myactions`. A new module name is created on import. |
 | `fileName` | string | Yes | - | Plain `.action` file name under the configured action artifact directory to import. |
-| `expectedCategoryName` | string | No | - | Expected module name. Must match `categoryName` and is verified against the live module set from `list-actions`; if the module does not yet exist the import proceeds and the result reports that a new module was created. The new-module note is reported only when this argument is supplied (the live check runs only then). |
+| `expectedCategoryName` | string | No | - | Expected module name. Must match `categoryName` and is verified against the live module set from `list-actions`; if the module does not yet exist the import proceeds and the result reports that a new module was created. The new-module note is reported only when this argument is supplied (the live check runs only then); omitting it imports without the live check, so a genuinely new module is created without the note. |
 | `confirm` | boolean | Yes | - | Must be `true` to confirm import. If `false`, import is not performed. |
 :::
 
