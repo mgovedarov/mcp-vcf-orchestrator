@@ -471,7 +471,7 @@ Import a `.action` file from the configured action artifact directory into an ac
 | --- | --- | --- | --- | --- |
 | `categoryName` | string | Yes | - | Action module to import into, for example `com.example.myactions`. A new module name is created on import. |
 | `fileName` | string | Yes | - | Plain `.action` file name under the configured action artifact directory to import. |
-| `expectedCategoryName` | string | No | - | Expected module name; must match `categoryName` before import. |
+| `expectedCategoryName` | string | No | - | Expected module name. Must match `categoryName` and is verified against the live module set from `list-actions`; if the module does not yet exist the import proceeds and the result reports that a new module was created. |
 | `confirm` | boolean | Yes | - | Must be `true` to confirm import. If `false`, import is not performed. |
 :::
 
@@ -535,7 +535,7 @@ Create a new configuration element in VCF Automation Orchestrator. Use `list-cat
 
 ### `update-configuration`
 
-Update a configuration element name, description, or attributes. Supplied attributes replace the existing attribute set.
+Update a configuration element name, description, or attributes. Supplied attributes replace the existing attribute set. At least one of `name`, `description`, or `attributes` must be provided; a request with none is rejected before any live update.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |

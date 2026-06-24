@@ -112,6 +112,48 @@ export async function guardExpectedCategory(
   ]);
 }
 
+/**
+ * Verify an action import target against live state. Action modules are not vRO
+ * categories (the ActionCategory type returns nothing from list-categories), so
+ * the only live signal is the set of modules already present in list-actions.
+ *
+ * When `expectedModuleName` is supplied this both (a) rejects a mismatch against
+ * the caller-supplied `moduleName` and (b) reports whether the module already
+ * exists live. A not-yet-existing module is not an error — vRO creates the module
+ * on import — but the caller should surface that a new module will be created.
+ */
+export async function guardExpectedActionModule(
+  target: string,
+  moduleName: string,
+  expectedModuleName: string | undefined,
+  listActions: () => Promise<{
+    link?: { module?: string }[];
+    truncated?: boolean;
+  }>,
+): Promise<{ guard?: CallToolResult; moduleIsNew: boolean }> {
+  if (!hasExpectedValue(expectedModuleName)) {
+    return { moduleIsNew: false };
+  }
+
+  const mismatch = guardExpectedFields(target, [
+    { label: "module name", expected: expectedModuleName, actual: moduleName },
+  ]);
+  if (mismatch) {
+    return { guard: mismatch, moduleIsNew: false };
+  }
+
+  const actions = await listActions();
+  const modules = new Set(
+    (actions.link ?? [])
+      .map((action) => action.module)
+      .filter((module): module is string => typeof module === "string"),
+  );
+  // A truncated list can't prove a module is absent, so only claim "new" when the
+  // full module set was observed.
+  const moduleIsNew = !actions.truncated && !modules.has(moduleName);
+  return { moduleIsNew };
+}
+
 function arraysEqual(left: string[], right: string[]): boolean {
   return (
     left.length === right.length &&

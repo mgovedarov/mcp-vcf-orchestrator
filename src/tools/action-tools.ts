@@ -8,6 +8,7 @@ import { omittedContentSummary } from "./content-summary.js";
 import { truncationNote } from "./truncation.js";
 import {
   appendGuardGuidance,
+  guardExpectedActionModule,
   guardExpectedFields,
   hasAnyExpectedValue,
 } from "./confirmation-guards.js";
@@ -511,7 +512,7 @@ export function registerActionTools(
           .string()
           .optional()
           .describe(
-            "Optional expected action module name; must match categoryName before import",
+            "Optional expected action module name. Must match categoryName and is verified against the live module set from list-actions; if the module does not yet exist the import proceeds and reports that a new module was created.",
           ),
         confirm: z
           .boolean()
@@ -538,26 +539,23 @@ export function registerActionTools(
         };
       }
       try {
-        const categoryNameGuard = guardExpectedFields(
+        const { guard, moduleIsNew } = await guardExpectedActionModule(
           `action import target ${categoryName}`,
-          [
-            {
-              label: "module name",
-              expected: expectedCategoryName,
-              actual: categoryName,
-            },
-          ],
+          categoryName,
+          expectedCategoryName,
+          client.listActions.bind(client),
         );
-        if (categoryNameGuard) return categoryNameGuard;
+        if (guard) return guard;
 
         await client.importActionFile(categoryName, fileName);
+        const importedText = moduleIsNew
+          ? `Action imported successfully from: ${fileName}\n\nNote: module "${categoryName}" did not exist before this import; a new module was created.`
+          : `Action imported successfully from: ${fileName}`;
         return {
           content: [
             {
               type: "text",
-              text: appendGuardGuidance(
-                `Action imported successfully from: ${fileName}`,
-              ),
+              text: appendGuardGuidance(importedText),
             },
           ],
         };
