@@ -16,6 +16,8 @@ This release applies follow-up polish from the VCFO-063 review. No public tool, 
 ### Tests
 
 - Added `resolveWorkflowCategoryFromList` coverage for the truncation-aware and plain not-found `categoryName` paths (VCFO-063).
+- Added automated graceful-shutdown tests (`SIGTERM`/`SIGINT` → exit 0 with shutdown log) for the entry point, covering the `try/finally` teardown path that previously had only manual verification (VCFO-063).
+- Added dedicated unit tests for `parseAttrs`/`getLinkAttrs` (malformed-entry guard, name precedence, field fallback) and `CategoryClient.listCategories` (well-formed mapping, empty-string id/name fallback for malformed entries, absent-parent-field omission, `@`-prefixed aliases) (VCFO-063).
 
 ## 2.2.2 - 2026-06-24
 
