@@ -4,6 +4,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function describeValueType(value: unknown): string {
+  if (value === null) return "null";
+  if (Array.isArray(value)) return "array";
+  return typeof value;
+}
+
 /**
  * The vRO REST API keys parameter values by the canonical lowercase/hyphenated
  * type literal ("secure-string", "mime-attachment"), not the display type used
@@ -42,7 +48,12 @@ export function toVroParameterValue(
     return { array: { elements } };
   }
 
-  if (key === "properties" && isRecord(value)) {
+  if (key === "properties") {
+    if (!isRecord(value)) {
+      throw new Error(
+        `Properties parameter (type "${type}") expects an object of key/value pairs, received ${describeValueType(value)}.`,
+      );
+    }
     if ("property" in value) {
       return { properties: value };
     }
@@ -61,7 +72,12 @@ export function toVroParameterValue(
     };
   }
 
-  if (key === "composite" && isRecord(value)) {
+  if (key === "composite") {
+    if (!isRecord(value)) {
+      throw new Error(
+        `Composite parameter (type "${type}") expects an object, received ${describeValueType(value)}.`,
+      );
+    }
     return { composite: value };
   }
 

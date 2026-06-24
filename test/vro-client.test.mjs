@@ -1168,6 +1168,25 @@ test("toVroParameterValue maps display types to canonical value keys and shapes"
   );
 });
 
+test("toVroParameterValue rejects non-object Properties and Composite values", () => {
+  assert.throws(
+    () => toVroParameterValue("Properties", "not-an-object"),
+    /Properties parameter .* expects an object of key\/value pairs, received string/,
+  );
+  assert.throws(
+    () => toVroParameterValue("Properties", ["a", "b"]),
+    /received array/,
+  );
+  assert.throws(
+    () => toVroParameterValue("Properties", null),
+    /received null/,
+  );
+  assert.throws(
+    () => toVroParameterValue("CompositeType(name:string):Pair", 42),
+    /Composite parameter .* expects an object, received number/,
+  );
+});
+
 test("toVroParameters omits the value wrapper for parameters without a value", () => {
   assert.deepEqual(
     toVroParameters([

@@ -347,6 +347,24 @@ test("configuration tools format attributes and guard imports and deletes", asyn
   assert.equal(deletedId, "config-1");
 });
 
+test("update-configuration rejects a confirmed no-op before any live write", async () => {
+  let updated;
+  const handlers = registeredTools(registerConfigTools, {
+    getConfiguration: async (id) => ({ id, name: "Settings" }),
+    updateConfiguration: async (id, patch) => {
+      updated = { id, patch };
+    },
+  });
+
+  const result = await handlers.get("update-configuration")({
+    id: "config-1",
+    confirm: true,
+  });
+  assert.equal(result.isError, true);
+  assert.match(result.content[0].text, /Nothing to update/);
+  assert.equal(updated, undefined);
+});
+
 test("action and configuration preflight tools format reports and are read-only", async () => {
   const action = registeredToolsWithConfigs(registerActionTools, {
     preflightActionFile: async (fileName) => ({
@@ -552,8 +570,8 @@ test("action import and delete expected guards stop mismatched mutations", async
       name: "getVmIp",
       module: "com.example.actions",
     }),
-    listCategories: async () => ({
-      link: [{ id: "category-1", name: "com.example.actions" }],
+    listActions: async () => ({
+      link: [{ id: "action-1", name: "getVmIp", module: "com.example.actions" }],
     }),
     getActionDirectory: () => "/tmp/actions",
     importActionFile: async (categoryName, fileName) => {
@@ -581,6 +599,85 @@ test("action import and delete expected guards stop mismatched mutations", async
   });
   assert.equal(deleteMismatch.isError, true);
   assert.equal(deletedId, undefined);
+});
+
+test("import-action-file verifies expected module against live list-actions", async () => {
+  let imported;
+  let listCalls = 0;
+  const handlers = registeredTools(registerActionTools, {
+    listActions: async () => {
+      listCalls += 1;
+      return {
+        link: [
+          { id: "a1", name: "getVmIp", module: "com.example.actions" },
+        ],
+      };
+    },
+    getActionDirectory: () => "/tmp/actions",
+    importActionFile: async (categoryName, fileName) => {
+      imported = { categoryName, fileName };
+    },
+  });
+
+  const existing = await handlers.get("import-action-file")({
+    categoryName: "com.example.actions",
+    fileName: "getVmIp.action",
+    expectedCategoryName: "com.example.actions",
+    confirm: true,
+  });
+  assert.equal(existing.isError ?? false, false);
+  assert.deepEqual(imported, {
+    categoryName: "com.example.actions",
+    fileName: "getVmIp.action",
+  });
+  assert.equal(listCalls, 1);
+  assert.doesNotMatch(existing.content[0].text, /new module was created/);
+});
+
+test("import-action-file reports when a new action module is created", async () => {
+  let imported;
+  const handlers = registeredTools(registerActionTools, {
+    listActions: async () => ({
+      link: [{ id: "a1", name: "getVmIp", module: "com.example.actions" }],
+    }),
+    getActionDirectory: () => "/tmp/actions",
+    importActionFile: async (categoryName, fileName) => {
+      imported = { categoryName, fileName };
+    },
+  });
+
+  const created = await handlers.get("import-action-file")({
+    categoryName: "com.brand.newmodule",
+    fileName: "helper.action",
+    expectedCategoryName: "com.brand.newmodule",
+    confirm: true,
+  });
+  assert.equal(created.isError ?? false, false);
+  assert.deepEqual(imported, {
+    categoryName: "com.brand.newmodule",
+    fileName: "helper.action",
+  });
+  assert.match(created.content[0].text, /new module was created/);
+});
+
+test("import-action-file does not claim a new module when list-actions is truncated", async () => {
+  const handlers = registeredTools(registerActionTools, {
+    listActions: async () => ({
+      link: [{ id: "a1", name: "getVmIp", module: "com.example.actions" }],
+      truncated: true,
+    }),
+    getActionDirectory: () => "/tmp/actions",
+    importActionFile: async () => {},
+  });
+
+  const result = await handlers.get("import-action-file")({
+    categoryName: "com.unknown.module",
+    fileName: "helper.action",
+    expectedCategoryName: "com.unknown.module",
+    confirm: true,
+  });
+  assert.equal(result.isError ?? false, false);
+  assert.doesNotMatch(result.content[0].text, /new module was created/);
 });
 
 test("configuration update and resource delete expected guards verify live targets", async () => {

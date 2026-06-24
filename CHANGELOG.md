@@ -1,5 +1,44 @@
 # Changelog
 
+## 2.2.3 - 2026-06-24
+
+This release applies follow-up polish from the VCFO-063 review. No public tool, prompt, or resource names changed.
+
+### Fixed
+
+- `list-workflows-by-category` now **surfaces category-list truncation for the `categoryName` selector** too: when no category matches the requested name and the live category list was truncated at the page-request cap, the error explains the category may exist beyond the returned page instead of asserting it does not exist — matching the existing `categoryId`/`categoryPath` behavior (VCFO-063).
+- Server shutdown now wraps transport/HTTP-dispatcher teardown in `try/finally` so the process still exits if `server.close()` or `client.close()` throws, preventing a hung close from keeping the server alive under a process-manager `SIGTERM` (VCFO-063).
+
+### Docs
+
+- Clarified the `import-action-file` `expectedCategoryName` documentation: omitting the argument skips the live `list-actions` check, so a genuinely new module is created without the "new module" note (VCFO-063).
+
+### Tests
+
+- Added `resolveWorkflowCategoryFromList` coverage for the truncation-aware and plain not-found `categoryName` paths (VCFO-063).
+
+## 2.2.2 - 2026-06-24
+
+This release resolves correctness, safety, and robustness findings from a full code review (VCFO-063). No public tool, prompt, or resource names changed.
+
+### Fixed
+
+- `import-action-file` now verifies `expectedCategoryName` against **live state**. Previously it compared the expected module name only against the caller-supplied `categoryName` (a tautology). It now also checks the live module set from `list-actions`, and when the target module does not yet exist the import proceeds and the result reports that a new module was created. Action modules are still discovered from the `module` column of `list-actions` (vRO does not expose them through `list-categories`) (VCFO-063).
+- `run-workflow`/parameter marshaling now **rejects non-object `Properties` and `Composite` values** with a clear error instead of silently emitting a malformed `{ properties: { value } }` payload that the execution API would reject (VCFO-063).
+- `get-workflow-execution` now renders output parameter values **unwrapped** (matching `run-workflow-and-wait`) instead of dumping the raw vRO type wrapper (for example `{"string":{"value":"x"}}`) (VCFO-063).
+- `get-resource-element`/`getResourceElement` now **surfaces list truncation** instead of reporting a misleading "not found" when the live resource list was truncated at the page-request cap (VCFO-063).
+- `list-workflows-by-category` now **surfaces category-list truncation** the same way: when the requested `categoryId`/`categoryPath` is absent and the live category list was truncated at the page-request cap, the error explains the category may exist beyond the returned page rather than asserting it does not exist (VCFO-063).
+- `update-configuration` now rejects a confirmed **no-op** (none of `name`, `description`, or `attributes` supplied) before issuing a live update, matching `update-action` (VCFO-063).
+- `getAllAutomationPages` now detects **non-advancing pagination** (a repeated page) and throws, matching the vRO pagination path, instead of silently looping to the page-request cap (VCFO-063). The repeat-detection signature was widened from a 32-bit to a ~53-bit hash so a false-positive "did not advance" at the page-request cap is negligible (VCFO-063).
+- Category listings no longer assign `undefined` to the required `id`/`name` fields; they fall back to `""` consistent with the plugin client (VCFO-063).
+- `parseAttrs` now skips attribute entries with a missing or non-string `name` so a malformed entry cannot pollute the parsed map (VCFO-063).
+- The server now handles **`SIGTERM`** (in addition to `SIGINT`) so the transport and the HTTP dispatcher are torn down under process-manager termination; removed an unused import (VCFO-063).
+- The `vcfa://context/snapshots/{fileName}` resource no longer advertises a misleading static `text/plain` mime type; the read handler reports the correct per-file `application/json` or `text/markdown` type (VCFO-063).
+
+### Tests
+
+- Added coverage for the action-import live module guard (existing/new/truncated module), non-object `Properties`/`Composite` rejection, `getResourceElement` truncation, `get-workflow-execution` output unwrapping, the `update-configuration` no-op guard, automation pagination non-advancement, the subscription OData single-quote escaping, the `resolveWorkflowCategoryFromList` truncation-aware not-found, and entry-point startup failures (missing env var and invalid `VCFA_TARGET_PLATFORM`) (VCFO-063).
+
 ## 2.2.1 - 2026-06-14
 
 This release completes and hardens scaffolded-workflow support so generated `.workflow` artifacts import, open in the editor, and run in live vRO 9.1, and lets the scaffolder emit native vRO action workflow items.

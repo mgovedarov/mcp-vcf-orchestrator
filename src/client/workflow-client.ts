@@ -356,13 +356,19 @@ function isWorkflowListPaginationFailure(error: unknown): boolean {
   );
 }
 
-function resolveWorkflowCategoryFromList(
+export function resolveWorkflowCategoryFromList(
   categories: Category[],
   params: ListWorkflowsByCategoryParams,
+  truncated: boolean,
 ): Category | undefined {
   if (params.categoryId) {
     const category = categories.find((candidate) => candidate.id === params.categoryId);
     if (!category) {
+      if (truncated) {
+        throw new Error(
+          `No WorkflowCategory found with id: ${params.categoryId} in the first ${categories.length} categories, but the live category list was truncated at the page-request cap, so it may exist beyond the returned page. Narrow the listing or retry rather than treating it as missing.`,
+        );
+      }
       throw new Error(`No WorkflowCategory found with id: ${params.categoryId}`);
     }
     return category;
@@ -380,6 +386,11 @@ function resolveWorkflowCategoryFromList(
     (candidate) => candidate.name === params.categoryName,
   );
   if (matches.length === 0) {
+    if (truncated) {
+      throw new Error(
+        `No WorkflowCategory found with name: ${params.categoryName} in the first ${categories.length} categories, but the live category list was truncated at the page-request cap, so it may exist beyond the returned page. Narrow the listing or retry rather than treating it as missing.`,
+      );
+    }
     throw new Error(`No WorkflowCategory found with name: ${params.categoryName}`);
   }
   if (matches.length > 1) {
@@ -426,8 +437,13 @@ export class WorkflowClient {
   private async resolveWorkflowCategory(
     categories: Category[],
     params: ListWorkflowsByCategoryParams,
+    truncated: boolean,
   ): Promise<Category> {
-    const listMatch = resolveWorkflowCategoryFromList(categories, params);
+    const listMatch = resolveWorkflowCategoryFromList(
+      categories,
+      params,
+      truncated,
+    );
     if (listMatch) return listMatch;
 
     if (!params.categoryPath) {
@@ -448,6 +464,11 @@ export class WorkflowClient {
     }
 
     if (matches.length === 0) {
+      if (truncated) {
+        throw new Error(
+          `No WorkflowCategory found with path: ${params.categoryPath} in the first ${categories.length} categories, but the live category list was truncated at the page-request cap, so it may exist beyond the returned page. Narrow the listing or retry rather than treating it as missing.`,
+        );
+      }
       throw new Error(`No WorkflowCategory found with path: ${params.categoryPath}`);
     }
     if (matches.length > 1) {
@@ -596,7 +617,11 @@ export class WorkflowClient {
       new URLSearchParams([["categoryType", "WorkflowCategory"]]),
     );
     const categories = (rawCategories.link ?? []).map(parseWorkflowCategory);
-    const rootCategory = await this.resolveWorkflowCategory(categories, params);
+    const rootCategory = await this.resolveWorkflowCategory(
+      categories,
+      params,
+      rawCategories.truncated ?? false,
+    );
     const { groups: rawGroups, truncated } = await this.collectWorkflowCategoryTree(
       rootCategory,
       maxCategories,

@@ -21,7 +21,7 @@ import { normalizeTargetPlatformInput as parseTargetPlatform } from "./client/co
 import type { VroTargetPlatformInput } from "./types.js";
 import { VroClient } from "./vro-client.js";
 import { createRequire } from "node:module";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 
 const require = createRequire(import.meta.url);
 const { version: SERVER_VERSION } = require("../package.json") as {
@@ -139,13 +139,27 @@ async function main(): Promise<void> {
   await server.connect(transport);
   console.error("[vcfa-server] MCP server started (stdio transport)");
 
-  // Graceful shutdown
-  process.on("SIGINT", async () => {
-    console.error("[vcfa-server] Shutting down...");
-    await server.close();
-    await client.close();
-    process.exit(0);
-  });
+  // Graceful shutdown. Process managers and MCP clients commonly terminate the
+  // server with SIGTERM as well as SIGINT, so both must tear down the transport
+  // and the client's HTTP dispatcher.
+  let shuttingDown = false;
+  const shutdown = async (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.error(`[vcfa-server] Shutting down (${signal})...`);
+    try {
+      await server.close();
+      await client.close();
+    } catch (error) {
+      // Surface teardown failures but still exit, so a hung or throwing close()
+      // can't keep the process alive under a process-manager SIGTERM.
+      console.error("[vcfa-server] Error during shutdown:", error);
+    } finally {
+      process.exit(0);
+    }
+  };
+  process.on("SIGINT", () => void shutdown("SIGINT"));
+  process.on("SIGTERM", () => void shutdown("SIGTERM"));
 }
 
 function normalizeTargetPlatform(

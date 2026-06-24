@@ -72,6 +72,24 @@ function withQuery(path: string, params: URLSearchParams): string {
   return query ? `${path}?${query}` : path;
 }
 
+// Cheap ~53-bit signature of a serialized page, formed from two independent
+// 32-bit FNV-1a streams (distinct offset bases) combined as "h1:h2". We store
+// the signature rather than the full page so repeat-detection memory stays
+// ~constant per page even for large listings. At the <=1000-page cap the
+// birthday collision probability is ~1e-13; a false positive would only surface
+// as a pagination-did-not-advance error.
+function hashPageItems(items: unknown): string {
+  const json = JSON.stringify(items);
+  let h1 = 0x811c9dc5;
+  let h2 = 0xc59d1c81;
+  for (let i = 0; i < json.length; i += 1) {
+    const code = json.charCodeAt(i);
+    h1 = Math.imul(h1 ^ code, 0x01000193);
+    h2 = Math.imul(h2 ^ code, 0x01000193);
+  }
+  return `${h1 >>> 0}:${h2 >>> 0}`;
+}
+
 export async function getAllVroPages<T>(
   http: VroHttpClient,
   path: string,
@@ -115,7 +133,7 @@ export async function getAllVroPages<T>(
     if (queryCount && page.total !== undefined) reportedTotal = page.total;
 
     if (items.length > 0) {
-      const signature = JSON.stringify(items);
+      const signature = hashPageItems(items);
       if (seenPageSignatures.has(signature)) {
         throw new Error(
           `vRO pagination did not advance for ${path}; received a repeated page at startIndex=${start}`,
@@ -154,6 +172,7 @@ export async function getAllAutomationPages<T>(
   const content: T[] = [];
   let reportedTotal: number | undefined;
   let totalPages: number | undefined;
+  const seenPageSignatures = new Set<string>();
 
   let pageNumber = 0;
   for (; pageNumber < maxPageRequests; pageNumber += 1) {
@@ -168,6 +187,16 @@ export async function getAllAutomationPages<T>(
     const items = page.content ?? [];
     if (page.totalElements !== undefined) reportedTotal = page.totalElements;
     if (page.totalPages !== undefined) totalPages = page.totalPages;
+
+    if (items.length > 0) {
+      const signature = hashPageItems(items);
+      if (seenPageSignatures.has(signature)) {
+        throw new Error(
+          `Automation pagination did not advance for ${path}; received a repeated page at page=${pageNumber}`,
+        );
+      }
+      seenPageSignatures.add(signature);
+    }
 
     content.push(...items);
 

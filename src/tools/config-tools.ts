@@ -523,6 +523,21 @@ export function registerConfigTools(
       attributes,
       confirm,
     }): Promise<CallToolResult> => {
+      if (
+        name === undefined &&
+        description === undefined &&
+        attributes === undefined
+      ) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Nothing to update for configuration element ${id}. Provide at least one of name, description, or attributes.`,
+            },
+          ],
+          isError: true,
+        };
+      }
       if (!confirm) {
         return {
           content: [
