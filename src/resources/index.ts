@@ -345,7 +345,8 @@ export function registerVcfaResources(
       title: "VCFA Context Snapshot File",
       description:
         "Read a persisted VCFA context snapshot Markdown or JSON file.",
-      mimeType: "text/plain",
+      // No resource-level mimeType: the read handler reports the correct
+      // per-file mime (application/json or text/markdown) instead.
     },
     async (uri, variables) =>
       readContextSnapshotResource(

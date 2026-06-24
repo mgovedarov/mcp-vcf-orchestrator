@@ -602,6 +602,30 @@ test("run-workflow-and-wait reports log fetch warnings", async () => {
   );
 });
 
+test("get-workflow-execution renders unwrapped output parameter values", async () => {
+  const handlers = registeredWorkflowTools({
+    getWorkflowExecution: async (workflowId, executionId) => ({
+      id: executionId,
+      state: "completed",
+      "output-parameters": [
+        { name: "result", type: "string", value: { string: { value: "hello" } } },
+        { name: "count", type: "number", value: { number: { value: 3 } } },
+      ],
+    }),
+  });
+
+  const result = await handlers.get("get-workflow-execution")({
+    workflowId: "workflow-1",
+    executionId: "execution-1",
+  });
+
+  assert.equal(result.isError, undefined);
+  // The raw vRO wrapper must not leak into the rendered output.
+  assert.doesNotMatch(result.content[0].text, /\{"string":\{"value"/);
+  assert.match(result.content[0].text, /result \(string\): "hello"/);
+  assert.match(result.content[0].text, /count \(number\): 3/);
+});
+
 test("get-workflow-execution-logs formats execution log entries", async () => {
   let logRequest;
   const handlers = registeredWorkflowTools({

@@ -1019,7 +1019,7 @@ export function registerWorkflowTools(
         if (outputs.length > 0) {
           text += `\nOutput Parameters:\n`;
           for (const p of outputs) {
-            text += `  • ${p.name} (${p.type}): ${JSON.stringify(p.value)}\n`;
+            text += `  • ${p.name} (${p.type}): ${stringifyValue(unwrapVroParameterValue(p))}\n`;
           }
         }
         return { content: [{ type: "text", text }] };
