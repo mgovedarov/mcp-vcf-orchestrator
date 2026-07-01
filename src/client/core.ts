@@ -1,6 +1,6 @@
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { Agent } from "undici";
+import { Agent, fetch as undiciFetch } from "undici";
 import type {
   VroClientConfig,
   VroTargetPlatform,
@@ -13,9 +13,20 @@ const UNSUPPORTED_AUTOMATION_SERVICES =
 const UNSUPPORTED_VRO_WRITE =
   "This vRO operation is not supported in VCFA_TARGET_PLATFORM=vra8 mode. The vRA/vRO 8 compatibility phase supports read operations plus workflow execution and execution logs only.";
 
-// The default TypeScript lib's RequestInit lacks undici's dispatcher option,
-// which Node's built-in fetch honors at runtime.
+// The default TypeScript lib's RequestInit lacks undici's dispatcher option.
+// A dispatcher must be paired with undici's own fetch(): Node's global fetch
+// is backed by the undici version bundled with the Node runtime, which can
+// diverge in major version from the npm `undici` dependency, and dispatcher
+// instances are not interchangeable across major versions.
 type DispatchedRequestInit = RequestInit & { dispatcher?: Agent };
+
+// Captured at module load, before any test replaces globalThis.fetch.
+const nativeFetch = globalThis.fetch;
+
+function requestFetch(init: DispatchedRequestInit): typeof fetch {
+  if (globalThis.fetch !== nativeFetch) return globalThis.fetch;
+  return (init.dispatcher ? undiciFetch : nativeFetch) as typeof fetch;
+}
 
 const SAFE_ERROR_BODY_KEYS = new Set(["message", "statusCode", "code", "error", "errors"]);
 const NON_JSON_BODY_LIMIT = 200;
@@ -283,7 +294,7 @@ export class VroHttpClient {
         signal: controller.signal,
         dispatcher: this.dispatcher,
       };
-      const res = await fetch(this.versionsUrl, init);
+      const res = await requestFetch(init)(this.versionsUrl, init);
       if (!res.ok) {
         throw new Error(`${res.status} ${res.statusText}`);
       }
@@ -337,7 +348,7 @@ export class VroHttpClient {
         signal: controller.signal,
         dispatcher: this.dispatcher,
       };
-      res = await fetch(this.sessionUrl, init);
+      res = await requestFetch(init)(this.sessionUrl, init);
     } finally {
       clearTimeout(timeoutId);
     }
@@ -401,7 +412,7 @@ export class VroHttpClient {
           signal: controller.signal,
           dispatcher: this.dispatcher,
         };
-        return await fetch(url, fetchInit);
+        return await requestFetch(fetchInit)(url, fetchInit);
       } finally {
         clearTimeout(timeoutId);
       }
