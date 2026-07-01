@@ -20,7 +20,7 @@ import type {
   WorkflowList,
 } from "../types.js";
 import { getLinkAttrs, parseAttrs } from "./attrs.js";
-import { sanitizeErrorBody, type VroHttpClient } from "./core.js";
+import { createUploadForm, sanitizeErrorBody, type VroHttpClient } from "./core.js";
 import {
   diffWorkflowArtifacts,
   ensurePreflightPassed,
@@ -965,8 +965,7 @@ export class WorkflowClient {
       "Workflow file path resolves outside the configured workflow artifact directory",
     );
     const buffer = await readFile(srcPath);
-    const form = new FormData();
-    form.append("file", new Blob([new Uint8Array(buffer)]), fileName);
+    const form = createUploadForm(buffer, fileName);
 
     const url = `${this.http.baseUrl}${path}`;
     console.error(`[vro-client] POST ${path}`);

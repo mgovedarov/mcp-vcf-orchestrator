@@ -1,6 +1,6 @@
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { Agent, fetch as undiciFetch } from "undici";
+import { Agent, fetch as undiciFetch, FormData as UndiciFormData } from "undici";
 import type {
   VroClientConfig,
   VroTargetPlatform,
@@ -23,9 +23,36 @@ type DispatchedRequestInit = RequestInit & { dispatcher?: Agent };
 // Captured at module load, before any test replaces globalThis.fetch.
 const nativeFetch = globalThis.fetch;
 
+// Select the fetch implementation for a request. A dispatcher (Agent) must be
+// paired with the undici it came from, so requests carrying one use undici's
+// own fetch; everything else uses Node's global fetch.
+//
+// The pairing guarantee is conditional: if globalThis.fetch has been swapped
+// since module load — a unit-test stub, or runtime instrumentation such as an
+// APM agent that wraps fetch — we defer to the replacement so mocking keeps
+// working. Note that an instrumentation wrapper combined with a dispatcher
+// would reintroduce the cross-major mismatch this indirection exists to avoid.
 function requestFetch(init: DispatchedRequestInit): typeof fetch {
   if (globalThis.fetch !== nativeFetch) return globalThis.fetch;
   return (init.dispatcher ? undiciFetch : nativeFetch) as typeof fetch;
+}
+
+// Build a multipart upload body. Uses undici's FormData deliberately: when a
+// TLS-relaxed dispatcher is configured, uploads route through undici's own
+// fetch (see requestFetch), and undici's fetch only serializes a FormData
+// created by the same undici — a global (Node-bundled) FormData fails undici's
+// internal brand check and is stringified to "[object FormData]" and sent as
+// text/plain. undici's FormData also serializes correctly through Node's global
+// fetch, so it is safe on both the strict-TLS and ignoreTls paths. The Blob may
+// stay global; undici accepts node:buffer's Blob.
+//
+// The return is cast to the DOM FormData type: undici's FormData is runtime-
+// compatible with a fetch body but nominally distinct from lib.dom's, and
+// callers pass the result straight into fetch's RequestInit.body.
+export function createUploadForm(buffer: Buffer, fileName: string): FormData {
+  const form = new UndiciFormData();
+  form.append("file", new Blob([new Uint8Array(buffer)]), fileName);
+  return form as unknown as FormData;
 }
 
 const SAFE_ERROR_BODY_KEYS = new Set(["message", "statusCode", "code", "error", "errors"]);

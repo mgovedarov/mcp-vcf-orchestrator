@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import type { ResourceElement, ResourceElementList } from "../types.js";
 import { getLinkAttrs, type AttributeLink } from "./attrs.js";
-import { sanitizeErrorBody, type VroHttpClient } from "./core.js";
+import { createUploadForm, sanitizeErrorBody, type VroHttpClient } from "./core.js";
 import {
   assertRealPathInside,
   getExistingFile,
@@ -124,7 +124,7 @@ export class ResourceClient {
 
   private async postResourceForm(
     path: string,
-    form: FormData,
+    form: ReturnType<typeof createUploadForm>,
     changesetSha?: string,
   ): Promise<void> {
     this.http.assertOperationSupported("POST", path);
@@ -154,8 +154,7 @@ export class ResourceClient {
   async importResource(categoryId: string, fileName: string): Promise<void> {
     this.http.assertOperationSupported("POST", "/resources");
     const buffer = await this.readResourceFile(fileName);
-    const form = new FormData();
-    form.append("file", new Blob([new Uint8Array(buffer)]), fileName);
+    const form = createUploadForm(buffer, fileName);
     form.append("categoryId", categoryId);
     await this.postResourceForm("/resources", form);
   }
@@ -168,8 +167,7 @@ export class ResourceClient {
     const path = `/resources/${encodeURIComponent(id)}`;
     this.http.assertOperationSupported("POST", path);
     const buffer = await this.readResourceFile(fileName);
-    const form = new FormData();
-    form.append("file", new Blob([new Uint8Array(buffer)]), fileName);
+    const form = createUploadForm(buffer, fileName);
     await this.postResourceForm(path, form, changesetSha);
   }
 
