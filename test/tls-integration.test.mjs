@@ -3,14 +3,23 @@
 // CI instead of passing silently behind the stubbed fetch used by unit tests.
 // The ignoreTls path pairs the per-client undici Agent with undici's own
 // fetch(); the strict path uses Node's built-in fetch. Both are exercised here,
-// including a multipart upload whose body must not degrade to "[object FormData]".
+// including multipart uploads whose body must not degrade to "[object FormData]":
+// the ignoreTls upload runs end-to-end through the client, and the strict path
+// posts createUploadForm's body through the built-in fetch directly (over plain
+// HTTP, since the strict client rejects the self-signed cert and Node's global
+// fetch takes no per-request CA). The built-in fetch is backed by the undici
+// bundled in the runtime, a different major than the npm undici that built the
+// FormData (Node 22 bundles undici 6, Node 24 undici 7), so its serialization
+// is not covered by the ignoreTls path.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import http from "node:http";
 import https from "node:https";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { createUploadForm } from "../dist/client/core.js";
 import { VroClient } from "../dist/vro-client.js";
 
 const hasOpenssl = spawnSync("openssl", ["version"]).status === 0;
@@ -74,8 +83,8 @@ async function startSelfSignedVcfaStub() {
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 
   return {
-    // Connect via 127.0.0.1, not localhost: Node 18 resolves localhost to
-    // ::1 first and has no IPv4 fallback (autoSelectFamily landed in 20).
+    // Connect via 127.0.0.1, not localhost, to bind the client to the IPv4
+    // address the stub listens on and avoid any localhost -> ::1 resolution.
     host: `127.0.0.1:${server.address().port}`,
     captured,
     async close() {
@@ -142,6 +151,56 @@ test("ignoreTls client uploads a real multipart body over undici's fetch", { ski
     await client.close();
     await stub.close();
     await rm(resourceDir, { recursive: true, force: true });
+  }
+});
+
+test("createUploadForm serializes as real multipart through Node's built-in fetch", async () => {
+  // The strict (non-ignoreTls) path carries no dispatcher, so requestFetch
+  // routes uploads through Node's built-in fetch — the same call the client
+  // makes. This asserts the runtime-bundled undici still serializes the npm
+  // undici FormData as multipart instead of degrading it to "[object
+  // FormData]". Plain HTTP isolates FormData serialization from TLS; no openssl
+  // dependency, so it runs even where the self-signed-cert tests are skipped.
+  const captured = { contentType: null, body: null };
+  const server = http.createServer((req, res) => {
+    const chunks = [];
+    req.on("data", (chunk) => chunks.push(chunk));
+    req.on("end", () => {
+      captured.contentType = req.headers["content-type"] ?? "";
+      captured.body = Buffer.concat(chunks).toString("utf8");
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ id: "res-1" }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+
+  try {
+    const form = createUploadForm(Buffer.from([1, 2, 3, 4, 5]), "payload.bin");
+    form.append("categoryId", "cat-1");
+    const res = await fetch(`http://127.0.0.1:${server.address().port}/`, {
+      method: "POST",
+      body: form,
+    });
+    assert.equal(res.status, 200);
+
+    assert.match(
+      captured.contentType ?? "",
+      /^multipart\/form-data; boundary=/,
+      `expected a multipart upload, got content-type: ${captured.contentType}`,
+    );
+    assert.match(
+      captured.body ?? "",
+      /filename="payload\.bin"/,
+      "multipart body is missing the file part",
+    );
+    assert.doesNotMatch(
+      captured.body ?? "",
+      /\[object FormData\]/,
+      "FormData was stringified instead of serialized as multipart",
+    );
+  } finally {
+    server.closeAllConnections?.();
+    await new Promise((resolve) => server.close(resolve));
   }
 });
 
