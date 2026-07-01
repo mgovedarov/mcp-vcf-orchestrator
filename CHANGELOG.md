@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **BREAKING: the minimum supported Node.js version is now 22.19.** `undici` 8 requires Node `>=22.19.0`, so support for Node 18 and 20 (both end-of-life) is dropped; `engines.node` and the CI matrix are updated accordingly.
+
+### Dependencies
+
+- Bumped `undici` from 6 to 8 and `fast-xml-parser` from 5.8 to 5.9.3 (npm-production group).
+
+### Fixed
+
+- Multipart artifact uploads (package/action/workflow/configuration/resource import) now build the request body with `undici`'s `FormData`. undici's `fetch` only serializes a `FormData` created by the same undici; a foreign `FormData` fails its brand check and is silently stringified to `"[object FormData]"` and sent as `text/plain`, breaking every import.
+- All requests now go through the npm `undici`'s own `fetch`, not Node's global `fetch`, so `fetch`, the multipart `FormData`, and the `VCFA_IGNORE_TLS` dispatcher `Agent` always come from the same undici. The `undici` bundled in the Node runtime is a different major (Node 22 → undici 6, Node 24 → undici 7) that neither honors an npm-`undici` `Agent` nor serializes an npm-`undici` `FormData` — the latter broke strict-TLS imports on Node 24 specifically, since undici 7 (unlike undici 6) rejects the foreign `FormData`.
+
 ## 2.2.3 - 2026-06-24
 
 This release applies follow-up polish from the VCFO-063 review. No public tool, prompt, or resource names changed.

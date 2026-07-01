@@ -7,7 +7,7 @@ import {
   preflightConfigurationFile,
   type ArtifactPreflightReport,
 } from "./artifact-preflight.js";
-import { sanitizeErrorBody, type VroHttpClient } from "./core.js";
+import { createUploadForm, sanitizeErrorBody, type VroHttpClient } from "./core.js";
 import {
   assertRealPathInside,
   getExistingFile,
@@ -172,8 +172,7 @@ export class ConfigurationClient {
       "Configuration file path resolves outside the configured configuration artifact directory",
     );
     const buffer = await readFile(srcPath);
-    const form = new FormData();
-    form.append("file", new Blob([new Uint8Array(buffer)]), fileName);
+    const form = createUploadForm(buffer, fileName);
     form.append("categoryId", categoryId);
 
     const url = `${this.http.baseUrl}${path}`;

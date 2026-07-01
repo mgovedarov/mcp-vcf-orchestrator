@@ -9,7 +9,7 @@ import {
   preflightActionFile,
   type ArtifactPreflightReport,
 } from "./artifact-preflight.js";
-import { sanitizeErrorBody, type VroHttpClient } from "./core.js";
+import { createUploadForm, sanitizeErrorBody, type VroHttpClient } from "./core.js";
 import {
   assertRealPathInside,
   getExistingFile,
@@ -308,8 +308,7 @@ export class ActionClient {
       "Action file path resolves outside the configured action artifact directory",
     );
     const buffer = await readFile(srcPath);
-    const form = new FormData();
-    form.append("file", new Blob([new Uint8Array(buffer)]), fileName);
+    const form = createUploadForm(buffer, fileName);
     form.append("categoryName", categoryName);
 
     const url = `${this.http.baseUrl}${path}`;

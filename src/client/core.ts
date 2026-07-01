@@ -1,6 +1,6 @@
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { Agent } from "undici";
+import { Agent, fetch as undiciFetch, FormData as UndiciFormData } from "undici";
 import type {
   VroClientConfig,
   VroTargetPlatform,
@@ -13,9 +13,49 @@ const UNSUPPORTED_AUTOMATION_SERVICES =
 const UNSUPPORTED_VRO_WRITE =
   "This vRO operation is not supported in VCFA_TARGET_PLATFORM=vra8 mode. The vRA/vRO 8 compatibility phase supports read operations plus workflow execution and execution logs only.";
 
-// The default TypeScript lib's RequestInit lacks undici's dispatcher option,
-// which Node's built-in fetch honors at runtime.
+// The default TypeScript lib's RequestInit lacks undici's dispatcher option.
 type DispatchedRequestInit = RequestInit & { dispatcher?: Agent };
+
+// Captured at module load, before any test replaces globalThis.fetch.
+const nativeFetch = globalThis.fetch;
+
+// Select the fetch implementation for a request. Production requests always use
+// the npm `undici` package's own fetch(), never Node's global fetch, so that
+// fetch(), the FormData it serializes (see createUploadForm), and the ignoreTls
+// dispatcher Agent all come from the SAME undici. The undici bundled in the Node
+// runtime is a different major (Node 22 -> undici 6, Node 24 -> undici 7) and is
+// not interchangeable: its fetch rejects an npm-undici FormData — stringifying
+// the body to "[object FormData]" and sending it as text/plain — and cannot
+// honor an npm-undici dispatcher.
+//
+// The exception is a swapped globalThis.fetch — a unit-test stub, or runtime
+// instrumentation such as an APM agent that wraps fetch, installed after module
+// load: we defer to the replacement so mocking and instrumentation keep working.
+// An instrumentation wrapper is assumed to delegate to a compatible fetch;
+// combining one with an npm-undici dispatcher would reintroduce the cross-major
+// mismatch this indirection exists to avoid.
+function requestFetch(): typeof fetch {
+  if (globalThis.fetch !== nativeFetch) return globalThis.fetch;
+  // undici's fetch is runtime-compatible but its Response type is nominally
+  // distinct from lib.dom's, so bridge through unknown.
+  return undiciFetch as unknown as typeof fetch;
+}
+
+// Build a multipart upload body with undici's FormData. Uploads route through
+// undici's own fetch (see requestFetch), and undici's fetch only serializes a
+// FormData created by the same undici — a foreign FormData (e.g. the global one,
+// backed by a different bundled-undici major) fails its internal brand check and
+// is stringified to "[object FormData]" and sent as text/plain. The Blob may
+// stay global; undici accepts node:buffer's Blob.
+//
+// The return is cast to the DOM FormData type: undici's FormData is runtime-
+// compatible with a fetch body but nominally distinct from lib.dom's, and
+// callers pass the result straight into fetch's RequestInit.body.
+export function createUploadForm(buffer: Buffer, fileName: string): FormData {
+  const form = new UndiciFormData();
+  form.append("file", new Blob([new Uint8Array(buffer)]), fileName);
+  return form as unknown as FormData;
+}
 
 const SAFE_ERROR_BODY_KEYS = new Set(["message", "statusCode", "code", "error", "errors"]);
 const NON_JSON_BODY_LIMIT = 200;
@@ -145,7 +185,7 @@ export function normalizeTargetPlatformInput(
 
 /**
  * Shared HTTP/authentication layer for VCF Automation and vRO APIs.
- * Uses native fetch() (Node 18+).
+ * Uses the npm undici's fetch() (Node 22+); see requestFetch for why.
  */
 export class VroHttpClient {
   readonly targetPlatform: VroTargetPlatform;
@@ -283,7 +323,7 @@ export class VroHttpClient {
         signal: controller.signal,
         dispatcher: this.dispatcher,
       };
-      const res = await fetch(this.versionsUrl, init);
+      const res = await requestFetch()(this.versionsUrl, init);
       if (!res.ok) {
         throw new Error(`${res.status} ${res.statusText}`);
       }
@@ -337,7 +377,7 @@ export class VroHttpClient {
         signal: controller.signal,
         dispatcher: this.dispatcher,
       };
-      res = await fetch(this.sessionUrl, init);
+      res = await requestFetch()(this.sessionUrl, init);
     } finally {
       clearTimeout(timeoutId);
     }
@@ -401,7 +441,7 @@ export class VroHttpClient {
           signal: controller.signal,
           dispatcher: this.dispatcher,
         };
-        return await fetch(url, fetchInit);
+        return await requestFetch()(url, fetchInit);
       } finally {
         clearTimeout(timeoutId);
       }

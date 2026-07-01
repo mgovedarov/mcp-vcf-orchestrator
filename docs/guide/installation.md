@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Node.js 18.17 or higher.
+- Node.js 22.19 or higher.
 - A VCF Automation 9.x or Aria Automation 8.x instance with REST API access.
 - Credentials for the VCF Cloud API.
 
