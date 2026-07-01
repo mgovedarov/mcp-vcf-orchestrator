@@ -12,8 +12,8 @@
 
 ### Fixed
 
-- Multipart artifact uploads (package/action/workflow/configuration/resource import) now build the request body with `undici`'s `FormData`. undici 8's `fetch` only serializes a `FormData` created by the same undici; a global (Node-bundled) `FormData` was silently stringified to `"[object FormData]"` and sent as `text/plain`, breaking every import when `VCFA_IGNORE_TLS=true` routed the request through undici's own `fetch`.
-- The TLS-relaxed dispatcher is now paired with undici's own `fetch`, since an `Agent` from the npm `undici` package is not interchangeable with the `undici` bundled in the Node runtime across major versions.
+- Multipart artifact uploads (package/action/workflow/configuration/resource import) now build the request body with `undici`'s `FormData`. undici's `fetch` only serializes a `FormData` created by the same undici; a foreign `FormData` fails its brand check and is silently stringified to `"[object FormData]"` and sent as `text/plain`, breaking every import.
+- All requests now go through the npm `undici`'s own `fetch`, not Node's global `fetch`, so `fetch`, the multipart `FormData`, and the `VCFA_IGNORE_TLS` dispatcher `Agent` always come from the same undici. The `undici` bundled in the Node runtime is a different major (Node 22 → undici 6, Node 24 → undici 7) that neither honors an npm-`undici` `Agent` nor serializes an npm-`undici` `FormData` — the latter broke strict-TLS imports on Node 24 specifically, since undici 7 (unlike undici 6) rejects the foreign `FormData`.
 
 ## 2.2.3 - 2026-06-24
 

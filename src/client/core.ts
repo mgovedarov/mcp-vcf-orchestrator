@@ -14,36 +14,38 @@ const UNSUPPORTED_VRO_WRITE =
   "This vRO operation is not supported in VCFA_TARGET_PLATFORM=vra8 mode. The vRA/vRO 8 compatibility phase supports read operations plus workflow execution and execution logs only.";
 
 // The default TypeScript lib's RequestInit lacks undici's dispatcher option.
-// A dispatcher must be paired with undici's own fetch(): Node's global fetch
-// is backed by the undici version bundled with the Node runtime, which can
-// diverge in major version from the npm `undici` dependency, and dispatcher
-// instances are not interchangeable across major versions.
 type DispatchedRequestInit = RequestInit & { dispatcher?: Agent };
 
 // Captured at module load, before any test replaces globalThis.fetch.
 const nativeFetch = globalThis.fetch;
 
-// Select the fetch implementation for a request. A dispatcher (Agent) must be
-// paired with the undici it came from, so requests carrying one use undici's
-// own fetch; everything else uses Node's global fetch.
+// Select the fetch implementation for a request. Production requests always use
+// the npm `undici` package's own fetch(), never Node's global fetch, so that
+// fetch(), the FormData it serializes (see createUploadForm), and the ignoreTls
+// dispatcher Agent all come from the SAME undici. The undici bundled in the Node
+// runtime is a different major (Node 22 -> undici 6, Node 24 -> undici 7) and is
+// not interchangeable: its fetch rejects an npm-undici FormData — stringifying
+// the body to "[object FormData]" and sending it as text/plain — and cannot
+// honor an npm-undici dispatcher.
 //
-// The pairing guarantee is conditional: if globalThis.fetch has been swapped
-// since module load — a unit-test stub, or runtime instrumentation such as an
-// APM agent that wraps fetch — we defer to the replacement so mocking keeps
-// working. Note that an instrumentation wrapper combined with a dispatcher
-// would reintroduce the cross-major mismatch this indirection exists to avoid.
-function requestFetch(init: DispatchedRequestInit): typeof fetch {
+// The exception is a swapped globalThis.fetch — a unit-test stub, or runtime
+// instrumentation such as an APM agent that wraps fetch, installed after module
+// load: we defer to the replacement so mocking and instrumentation keep working.
+// An instrumentation wrapper is assumed to delegate to a compatible fetch;
+// combining one with an npm-undici dispatcher would reintroduce the cross-major
+// mismatch this indirection exists to avoid.
+function requestFetch(): typeof fetch {
   if (globalThis.fetch !== nativeFetch) return globalThis.fetch;
-  return (init.dispatcher ? undiciFetch : nativeFetch) as typeof fetch;
+  // undici's fetch is runtime-compatible but its Response type is nominally
+  // distinct from lib.dom's, so bridge through unknown.
+  return undiciFetch as unknown as typeof fetch;
 }
 
-// Build a multipart upload body. Uses undici's FormData deliberately: when a
-// TLS-relaxed dispatcher is configured, uploads route through undici's own
-// fetch (see requestFetch), and undici's fetch only serializes a FormData
-// created by the same undici — a global (Node-bundled) FormData fails undici's
-// internal brand check and is stringified to "[object FormData]" and sent as
-// text/plain. undici's FormData also serializes correctly through Node's global
-// fetch, so it is safe on both the strict-TLS and ignoreTls paths. The Blob may
+// Build a multipart upload body with undici's FormData. Uploads route through
+// undici's own fetch (see requestFetch), and undici's fetch only serializes a
+// FormData created by the same undici — a foreign FormData (e.g. the global one,
+// backed by a different bundled-undici major) fails its internal brand check and
+// is stringified to "[object FormData]" and sent as text/plain. The Blob may
 // stay global; undici accepts node:buffer's Blob.
 //
 // The return is cast to the DOM FormData type: undici's FormData is runtime-
@@ -183,7 +185,7 @@ export function normalizeTargetPlatformInput(
 
 /**
  * Shared HTTP/authentication layer for VCF Automation and vRO APIs.
- * Uses fetch() (Node 22+); see requestFetch for the native/undici pairing.
+ * Uses the npm undici's fetch() (Node 22+); see requestFetch for why.
  */
 export class VroHttpClient {
   readonly targetPlatform: VroTargetPlatform;
@@ -321,7 +323,7 @@ export class VroHttpClient {
         signal: controller.signal,
         dispatcher: this.dispatcher,
       };
-      const res = await requestFetch(init)(this.versionsUrl, init);
+      const res = await requestFetch()(this.versionsUrl, init);
       if (!res.ok) {
         throw new Error(`${res.status} ${res.statusText}`);
       }
@@ -375,7 +377,7 @@ export class VroHttpClient {
         signal: controller.signal,
         dispatcher: this.dispatcher,
       };
-      res = await requestFetch(init)(this.sessionUrl, init);
+      res = await requestFetch()(this.sessionUrl, init);
     } finally {
       clearTimeout(timeoutId);
     }
@@ -439,7 +441,7 @@ export class VroHttpClient {
           signal: controller.signal,
           dispatcher: this.dispatcher,
         };
-        return await requestFetch(fetchInit)(url, fetchInit);
+        return await requestFetch()(url, fetchInit);
       } finally {
         clearTimeout(timeoutId);
       }

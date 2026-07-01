@@ -1,16 +1,14 @@
 // Integration test for VCFA_IGNORE_TLS: drives the real client against a local
 // self-signed HTTPS server so a real dispatcher/fetch interop regression fails
 // CI instead of passing silently behind the stubbed fetch used by unit tests.
-// The ignoreTls path pairs the per-client undici Agent with undici's own
-// fetch(); the strict path uses Node's built-in fetch. Both are exercised here,
-// including multipart uploads whose body must not degrade to "[object FormData]":
-// the ignoreTls upload runs end-to-end through the client, and the strict path
-// posts createUploadForm's body through the built-in fetch directly (over plain
-// HTTP, since the strict client rejects the self-signed cert and Node's global
-// fetch takes no per-request CA). The built-in fetch is backed by the undici
-// bundled in the runtime, a different major than the npm undici that built the
-// FormData (Node 22 bundles undici 6, Node 24 undici 7), so its serialization
-// is not covered by the ignoreTls path.
+// Both TLS paths use the npm undici's own fetch() (see requestFetch): the
+// ignoreTls path pairs it with the per-client Agent to relax verification; the
+// strict path uses it with no dispatcher and full verification. A separate
+// check posts createUploadForm's body through undici's fetch and asserts it
+// serializes as multipart, not "[object FormData]" — the failure mode when the
+// FormData and fetch come from different undici majors, which is why the client
+// avoids Node's built-in fetch (backed by the runtime's bundled undici: 6 on
+// Node 22, 7 on Node 24, neither matching the npm undici that builds the form).
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -19,6 +17,7 @@ import https from "node:https";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { fetch as undiciFetch } from "undici";
 import { createUploadForm } from "../dist/client/core.js";
 import { VroClient } from "../dist/vro-client.js";
 
@@ -154,13 +153,16 @@ test("ignoreTls client uploads a real multipart body over undici's fetch", { ski
   }
 });
 
-test("createUploadForm serializes as real multipart through Node's built-in fetch", async () => {
+test("createUploadForm serializes as real multipart through undici's fetch", async () => {
   // The strict (non-ignoreTls) path carries no dispatcher, so requestFetch
-  // routes uploads through Node's built-in fetch — the same call the client
-  // makes. This asserts the runtime-bundled undici still serializes the npm
-  // undici FormData as multipart instead of degrading it to "[object
-  // FormData]". Plain HTTP isolates FormData serialization from TLS; no openssl
-  // dependency, so it runs even where the self-signed-cert tests are skipped.
+  // routes uploads through the npm undici's fetch with the default dispatcher —
+  // the same call the client makes. This asserts undici's fetch serializes the
+  // FormData createUploadForm builds (from the same undici) as multipart rather
+  // than degrading it to "[object FormData]", the failure mode when a form and
+  // fetch come from different undici majors. Plain HTTP isolates serialization
+  // from TLS; no openssl dependency, so it runs even where the self-signed-cert
+  // tests are skipped. Regression guard: Node's built-in fetch (bundled undici
+  // 7 on Node 24) degrades this exact form to text/plain — hence undici's fetch.
   const captured = { contentType: null, body: null };
   const server = http.createServer((req, res) => {
     const chunks = [];
@@ -177,7 +179,7 @@ test("createUploadForm serializes as real multipart through Node's built-in fetc
   try {
     const form = createUploadForm(Buffer.from([1, 2, 3, 4, 5]), "payload.bin");
     form.append("categoryId", "cat-1");
-    const res = await fetch(`http://127.0.0.1:${server.address().port}/`, {
+    const res = await undiciFetch(`http://127.0.0.1:${server.address().port}/`, {
       method: "POST",
       body: form,
     });
