@@ -183,7 +183,7 @@ export function normalizeTargetPlatformInput(
 
 /**
  * Shared HTTP/authentication layer for VCF Automation and vRO APIs.
- * Uses native fetch() (Node 18+).
+ * Uses fetch() (Node 22+); see requestFetch for the native/undici pairing.
  */
 export class VroHttpClient {
   readonly targetPlatform: VroTargetPlatform;
