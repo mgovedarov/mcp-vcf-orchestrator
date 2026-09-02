@@ -12,8 +12,9 @@ Recommended sequence:
 
 1. `list-catalog-items(search: "Ubuntu")`
 2. `get-catalog-item(id: "...")`
-3. `create-deployment(catalogItemId: "...", deploymentName: "...", projectId: "...", inputs: {...}, confirm: true)`
-4. `list-deployments(search: "...", projectId: "...")`
+3. `list-projects(search: "...")` to resolve the target `projectId`; never guess it
+4. `create-deployment(catalogItemId: "...", deploymentName: "...", projectId: "...", inputs: {...}, confirm: true)`
+5. `list-deployments(search: "...", projectId: "...")`
 
 ## Discover And Run Day-2 Actions
 

@@ -343,6 +343,8 @@ test("implementation prompts include discovery-first guardrails", async () => {
     projectHint: "MainPrj",
   });
   assert.match(createTemplate.messages[0].content.text, /list-templates/);
+  assert.match(createTemplate.messages[0].content.text, /list-projects/);
+  assert.match(createTemplate.messages[0].content.text, /get-project/);
   assert.match(
     createTemplate.messages[0].content.text,
     /create-template with confirm set to true only after/,
@@ -437,6 +439,7 @@ test("all discovery pattern resources contain discovery-first instructions", asy
   assert.match(smallVm.contents[0].text, /list-templates/);
   assert.match(smallVm.contents[0].text, /get-template/);
   assert.match(smallVm.contents[0].text, /create-template/);
+  assert.match(smallVm.contents[0].text, /list-projects/);
   assert.match(smallVm.contents[0].text, /do not guess/i);
 
   const catalogReady = await resources

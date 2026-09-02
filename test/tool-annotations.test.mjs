@@ -8,6 +8,7 @@ import { registerContextTools } from "../dist/tools/context-tools.js";
 import { registerDeploymentTools } from "../dist/tools/deployment-tools.js";
 import { registerPackageTools } from "../dist/tools/package-tools.js";
 import { registerPluginTools } from "../dist/tools/plugin-tools.js";
+import { registerProjectTools } from "../dist/tools/project-tools.js";
 import { registerPromotionTools } from "../dist/tools/promotion-tools.js";
 import { registerResourceTools } from "../dist/tools/resource-tools.js";
 import { registerSubscriptionTools } from "../dist/tools/subscription-tools.js";
@@ -67,6 +68,7 @@ function registerAllToolConfigs() {
   registerCategoryTools(server, client);
   registerSubscriptionTools(server, client);
   registerCatalogTools(server, client);
+  registerProjectTools(server, client);
   registerDeploymentTools(server, client);
   registerTemplateTools(server, client);
   registerPackageTools(server, client);

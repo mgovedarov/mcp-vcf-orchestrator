@@ -544,6 +544,26 @@ export interface TemplateList {
   truncated?: boolean;
 }
 
+// --- Projects (project-service) ---
+
+/**
+ * VCF Automation project as returned by the project-service API. Only the
+ * fields the tools render are declared; extend after live verification.
+ */
+export interface Project {
+  id: string;
+  name: string;
+  description?: string;
+}
+
+export interface ProjectList {
+  content: Project[];
+  totalElements?: number;
+  numberOfElements?: number;
+  /** Present (true) when server-side pagination stopped at the page-request cap. */
+  truncated?: boolean;
+}
+
 // --- vRO Packages ---
 
 export interface VroPackage {

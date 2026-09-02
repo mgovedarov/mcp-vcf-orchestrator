@@ -19,7 +19,7 @@ export function registerTemplateTools(
     {
       title: "List Templates",
       description:
-        "List blueprint templates in VCF Automation Cloud Assembly. Optionally filter by name/keyword search or by project ID.",
+        "List blueprint templates in VCF Automation Cloud Assembly. Optionally filter by name/keyword search or by project ID. Use list-projects to discover project IDs.",
       inputSchema: z.object({
         search: z
           .string()
@@ -132,7 +132,9 @@ export function registerTemplateTools(
         name: z.string().describe("Name for the new template"),
         projectId: z
           .string()
-          .describe("The project ID in which to create the template"),
+          .describe(
+            "The project ID in which to create the template (discover with list-projects)",
+          ),
         description: z
           .string()
           .optional()
