@@ -1806,6 +1806,10 @@ test("project client filters search client-side on name and description", async 
   assert.equal(dev.totalElements, 2);
   assert.equal(dev.numberOfElements, 2);
   assert.equal(dev.truncated, undefined);
+  // The pre-filter inventory counts survive so truncation warnings can
+  // report how much was scanned rather than how much matched.
+  assert.equal(dev.scannedElements, 3);
+  assert.equal(dev.inventoryTotalElements, 3);
 
   const trimmed = await client.listProjects("  qa ");
   assert.deepEqual(
@@ -1820,6 +1824,7 @@ test("project client filters search client-side on name and description", async 
   const all = await client.listProjects("   ");
   assert.equal(all.content.length, 3);
   assert.equal(all.totalElements, 3);
+  assert.equal(all.scannedElements, undefined);
 
   // The filter never reaches the wire: every list request is the bare page URL.
   for (const url of calls.slice(1)) {

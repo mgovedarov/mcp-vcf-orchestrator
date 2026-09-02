@@ -112,7 +112,9 @@ export function registerDeploymentTools(
         projectId: z
           .string()
           .optional()
-          .describe("Filter deployments by project ID"),
+          .describe(
+            "Filter deployments by project ID (discover with list-projects)",
+          ),
       }),
       annotations: { readOnlyHint: true },
     },

@@ -28,7 +28,9 @@ export function registerTemplateTools(
         projectId: z
           .string()
           .optional()
-          .describe("Filter templates by project ID"),
+          .describe(
+            "Filter templates by project ID (discover with list-projects)",
+          ),
       }),
       annotations: { readOnlyHint: true },
     },

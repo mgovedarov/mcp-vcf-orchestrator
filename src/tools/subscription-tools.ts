@@ -72,7 +72,9 @@ export function registerSubscriptionTools(
         projectId: z
           .string()
           .optional()
-          .describe("Filter subscriptions by project ID"),
+          .describe(
+            "Filter subscriptions by project ID (discover with list-projects)",
+          ),
       }),
       annotations: { readOnlyHint: true },
     },

@@ -562,6 +562,14 @@ export interface ProjectList {
   numberOfElements?: number;
   /** Present (true) when server-side pagination stopped at the page-request cap. */
   truncated?: boolean;
+  /**
+   * Set when a client-side search was applied: the number of projects
+   * collected from the server before filtering, and the server-reported
+   * inventory total. `content`/`totalElements` then describe the matches,
+   * while these describe how much of the inventory was actually scanned.
+   */
+  scannedElements?: number;
+  inventoryTotalElements?: number;
 }
 
 // --- vRO Packages ---

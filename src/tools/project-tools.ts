@@ -1,8 +1,25 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
+import type { ProjectList } from "../types.js";
 import type { VroClient } from "../vro-client.js";
-import { truncationNote } from "./truncation.js";
+
+/**
+ * Truncation warning for list-projects. The shared truncationNote advises
+ * narrowing the query with a filter, which does not apply here: the search is
+ * applied client-side after pagination, so it can neither reduce the pages
+ * fetched nor recover projects beyond the request cap. Reports the scanned
+ * inventory (not the match count) so a partial scan is never mistaken for a
+ * complete one.
+ */
+function projectTruncationNote(result: ProjectList): string {
+  if (!result.truncated) return "";
+  const scanned = result.scannedElements ?? result.content.length;
+  const total = result.inventoryTotalElements ?? result.totalElements;
+  const ofTotal =
+    total !== undefined && total > scanned ? ` of ~${total}` : "";
+  return `\n\n⚠️ Results truncated: the pagination request limit was reached after scanning ${scanned}${ofTotal} project(s). Projects beyond that point were not checked, and the search filter is applied client-side so it cannot retrieve them; treat missing matches as unverified and use get-project with a known ID instead.`;
+}
 
 export function registerProjectTools(
   server: McpServer,
@@ -28,11 +45,15 @@ export function registerProjectTools(
       try {
         const result = await client.listProjects(search);
         const items = result.content ?? [];
+        const note = projectTruncationNote(result);
         if (items.length === 0) {
-          const text = search
-            ? `No projects found matching "${search}".`
+          // Mirror the client's trimming so the message only claims a filter
+          // was applied when one actually was.
+          const needle = search?.trim();
+          const text = needle
+            ? `No projects found matching "${needle}".`
             : "No projects found.";
-          return { content: [{ type: "text", text }] };
+          return { content: [{ type: "text", text: `${text}${note}` }] };
         }
         const lines = items.map((project) => {
           let line = `• ${project.name} (id: ${project.id})`;
@@ -44,7 +65,7 @@ export function registerProjectTools(
           content: [
             {
               type: "text",
-              text: `Found ${total} project(s):\n\n${lines.join("\n")}${truncationNote(result, items.length, result.totalElements)}`,
+              text: `Found ${total} project(s):\n\n${lines.join("\n")}${note}`,
             },
           ],
         };

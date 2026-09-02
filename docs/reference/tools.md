@@ -688,7 +688,7 @@ List categories by type. Categories are needed to create or import workflows, ac
 
 ### `list-projects`
 
-List VCF Automation projects so agents can resolve the `projectId` consumed by `create-deployment`, `create-template`, `create-subscription`, and the project-scoped list tools instead of guessing it. The optional search is a case-insensitive substring match on project name and description applied after the full project list is collected.
+List VCF Automation projects so agents can resolve the `projectId` consumed by `create-deployment`, `create-template`, `create-subscription`, and the project-scoped list tools instead of guessing it. The optional search is a case-insensitive substring match on project name and description applied after the full project list is collected. If pagination stops at the request cap, the result (including an empty match list) carries a truncation warning reporting how much of the inventory was scanned; because the search never reaches the server it cannot retrieve the unscanned projects, so resolve those with `get-project` by ID.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |

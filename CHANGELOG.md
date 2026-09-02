@@ -4,7 +4,7 @@
 
 ### Added
 
-- **New read-only project discovery tools `list-projects` and `get-project`** backed by `GET /project-service/api/projects`, so agents can resolve the `projectId` consumed by `create-deployment`, `create-template`, `create-subscription`, and the project-scoped list tools instead of asking for it out-of-band. `list-projects` paginates the full project list and applies an optional client-side, case-insensitive name/description filter; both tools are rejected in `vra8` mode like the other Automation-service APIs. Project-scoped tool descriptions, prompts, and patterns now point at them for ID discovery (VCFO-062).
+- **New read-only project discovery tools `list-projects` and `get-project`** backed by `GET /project-service/api/projects`, so agents can resolve the `projectId` consumed by `create-deployment`, `create-template`, `create-subscription`, and the project-scoped list tools instead of asking for it out-of-band. `list-projects` paginates the full project list and applies an optional client-side, case-insensitive name/description filter; when pagination hits the request cap, the result (even an empty match list) warns how much of the inventory was scanned and that the client-side search cannot recover the rest. Both tools are rejected in `vra8` mode like the other Automation-service APIs. Project-scoped tool descriptions, prompts, and patterns now point at them for ID discovery (VCFO-062).
 
 ### Changed
 

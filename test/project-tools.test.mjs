@@ -47,6 +47,14 @@ test("list-projects reports empty results with and without a search", async () =
 
   const filtered = await handlers.get("list-projects")({ search: "x" });
   assert.equal(filtered.content[0].text, 'No projects found matching "x".');
+
+  // The client trims and ignores whitespace-only searches, so the message
+  // must not claim a filter was applied.
+  const blank = await handlers.get("list-projects")({ search: "   " });
+  assert.equal(blank.content[0].text, "No projects found.");
+
+  const padded = await handlers.get("list-projects")({ search: "  qa " });
+  assert.equal(padded.content[0].text, 'No projects found matching "qa".');
 });
 
 test("list-projects surfaces a pagination truncation warning", async () => {
@@ -61,7 +69,51 @@ test("list-projects surfaces a pagination truncation warning", async () => {
   const result = await handlers.get("list-projects")({});
   assert.match(result.content[0].text, /Found 50 project\(s\)/);
   assert.match(result.content[0].text, /Results truncated/);
-  assert.match(result.content[0].text, /collecting 1 of ~50 item\(s\)/);
+  assert.match(result.content[0].text, /scanning 1 of ~50 project\(s\)/);
+  // The shared "narrow the query with a filter" advice does not apply: the
+  // search is client-side and cannot recover unscanned projects.
+  assert.doesNotMatch(result.content[0].text, /Narrow the query/);
+  assert.match(result.content[0].text, /cannot retrieve them/);
+});
+
+test("list-projects truncation warning reports the scanned inventory, not the match count", async () => {
+  const handlers = registeredTools(registerProjectTools, {
+    listProjects: async () => ({
+      totalElements: 3,
+      numberOfElements: 3,
+      scannedElements: 200,
+      inventoryTotalElements: 5000,
+      truncated: true,
+      content: [
+        { id: "p-1", name: "dev-a" },
+        { id: "p-2", name: "dev-b" },
+        { id: "p-3", name: "dev-c" },
+      ],
+    }),
+  });
+
+  const result = await handlers.get("list-projects")({ search: "dev" });
+  assert.match(result.content[0].text, /Found 3 project\(s\)/);
+  assert.match(result.content[0].text, /scanning 200 of ~5000 project\(s\)/);
+});
+
+test("list-projects keeps the truncation warning when a search matches nothing", async () => {
+  const handlers = registeredTools(registerProjectTools, {
+    listProjects: async () => ({
+      totalElements: 0,
+      numberOfElements: 0,
+      scannedElements: 200,
+      inventoryTotalElements: 5000,
+      truncated: true,
+      content: [],
+    }),
+  });
+
+  const result = await handlers.get("list-projects")({ search: "legacy" });
+  assert.equal(result.isError, undefined);
+  assert.match(result.content[0].text, /^No projects found matching "legacy"\./);
+  assert.match(result.content[0].text, /Results truncated/);
+  assert.match(result.content[0].text, /scanning 200 of ~5000 project\(s\)/);
 });
 
 test("get-project renders id, name, and optional description", async () => {

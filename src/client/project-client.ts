@@ -27,7 +27,10 @@ export class ProjectClient {
       content,
       numberOfElements: content.length,
       totalElements: content.length,
+      scannedElements: page.content.length,
     };
+    if (page.totalElements !== undefined)
+      filtered.inventoryTotalElements = page.totalElements;
     if (page.truncated) filtered.truncated = true;
     return filtered;
   }
