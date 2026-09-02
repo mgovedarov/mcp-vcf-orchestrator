@@ -20,3 +20,9 @@ updates:
       time: "05:30"
       timezone: Europe/Sofia
     open-pull-requests-limit: 5
+    groups:
+      # init, autobuild and analyze must run the same action version, so
+      # bump them together instead of one PR per step (each fails alone).
+      codeql-action:
+        patterns:
+          - "github/codeql-action*"
