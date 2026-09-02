@@ -5,6 +5,7 @@
 ### Changed
 
 - **BREAKING: the minimum supported Node.js version is now 22.19.** `undici` 8 requires Node `>=22.19.0`, so support for Node 18 and 20 (both end-of-life) is dropped; `engines.node` and the CI matrix are updated accordingly.
+- Grouped the `github/codeql-action` `init`, `autobuild` and `analyze` bumps into a single Dependabot PR (`codeql-action` group). The CodeQL workflow requires all three steps to run the same action version, so the one-PR-per-step updates Dependabot started opening each failed CI on their own.
 
 ### Dependencies
 
