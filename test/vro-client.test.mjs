@@ -952,6 +952,14 @@ test("vra8 platform rejects Automation-service APIs with clear message", async (
     () => client.listSubscriptions(),
     /Automation-service APIs .* not supported .*vra8 Basic-auth mode/,
   );
+  await assert.rejects(
+    () => client.listProjects(),
+    /Automation-service APIs \(catalog, deployments, templates, projects, .* not supported .*vra8 Basic-auth mode/,
+  );
+  await assert.rejects(
+    () => client.getProject("p-1"),
+    /Automation-service APIs .* not supported .*vra8 Basic-auth mode/,
+  );
 });
 
 test("vra8 platform rejects vRO writes other than workflow execution", async () => {
@@ -1730,6 +1738,101 @@ test("catalog client uses service broker endpoints and request payloads", async 
     reason: "Test",
     inputs: { size: "small" },
   });
+});
+
+test("project client uses project-service endpoints and encodes ids", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+
+    if (String(url).endsWith("/project-service/api/projects?page=0&size=100")) {
+      return Response.json({
+        totalElements: 2,
+        content: [
+          { id: "p-1", name: "Dev", description: "Dev sandbox" },
+          { id: "p/2", name: "Prod" },
+        ],
+      });
+    }
+
+    if (String(url).endsWith("/project-service/api/projects/p%2F2")) {
+      return Response.json({ id: "p/2", name: "Prod" });
+    }
+
+    throw new Error(`unexpected request ${String(url)}`);
+  };
+
+  const client = new VroClient(config());
+  const list = await client.listProjects();
+  const project = await client.getProject("p/2");
+
+  assert.equal(list.content.length, 2);
+  assert.equal(list.totalElements, 2);
+  assert.equal(project.id, "p/2");
+  assert.equal(
+    calls[1].url,
+    "https://vcfa.example.test/project-service/api/projects?page=0&size=100",
+  );
+  assert.equal(
+    calls[2].url,
+    "https://vcfa.example.test/project-service/api/projects/p%2F2",
+  );
+  assert.equal(calls[1].init.method, "GET");
+});
+
+test("project client filters search client-side on name and description", async () => {
+  const calls = [];
+  globalThis.fetch = async (url) => {
+    calls.push(String(url));
+    if (calls.length === 1) return authResponse();
+    return Response.json({
+      totalElements: 3,
+      content: [
+        { id: "p-1", name: "Dev Sandbox" },
+        { id: "p-2", name: "Prod", description: "Production DEV mirror" },
+        { id: "p-3", name: "QA" },
+      ],
+    });
+  };
+
+  const client = new VroClient(config());
+
+  const dev = await client.listProjects("dev");
+  assert.deepEqual(
+    dev.content.map((project) => project.id),
+    ["p-1", "p-2"],
+  );
+  assert.equal(dev.totalElements, 2);
+  assert.equal(dev.numberOfElements, 2);
+  assert.equal(dev.truncated, undefined);
+  // The pre-filter inventory counts survive so truncation warnings can
+  // report how much was scanned rather than how much matched.
+  assert.equal(dev.scannedElements, 3);
+  assert.equal(dev.inventoryTotalElements, 3);
+
+  const trimmed = await client.listProjects("  qa ");
+  assert.deepEqual(
+    trimmed.content.map((project) => project.id),
+    ["p-3"],
+  );
+
+  const none = await client.listProjects("nothing");
+  assert.deepEqual(none.content, []);
+  assert.equal(none.totalElements, 0);
+
+  const all = await client.listProjects("   ");
+  assert.equal(all.content.length, 3);
+  assert.equal(all.totalElements, 3);
+  assert.equal(all.scannedElements, undefined);
+
+  // The filter never reaches the wire: every list request is the bare page URL.
+  for (const url of calls.slice(1)) {
+    assert.equal(
+      url,
+      "https://vcfa.example.test/project-service/api/projects?page=0&size=100",
+    );
+  }
 });
 
 test("Automation service list clients aggregate multiple page results", async () => {

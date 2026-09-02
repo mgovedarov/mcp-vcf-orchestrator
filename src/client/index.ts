@@ -19,6 +19,8 @@ import type {
   PackageImportDetails,
   PackageImportOptions,
   PrepareArtifactPromotionParams,
+  Project,
+  ProjectList,
   ProjectPackageResult,
   EventTopicList,
   ResourceElement,
@@ -58,6 +60,7 @@ import { VroHttpClient } from "./core.js";
 import { DeploymentClient } from "./deployment-client.js";
 import { PackageClient } from "./package-client.js";
 import { PluginClient } from "./plugin-client.js";
+import { ProjectClient } from "./project-client.js";
 import { ResourceClient } from "./resource-client.js";
 import { SubscriptionClient } from "./subscription-client.js";
 import { TemplateClient } from "./template-client.js";
@@ -82,6 +85,7 @@ export class VroClient {
   private packages: PackageClient;
   private resources: ResourceClient;
   private plugins: PluginClient;
+  private projects: ProjectClient;
 
   constructor(config: VroClientConfig) {
     const http = new VroHttpClient(config);
@@ -97,6 +101,7 @@ export class VroClient {
     this.packages = new PackageClient(http);
     this.resources = new ResourceClient(http);
     this.plugins = new PluginClient(http);
+    this.projects = new ProjectClient(http);
   }
 
   /** Release network resources (e.g. the TLS-relaxed dispatcher). */
@@ -620,6 +625,14 @@ export class VroClient {
 
   deleteTemplate(id: string): Promise<void> {
     return this.templates.deleteTemplate(id);
+  }
+
+  listProjects(search?: string): Promise<ProjectList> {
+    return this.projects.listProjects(search);
+  }
+
+  getProject(id: string): Promise<Project> {
+    return this.projects.getProject(id);
   }
 
   listPackages(filter?: string): Promise<VroPackageList> {

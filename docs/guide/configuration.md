@@ -29,7 +29,7 @@ It uses the returned bearer token for later VCF Automation, Service Broker, Clou
 
 VCF Automation 9.1 introduces API version `9.1.0` alongside `9.0.0`. Before authenticating, the server probes the unauthenticated discovery document at `https://{VCFA_HOST}/api/versions` and selects the newest API version it knows (`9.1.0` preferred, then `9.0.0`) for the session request. If the probe fails or advertises no known version, the server falls back to `9.0.0`, which 9.1 servers still accept. Set `VCFA_TARGET_PLATFORM` to `vcfa9.1` or `vcfa9.0` to pin the version explicitly and skip the probe.
 
-For vRA/vRO 8.12+ read/run compatibility, set `VCFA_TARGET_PLATFORM=vra8`. In that mode, the server skips the VCF Cloud API session endpoint and sends Basic auth directly to `/vco/api`. The vRA/vRO 8 mode supports vRO read operations plus workflow execution and execution logs; Automation-service APIs such as catalog, deployments, templates, subscriptions, and event topics are intentionally unsupported until token-auth support is added.
+For vRA/vRO 8.12+ read/run compatibility, set `VCFA_TARGET_PLATFORM=vra8`. In that mode, the server skips the VCF Cloud API session endpoint and sends Basic auth directly to `/vco/api`. The vRA/vRO 8 mode supports vRO read operations plus workflow execution and execution logs; Automation-service APIs such as catalog, deployments, templates, projects, subscriptions, and event topics are intentionally unsupported until token-auth support is added.
 
 ## Optional Variables
 

@@ -10,6 +10,7 @@ import { registerContextTools } from "./tools/context-tools.js";
 import { registerDeploymentTools } from "./tools/deployment-tools.js";
 import { registerPackageTools } from "./tools/package-tools.js";
 import { registerPluginTools } from "./tools/plugin-tools.js";
+import { registerProjectTools } from "./tools/project-tools.js";
 import { registerPromotionTools } from "./tools/promotion-tools.js";
 import { registerVcfaPrompts } from "./prompts/index.js";
 import { registerVcfaResources } from "./resources/index.js";
@@ -108,6 +109,7 @@ async function main(): Promise<void> {
         "Use list-event-topics to discover available event topics before creating extensibility subscriptions.",
         "Use list-subscriptions to see existing event-driven triggers.",
         "Use list-catalog-items to browse the Service Broker catalog; use get-catalog-item to inspect a specific item by ID.",
+        "Use list-projects to discover project IDs (optionally filtering by name or description) and get-project to inspect one before passing projectId to create-deployment, create-template, create-subscription, or the project-scoped list tools; never guess project IDs.",
         "Use list-deployments to see existing deployments; use create-deployment with confirm set to true to deploy a catalog item, providing the catalogItemId, deploymentName, and projectId. Use list-deployment-actions to discover available deployment day-2 actions, then run-deployment-action with confirm set to true and expectedDeploymentName and expectedActionName to submit one.",
         "Use list-templates to browse blueprint templates; use get-template to inspect a specific template by ID; use create-template with confirm set to true to create a new template; use delete-template with expectedName or project/status expected fields to remove one.",
         "Publish reusable vRO content through packages by default: use ensure-project-package, add content to the exact project package, rebuild-project-package, export-project-package, get-project-package-import-details, then import-project-package. Reuse the configured project package from VCFA_PROJECT_PACKAGE_NAME; never create one-off packages unless the user confirms the exact package name.",
@@ -124,6 +126,7 @@ async function main(): Promise<void> {
   registerCategoryTools(server, client);
   registerSubscriptionTools(server, client);
   registerCatalogTools(server, client);
+  registerProjectTools(server, client);
   registerDeploymentTools(server, client);
   registerTemplateTools(server, client);
   registerPackageTools(server, client);

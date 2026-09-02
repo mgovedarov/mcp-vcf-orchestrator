@@ -130,7 +130,7 @@ Discover existing Cloud Assembly templates and draft a new blueprint template sa
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `templateGoal` | string | Yes | - | Template purpose or desired workload. |
-| `projectHint` | string | No | - | Optional project name or ID hint. |
+| `projectHint` | string | No | - | Optional project name or ID hint; resolve it with `list-projects`. |
 :::
 
 ### `vcfa-review-template`

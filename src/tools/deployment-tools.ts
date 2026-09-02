@@ -103,7 +103,7 @@ export function registerDeploymentTools(
     {
       title: "List Deployments",
       description:
-        "List deployments in VCF Automation. Optionally filter by name/keyword search or by project ID.",
+        "List deployments in VCF Automation. Optionally filter by name/keyword search or by project ID. Use list-projects to discover project IDs.",
       inputSchema: z.object({
         search: z
           .string()
@@ -112,7 +112,9 @@ export function registerDeploymentTools(
         projectId: z
           .string()
           .optional()
-          .describe("Filter deployments by project ID"),
+          .describe(
+            "Filter deployments by project ID (discover with list-projects)",
+          ),
       }),
       annotations: { readOnlyHint: true },
     },
@@ -321,7 +323,9 @@ export function registerDeploymentTools(
         deploymentName: z.string().describe("Name for the new deployment"),
         projectId: z
           .string()
-          .describe("The project ID in which to create the deployment"),
+          .describe(
+            "The project ID in which to create the deployment (discover with list-projects)",
+          ),
         version: z
           .string()
           .optional()

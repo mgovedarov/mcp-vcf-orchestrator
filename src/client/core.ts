@@ -8,7 +8,7 @@ import type {
 } from "../types.js";
 
 const UNSUPPORTED_AUTOMATION_SERVICES =
-  "Automation-service APIs (catalog, deployments, templates, subscriptions, and event topics) are not supported in VCFA_TARGET_PLATFORM=vra8 Basic-auth mode. This mode supports vRO /vco/api read operations plus workflow execution and execution logs.";
+  "Automation-service APIs (catalog, deployments, templates, projects, subscriptions, and event topics) are not supported in VCFA_TARGET_PLATFORM=vra8 Basic-auth mode. This mode supports vRO /vco/api read operations plus workflow execution and execution logs.";
 
 const UNSUPPORTED_VRO_WRITE =
   "This vRO operation is not supported in VCFA_TARGET_PLATFORM=vra8 mode. The vRA/vRO 8 compatibility phase supports read operations plus workflow execution and execution logs only.";
@@ -194,6 +194,7 @@ export class VroHttpClient {
   readonly catalogBaseUrl: string;
   readonly deploymentBaseUrl: string;
   readonly blueprintBaseUrl: string;
+  readonly projectBaseUrl: string;
   readonly packageDir: string;
   readonly projectPackageName?: string;
   readonly projectPackageDescription?: string;
@@ -229,6 +230,7 @@ export class VroHttpClient {
     this.catalogBaseUrl = `https://${config.host}/catalog/api`;
     this.deploymentBaseUrl = `https://${config.host}/deployment/api`;
     this.blueprintBaseUrl = `https://${config.host}/blueprint/api`;
+    this.projectBaseUrl = `https://${config.host}/project-service/api`;
     // Provider/system administrators authenticate at the dedicated provider
     // session endpoint; the tenant endpoint rejects them with 401.
     this.isProviderLogin =

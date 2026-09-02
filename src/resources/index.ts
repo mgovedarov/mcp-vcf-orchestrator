@@ -190,7 +190,7 @@ Discovery first:
 
 - Run \`list-templates\` for existing small VM, Linux, Windows, or project-specific templates.
 - Run \`get-template\` (with \`includeContent: true\`) on the closest match and reuse its resource type names, image/flavor conventions, networks, constraints, and inputs when appropriate.
-- Confirm the target \`projectId\`; do not guess project IDs.
+- Confirm the target \`projectId\` with \`list-projects\` or \`get-project\`; do not guess project IDs.
 
 Implementation shape:
 

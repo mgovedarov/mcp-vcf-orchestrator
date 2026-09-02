@@ -684,6 +684,28 @@ List categories by type. Categories are needed to create or import workflows, ac
 | `filter` | string | No | - | Filter categories by name using a substring match. |
 :::
 
+## Projects
+
+### `list-projects`
+
+List VCF Automation projects so agents can resolve the `projectId` consumed by `create-deployment`, `create-template`, `create-subscription`, and the project-scoped list tools instead of guessing it. The optional search is a case-insensitive substring match on project name and description applied after the full project list is collected. If pagination stops at the request cap, the result (including an empty match list) carries a truncation warning reporting how much of the inventory was scanned; because the search never reaches the server it cannot retrieve the unscanned projects, so resolve those with `get-project` by ID.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `search` | string | No | - | Case-insensitive substring matched against project name and description. |
+:::
+
+### `get-project`
+
+Get details for a specific project by its ID. Use `list-projects` to discover project IDs.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `id` | string | Yes | - | Project ID to inspect. |
+:::
+
 ## Catalog Items
 
 ### `list-catalog-items`
@@ -710,13 +732,13 @@ Get catalog item details including type, source, and project assignments.
 
 ### `list-deployments`
 
-List deployments, optionally filtered by name or keyword and project ID.
+List deployments, optionally filtered by name or keyword and project ID. Use `list-projects` to discover project IDs.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `search` | string | No | - | Search deployments by name or keyword. |
-| `projectId` | string | No | - | Filter deployments by project ID. |
+| `projectId` | string | No | - | Filter deployments by project ID (discover with `list-projects`). |
 :::
 
 ### `get-deployment`
@@ -731,14 +753,14 @@ Get detailed information about a specific deployment by its ID.
 
 ### `create-deployment`
 
-Create a new deployment from a catalog item. Use `list-catalog-items` to find the catalog item ID, and `list-deployments` to verify afterwards.
+Create a new deployment from a catalog item. Use `list-catalog-items` to find the catalog item ID, `list-projects` to find the project ID, and `list-deployments` to verify afterwards.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `catalogItemId` | string | Yes | - | Catalog item ID to deploy. |
 | `deploymentName` | string | Yes | - | Name for the new deployment. |
-| `projectId` | string | Yes | - | Project ID in which to create the deployment. |
+| `projectId` | string | Yes | - | Project ID in which to create the deployment (discover with `list-projects`). |
 | `version` | string | No | latest | Catalog item version to deploy. |
 | `reason` | string | No | - | Reason or comment for the deployment request. |
 | `inputs` | object | No | `{}` | Catalog item input parameters as a key/value object. Use `get-catalog-item` or catalog documentation to verify the expected shape before deploying. |
@@ -799,7 +821,7 @@ List blueprint templates in VCF Automation Cloud Assembly. Optionally filter by 
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `search` | string | No | - | Search templates by name or keyword. |
-| `projectId` | string | No | - | Filter templates by project ID. |
+| `projectId` | string | No | - | Filter templates by project ID (discover with `list-projects`). |
 :::
 
 ### `get-template`
@@ -821,7 +843,7 @@ Create a new blueprint template in VCF Automation Cloud Assembly. Use `list-temp
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `name` | string | Yes | - | Name for the new template. |
-| `projectId` | string | Yes | - | Project ID in which to create the template. |
+| `projectId` | string | Yes | - | Project ID in which to create the template (discover with `list-projects`). |
 | `description` | string | No | - | Optional template description. |
 | `content` | string | No | empty template | YAML blueprint content for the template. Treat this as Cloud Assembly blueprint content and verify conventions from existing templates or docs before authoring. |
 | `requestScopeOrg` | boolean | No | `false` | If `true`, the template is available org-wide rather than project-scoped. |
@@ -1088,7 +1110,7 @@ List extensibility subscriptions, optionally filtered by project ID.
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
-| `projectId` | string | No | - | Filter subscriptions by project ID. |
+| `projectId` | string | No | - | Filter subscriptions by project ID (discover with `list-projects`). |
 :::
 
 ### `get-subscription`
@@ -1113,7 +1135,7 @@ Create a subscription linking an Event Broker topic to a vRO workflow or ABX act
 | `eventTopicId` | string | Yes | - | Event topic ID to subscribe to. Use `list-event-topics` to discover available topics. |
 | `runnableType` | enum | Yes | - | Runnable type to trigger: `extensibility.vro` for a vRO workflow or `extensibility.abx` for an ABX action. |
 | `runnableId` | string | Yes | - | ID of the workflow or ABX action to trigger. |
-| `projectId` | string | No | - | Project ID to scope the subscription to. |
+| `projectId` | string | No | - | Project ID to scope the subscription to (discover with `list-projects`). |
 | `description` | string | No | - | Optional subscription description. |
 | `blocking` | boolean | No | - | Whether the subscription blocks the event pipeline until the runnable completes. |
 | `priority` | number | No | - | Subscription priority. Lower number means higher priority. |

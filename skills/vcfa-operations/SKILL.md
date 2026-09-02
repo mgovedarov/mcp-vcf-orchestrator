@@ -50,6 +50,8 @@ them.
   `get-workflow-execution-logs`, `list-workflow-executions`.
 - Deployments: `list-deployments`, `get-deployment`, `list-deployment-actions`,
   `run-deployment-action`, `create-deployment`, `delete-deployment`.
+- Projects: `list-projects`, `get-project` (resolve `projectId` before
+  project-scoped calls).
 - Catalog: `list-catalog-items`, `get-catalog-item`.
 - Templates: `list-templates`, `get-template`, `create-template`,
   `delete-template`.
@@ -67,4 +69,5 @@ Live objects are also available as read-only resources, e.g.
 When the server runs with `VCFA_TARGET_PLATFORM=vra8` (vRA/vRO 8.12+ Basic auth),
 only vRO read operations plus workflow execution and execution logs are
 supported. Automation-service surfaces — catalog, deployments, templates,
-subscriptions, and event topics — are intentionally unsupported in that mode.
+projects, subscriptions, and event topics — are intentionally unsupported in
+that mode.

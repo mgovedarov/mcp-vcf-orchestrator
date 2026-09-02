@@ -16,6 +16,7 @@ list-templates(search: "Ubuntu")
 get-template(id: "<template-id>", includeContent: true)
 list-catalog-items(search: "Ubuntu")
 get-catalog-item(id: "<catalog-item-id>")
+list-projects(search: "<project-name>")
 list-deployments(search: "Ubuntu", projectId: "<project-id>")
 ```
 

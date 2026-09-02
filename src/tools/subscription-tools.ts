@@ -67,12 +67,14 @@ export function registerSubscriptionTools(
     {
       title: "List Subscriptions",
       description:
-        "List extensibility subscriptions from the VCF Automation Event Broker. Optionally filter by project ID.",
+        "List extensibility subscriptions from the VCF Automation Event Broker. Optionally filter by project ID. Use list-projects to discover project IDs.",
       inputSchema: z.object({
         projectId: z
           .string()
           .optional()
-          .describe("Filter subscriptions by project ID"),
+          .describe(
+            "Filter subscriptions by project ID (discover with list-projects)",
+          ),
       }),
       annotations: { readOnlyHint: true },
     },
@@ -189,7 +191,9 @@ export function registerSubscriptionTools(
         projectId: z
           .string()
           .optional()
-          .describe("Project ID to scope the subscription to"),
+          .describe(
+            "Project ID to scope the subscription to (discover with list-projects)",
+          ),
         description: z.string().optional().describe("Optional description"),
         blocking: z
           .boolean()

@@ -268,7 +268,9 @@ export function registerVcfaPrompts(server: McpServer): void {
         projectHint: z
           .string()
           .optional()
-          .describe("Optional project name or ID hint"),
+          .describe(
+            "Optional project name or ID hint; resolve it with list-projects",
+          ),
       },
     },
     ({ templateGoal, projectHint }) =>
@@ -280,6 +282,7 @@ export function registerVcfaPrompts(server: McpServer): void {
           "",
           "Read vcfa://patterns/templates/conventions and vcfa://patterns/templates/small-vm or vcfa://patterns/templates/catalog-ready when relevant.",
           "Use list-templates and get-template (with includeContent set to true) to find reusable YAML conventions before drafting content.",
+          "Use list-projects to resolve the project hint to a verified projectId and get-project to confirm it; never guess project IDs.",
           "Use list-catalog-items or list-deployments when the template must align with catalog or deployment behavior.",
           ...discoveryGuardrails(),
           "Call create-template with confirm set to true only after the target projectId and YAML content are confirmed, then verify with get-template.",

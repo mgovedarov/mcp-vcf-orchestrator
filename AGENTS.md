@@ -54,11 +54,12 @@ Use the exact registered tool names. Start with list/get tools unless the user h
 - Categories and plugins: `list-categories`, `list-plugins`
 - Templates: `list-templates`, `get-template`, `create-template`, `delete-template`
 - Subscriptions and event topics: `list-event-topics`, `list-subscriptions`, `get-subscription`, `create-subscription`, `update-subscription`, `delete-subscription`
+- Projects: `list-projects`, `get-project`
 - Catalog and deployments: `list-catalog-items`, `get-catalog-item`, `list-deployments`, `get-deployment`, `create-deployment`, `delete-deployment`, `list-deployment-actions`, `run-deployment-action`
 
 Many write-capable tools require a `confirm: true` argument before they mutate state. That schema requirement does not replace user confirmation. Confirm the exact target, expected impact, and rollback or backup plan before calling live create, update, import, delete, deployment, day-2, package, or local overwrite tools.
 
-In `vra8` mode, support only vRO `/vco/api` read operations plus workflow execution and execution logs. Automation-service APIs such as catalog, deployments, templates, subscriptions, and event topics are intentionally unsupported in Basic-auth mode until token-auth support is added.
+In `vra8` mode, support only vRO `/vco/api` read operations plus workflow execution and execution logs. Automation-service APIs such as catalog, deployments, templates, projects, subscriptions, and event topics are intentionally unsupported in Basic-auth mode until token-auth support is added.
 
 On the default `vcfa` platform, the client auto-negotiates the VCF Cloud API version (`9.1.0` preferred, then `9.0.0`) via the unauthenticated `GET /api/versions` discovery document; `VCFA_TARGET_PLATFORM=vcfa9.1` or `vcfa9.0` pins it. Logins with `VCFA_ORGANIZATION=system` (case-insensitive) are routed to `/cloudapi/1.0.0/sessions/provider` for provider/system administrators; tenant logins use `/cloudapi/1.0.0/sessions` with the organization name (URL slug), not its display name.
 
@@ -160,7 +161,7 @@ Before authoring or importing workflow artifacts, read `docs/vro-artifact-author
 ## Template, Subscription, Catalog, And Deployment Rules
 
 - For Cloud Assembly templates, inspect existing templates with `list-templates` and `get-template` (set `includeContent: true` to read the YAML) before drafting YAML. Reuse discovered resource types, inputs, image/flavor/network conventions, constraints, and catalog patterns. Do not invent provider-specific YAML.
-- Confirm the target `projectId` and template content before calling `create-template` with `confirm: true`.
+- Confirm the target `projectId` with `list-projects` or `get-project` and the template content before calling `create-template` with `confirm: true`.
 - For catalog work, inspect `list-catalog-items` and `get-catalog-item` before creating deployments.
 - For deployments, inspect `get-deployment` and `list-deployment-actions` before proposing remediation. Do not run `run-deployment-action` until the user confirms the action, inputs, target deployment, and expected impact.
 - For extensibility subscriptions, inspect `list-event-topics`, `list-subscriptions`, and `get-subscription` (set `includeConstraints: true` to read constraints) first. During testing, disabling or updating a subscription may be safer than deleting it.

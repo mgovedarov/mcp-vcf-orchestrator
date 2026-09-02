@@ -544,6 +544,34 @@ export interface TemplateList {
   truncated?: boolean;
 }
 
+// --- Projects (project-service) ---
+
+/**
+ * VCF Automation project as returned by the project-service API. Only the
+ * fields the tools render are declared; extend after live verification.
+ */
+export interface Project {
+  id: string;
+  name: string;
+  description?: string;
+}
+
+export interface ProjectList {
+  content: Project[];
+  totalElements?: number;
+  numberOfElements?: number;
+  /** Present (true) when server-side pagination stopped at the page-request cap. */
+  truncated?: boolean;
+  /**
+   * Set when a client-side search was applied: the number of projects
+   * collected from the server before filtering, and the server-reported
+   * inventory total. `content`/`totalElements` then describe the matches,
+   * while these describe how much of the inventory was actually scanned.
+   */
+  scannedElements?: number;
+  inventoryTotalElements?: number;
+}
+
 // --- vRO Packages ---
 
 export interface VroPackage {
