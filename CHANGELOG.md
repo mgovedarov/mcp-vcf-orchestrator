@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Dependencies
+
+- Applied Dependabot security updates to the lockfile, clearing 25 of the 27 open alerts. Transitive under `@modelcontextprotocol/sdk`: `qs` 6.15.2 → 6.16.0, `@hono/node-server` 1.19.14 → 2.1.1, `hono` 4.12.26 → 4.13.7, `fast-uri` 3.1.2 → 3.1.7, `ip-address` 10.2.0 → 10.7.0, `body-parser` 2.2.2 → 2.3.0. Transitive under `vitepress`: `postcss` 8.5.13 → 8.5.28. `package-lock.json` is not part of the published package, so installs already resolved fixed versions; these bumps cover clones, CI, and the release workflow's `npm ci`. The server uses only the stdio transport, so the `hono`, `express`, and `ip-address` advisories were unreachable code paths here.
+
+### Changed
+
+- Enabled Dependabot security updates on the repository, so transitive advisories now get their own pull requests instead of waiting for the monthly grouped version updates.
+
 ## 3.0.0 - 2026-09-10
 
 This release drops end-of-life Node.js 18 and 20, routes all HTTP through the npm `undici` 8 client (fixing multipart artifact imports), adds project discovery (`list-projects`, `get-project`) and `update-action`, hardens the action tool surface and input-form authoring, and is the first version published since 2.2.1: the 2.2.2 and 2.2.3 sections below were recorded in this changelog but never tagged or published to npm, so their changes ship here as well.
