@@ -7,11 +7,25 @@ import type {
   VroTargetPlatformInput,
 } from "../types.js";
 
-const UNSUPPORTED_AUTOMATION_SERVICES =
-  "Automation-service APIs (catalog, deployments, templates, projects, subscriptions, and event topics) are not supported in VCFA_TARGET_PLATFORM=vra8 mode. This mode supports vRO /vco/api read operations plus workflow execution and execution logs.";
+// Automation-service writes (catalog requests, deployment deletes and day-2
+// actions, blueprint create/delete, subscription create/update/delete) are the
+// one surface still withheld in vra8 mode: the read paths were verified against
+// a vRA 8.18 lab (VCFO-068) but the write paths were not, and each one either
+// provisions or destroys real infrastructure.
+const UNSUPPORTED_AUTOMATION_WRITE =
+  "Automation-service writes (catalog item requests, deployment deletion and day-2 actions, blueprint create/delete, and subscription create/update/delete) are not supported in VCFA_TARGET_PLATFORM=vra8 mode pending lab verification. Reading catalog items, deployments, templates, projects, subscriptions, and event topics is supported, as is the full vRO /vco/api surface.";
 
-const UNSUPPORTED_VRO_WRITE =
-  "This vRO operation is not supported in VCFA_TARGET_PLATFORM=vra8 mode. The vRA/vRO 8 compatibility phase supports read operations plus workflow execution and execution logs only.";
+// vRA 8 serves a single configuration element as JSON only: a GET that asks
+// for application/zip answers 406, while the same request for a workflow or an
+// action returns the artifact (verified on vRO 8.18.1, VCFO-068). The package
+// route is the working alternative and is named in the message.
+export const UNSUPPORTED_VRA8_CONFIGURATION_EXPORT =
+  "Exporting a single configuration element as a .vsoconf artifact is not supported in VCFA_TARGET_PLATFORM=vra8 mode: vRA 8 serves configuration elements as JSON only and rejects the artifact request with 406. Use get-configuration to read it, or add it to the project package with add-configuration-to-project-package and export that package instead.";
+
+// A base URL the vra8 clients never build. Reachable only if a new
+// Automation-service base URL is added without deciding its vra8 support.
+const UNSUPPORTED_UNKNOWN_SERVICE =
+  "This service is not supported in VCFA_TARGET_PLATFORM=vra8 mode.";
 
 // Appended to vRA 8 login failures. The CSP login answers wrong credentials
 // and unknown domains with 400 (not 401), so the hint covers both.
@@ -132,12 +146,62 @@ export function sanitizeErrorBody(rawText: string, res?: Response): string {
     return parts.join("\n");
   }
 
+  const htmlSummary = summarizeHtmlErrorPage(rawText);
+  if (htmlSummary) {
+    parts.push(htmlSummary);
+    return parts.join("\n");
+  }
+
   // Non-JSON: truncate to limit exposure
   const excerpt = rawText.length <= NON_JSON_BODY_LIMIT
     ? rawText
     : `${rawText.slice(0, NON_JSON_BODY_LIMIT)}…`;
   parts.push(`[non-JSON body: ${excerpt}]`);
   return parts.join("\n");
+}
+
+/**
+ * Summarize a gateway HTML error page, or return undefined for a body that is
+ * not one.
+ *
+ * The vRA 8 gateway answers a rejected /vco/api request with a styled HTML
+ * page whose only diagnostic content is the status code and reason, several
+ * hundred bytes into a stylesheet. Truncating that to NON_JSON_BODY_LIMIT
+ * yields CSS boilerplate and nothing else, which is how a real 400 came to
+ * read as `vRO API error: 400  — POST /configurations` with no usable detail
+ * (VCFO-068). The reason phrase matters more here than it looks: these
+ * responses arrive over HTTP/2, which has no reason phrase, so Response
+ * .statusText is empty and the page's own text is the only place it survives.
+ *
+ * Only the two short status fields are lifted out; the surrounding markup is
+ * never echoed, and a page without them is reported as carrying no detail
+ * rather than being quoted.
+ */
+function summarizeHtmlErrorPage(rawText: string): string | undefined {
+  if (!/^\s*(?:<!doctype html|<html[\s>])/i.test(rawText)) return undefined;
+  const status = matchHtmlStatusField(rawText, "status-code");
+  const message = matchHtmlStatusField(rawText, "status-message");
+  const detail = [status, message].filter(Boolean).join(" ");
+  // "HTML body", not "error page": sanitizeErrorBody also renders the
+  // non-JSON 2xx path, where the same markup is a gateway or maintenance page
+  // rather than a rejection.
+  return detail
+    ? `[HTML body: ${detail} — no further detail]`
+    : "[HTML body with no diagnostic detail]";
+}
+
+// Read one `<div class="<field>">text</div>` value, capped so a crafted page
+// cannot pad the error message. Returns undefined when absent or empty.
+function matchHtmlStatusField(
+  rawText: string,
+  field: string,
+): string | undefined {
+  const match = new RegExp(
+    `class="${field}"[^>]*>([^<]{1,40})<`,
+    "i",
+  ).exec(rawText);
+  const value = match?.[1]?.trim();
+  return value ? value : undefined;
 }
 
 /**
@@ -372,6 +436,11 @@ export class VroHttpClient {
   readonly configurationDir: string;
   readonly contextDir: string;
 
+  // The Automation-service base URLs, for the vra8 read/write split in
+  // assertOperationSupported. Built in the constructor from the same values as
+  // the public fields so the set cannot drift from them.
+  private readonly automationBaseUrls: ReadonlySet<string>;
+
   private readonly versionsUrl: string;
   private pinnedApiVersion: string | undefined;
   private negotiatedApiVersion: string | null = null;
@@ -406,6 +475,13 @@ export class VroHttpClient {
     this.deploymentBaseUrl = `https://${config.host}/deployment/api`;
     this.blueprintBaseUrl = `https://${config.host}/blueprint/api`;
     this.projectBaseUrl = `https://${config.host}/project-service/api`;
+    this.automationBaseUrls = new Set([
+      this.eventBrokerBaseUrl,
+      this.catalogBaseUrl,
+      this.deploymentBaseUrl,
+      this.blueprintBaseUrl,
+      this.projectBaseUrl,
+    ]);
     this.versionsUrl = `https://${config.host}/api/versions`;
     this.pinnedApiVersion = resolvePinnedApiVersion(config.targetPlatform);
     this.login =
@@ -711,8 +787,11 @@ export class VroHttpClient {
    * 403 from /vco/api normally means the vIDM user lacks the vRO permission —
    * repeating the two-step login cannot change that, so a challenge-less 403 is
    * surfaced immediately instead of costing an extra login and a retry that is
-   * certain to fail the same way. (The vRA 8 status semantics here are the part
-   * of that mode still pending lab verification under VCFO-068.)
+   * certain to fail the same way. Confirmed against a vRA 8.18 lab under
+   * VCFO-068: an invalid or expired token answers 401 with a
+   * `WWW-Authenticate: Bearer` challenge — on /vco/api and on the Automation
+   * services alike — while a genuine authorization denial answers 403 with no
+   * challenge.
    */
   private shouldReauthenticate(res: Response): boolean {
     if (res.status === 401) return true;
@@ -768,6 +847,23 @@ export class VroHttpClient {
     return res;
   }
 
+  /**
+   * Gate an operation the active target platform cannot serve.
+   *
+   * Only `vra8` restricts anything, and after the VCFO-068 lab verification the
+   * restriction is per service and per method rather than one flat rule:
+   *
+   * - `/vco/api` (vRO): fully supported, reads and writes alike. Verified
+   *   against vRO 8.18.1 — create/update/delete of workflows, actions, and
+   *   configuration elements, plus package import and its dry-run details.
+   * - Automation services: reads only. The list and get paths return the same
+   *   Spring `Page` and object shapes the VCFA 9.x clients parse (verified on
+   *   vRA 8.18), but no write path was exercised, so writes still throw.
+   *
+   * `path` is unused now that no vRO method is withheld; it is kept because the
+   * signature is public and callers pass the path they are about to send, and a
+   * future per-path narrowing would need it.
+   */
   assertOperationSupported(
     method: string,
     path: string,
@@ -775,20 +871,15 @@ export class VroHttpClient {
   ): void {
     if (this.targetPlatform !== "vra8") return;
 
-    if (overrideBaseUrl && overrideBaseUrl !== this.baseUrl) {
-      throw new Error(UNSUPPORTED_AUTOMATION_SERVICES);
-    }
+    const baseUrl = overrideBaseUrl ?? this.baseUrl;
+    if (baseUrl === this.baseUrl) return;
 
-    const normalizedMethod = method.toUpperCase();
-    if (normalizedMethod === "GET") return;
-    if (
-      normalizedMethod === "POST" &&
-      /^\/workflows\/[^/]+\/executions(?:$|\?)/.test(path)
-    ) {
-      return;
+    if (!this.automationBaseUrls.has(baseUrl)) {
+      throw new Error(UNSUPPORTED_UNKNOWN_SERVICE);
     }
+    if (method.toUpperCase() === "GET") return;
 
-    throw new Error(UNSUPPORTED_VRO_WRITE);
+    throw new Error(UNSUPPORTED_AUTOMATION_WRITE);
   }
 
   private async send(

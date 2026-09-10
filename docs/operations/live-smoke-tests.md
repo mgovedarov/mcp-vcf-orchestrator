@@ -159,16 +159,43 @@ VCFA_TARGET_PLATFORM=vra8
 VCFA_ORGANIZATION="System Domain"
 ```
 
-Verify the intentionally reduced surface:
+Read-only checks, safe on any vRA 8 environment:
 
 ```text
 list-workflows()
 get-workflow(id: "<workflow-id>")
+list-projects()
+list-templates()
+list-subscriptions()
+list-event-topics()
+list-catalog-items()
+list-deployments()
 run-workflow-and-wait(id: "<workflow-id>", inputs: [], timeoutSeconds: 60, confirm: true)
 get-workflow-execution-logs(workflowId: "<workflow-id>", executionId: "<execution-id>", level: "info")
 ```
 
-Automation-service tools such as catalog, deployment, template, subscription, and event-topic operations should fail with a clear unsupported-operation message in this mode.
+The Automation-service list tools return the same shapes as on VCFA 9.x. Note that `list-catalog-items` and `list-deployments` were both empty in the environment VCFO-068 verified, so their item shapes are still unconfirmed on vRA 8 — an environment with released catalog content is the one worth re-running them against.
+
+The vRO write surface is verified on vRA 8 but still mutates a live environment, so run it only against a disposable category and disposable content, and clean up afterwards:
+
+```text
+list-categories(type: "WorkflowCategory")
+create-workflow(categoryId: "<disposable-category-id>", name: "zz-smoke", confirm: true)
+create-configuration(categoryId: "<disposable-config-category-id>", name: "zz-smoke", attributes: [{ name: "setting", type: "string", value: "probe" }], confirm: true)
+delete-workflow(id: "<workflow-id>", confirm: true)
+delete-configuration(id: "<configuration-id>", confirm: true)
+```
+
+Expected unsupported-mode messages in this mode:
+
+```text
+create-template(...)          # and delete-template
+create-subscription(...)      # and update-subscription, delete-subscription
+create-deployment(...)        # and delete-deployment, run-deployment-action
+export-configuration-file(...)
+```
+
+The Automation-service write tools name the pending verification; `export-configuration-file` explains that vRA 8 serves a configuration element as JSON only and points at the project-package route.
 
 ## Negative And Safety Checks
 

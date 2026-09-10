@@ -7,7 +7,12 @@ import {
   preflightConfigurationFile,
   type ArtifactPreflightReport,
 } from "./artifact-preflight.js";
-import { createUploadForm, sanitizeErrorBody, type VroHttpClient } from "./core.js";
+import {
+  createUploadForm,
+  sanitizeErrorBody,
+  UNSUPPORTED_VRA8_CONFIGURATION_EXPORT,
+  type VroHttpClient,
+} from "./core.js";
 import {
   assertRealPathInside,
   getExistingFile,
@@ -120,6 +125,11 @@ export class ConfigurationClient {
     fileName: string,
     overwrite = false,
   ): Promise<string> {
+    // Asserted before the local file checks, like the import paths, so the
+    // mode is reported without first touching the artifact directory.
+    if (this.http.targetPlatform === "vra8") {
+      throw new Error(UNSUPPORTED_VRA8_CONFIGURATION_EXPORT);
+    }
     const destPath = await this.resolveConfigurationPath(fileName);
     const existingFile = await getExistingFile(destPath);
     if (existingFile?.isSymbolicLink()) {
@@ -191,6 +201,24 @@ export class ConfigurationClient {
     }
   }
 
+  /**
+   * The request-body key carrying configuration attributes, which differs by
+   * platform even though both return the plural `attributes` on reads:
+   *
+   * - VCFA 9.x accepts the singular `attribute`.
+   * - vRA 8 requires the plural `attributes` and answers 400 for a body that
+   *   carries `attribute` at all — including one that carries both keys, so a
+   *   single body cannot satisfy both platforms (verified on vRO 8.18.1,
+   *   VCFO-068).
+   *
+   * The `vcfa` branch keeps the key it already ships: whether VCFA 9.x also
+   * accepts the plural form is unverified, so unifying on one key waits for a
+   * 9.x lab check rather than being inferred from the response shape.
+   */
+  private attributeBodyKey(): "attribute" | "attributes" {
+    return this.http.targetPlatform === "vra8" ? "attributes" : "attribute";
+  }
+
   createConfiguration(
     categoryId: string,
     name: string,
@@ -205,7 +233,7 @@ export class ConfigurationClient {
       body.description = description;
     }
     if (attributes && attributes.length > 0) {
-      body.attribute = toVroParameters(attributes);
+      body[this.attributeBodyKey()] = toVroParameters(attributes);
     }
     return this.http.post<ConfigElement>("/configurations", body);
   }
@@ -223,10 +251,47 @@ export class ConfigurationClient {
     },
   ): Promise<void> {
     const body: Record<string, unknown> = {};
-    if (params.name !== undefined) body.name = params.name;
+
+    // PUT /configurations/{id} replaces the element rather than patching it,
+    // which has two consequences the caller does not ask for.
+    //
+    // First, vRA 8 rejects a body whose name is absent with `The configuration
+    // element name contains invalid characters (\, /).Name: null` (verified on
+    // vRO 8.18.1, VCFO-068), so the live name is carried forward when the
+    // caller is not renaming — the way updateAction re-reads the current
+    // action before its PUT.
+    //
+    // Second, a body that omits the attributes drops every attribute the
+    // element had, which contradicts this method's contract that only the
+    // provided fields change. Carrying them forward is not an option: a
+    // SecureString attribute reads back as ciphertext with
+    // `isPlainText: false`, so replaying a read value risks storing that blob
+    // as the new secret. So an update that would silently clear attributes is
+    // refused instead, and the caller re-sends the ones it wants to keep.
+    //
+    // One read serves both: it is skipped only for a call that renames and
+    // sets attributes, and so needs neither.
+    const needsLiveRead =
+      params.name === undefined || params.attributes === undefined;
+    const current = needsLiveRead ? await this.getConfiguration(id) : undefined;
+
+    if (params.attributes === undefined) {
+      const existing = current?.attributes ?? [];
+      if (existing.length > 0) {
+        // Names and types only — an attribute value is never echoed.
+        const summary = existing
+          .map((attribute) => `${attribute.name} (${attribute.type})`)
+          .join(", ");
+        throw new Error(
+          `Updating configuration element ${id} replaces it, so omitting attributes would delete the ${existing.length} it currently has: ${summary}. Pass the attributes to keep (read them with get-configuration), or pass an empty array to clear them deliberately.`,
+        );
+      }
+    }
+
+    body.name = params.name ?? current?.name;
     if (params.description !== undefined) body.description = params.description;
     if (params.attributes !== undefined) {
-      body.attribute = toVroParameters(params.attributes);
+      body[this.attributeBodyKey()] = toVroParameters(params.attributes);
     }
     await this.http.put<unknown>(
       `/configurations/${encodeURIComponent(id)}`,
