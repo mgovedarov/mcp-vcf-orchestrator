@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- `VCFA_TARGET_PLATFORM=vra8` now authenticates against vRA 8 (embedded vRO) with the platform's bearer-token flow instead of HTTP Basic: the client posts the configured credentials to `POST /csp/gateway/am/api/login?access_token`, sending `VCFA_ORGANIZATION` as the vIDM `domain` (for example `System Domain`), exchanges the returned `refresh_token` at `POST /iaas/api/login`, and sends the resulting token as `Authorization: Bearer` on every `/vco/api` request. Real vRA 8.18 appliances reject Basic auth on `/vco/api` with `401` and `WWW-Authenticate: Bearer`, so the previous mode could not log in at all. Login failures carry a hint that `VCFA_USERNAME`/`VCFA_PASSWORD` are vIDM credentials and `VCFA_ORGANIZATION` is the vIDM domain; tokens, refresh tokens, and passwords are never logged or surfaced, and 2xx login bodies are never echoed into errors (VCFO-067).
+
 ### Dependencies
 
 - Applied Dependabot security updates to the lockfile, clearing 25 of the 27 open alerts. Transitive under `@modelcontextprotocol/sdk`: `qs` 6.15.2 → 6.16.0, `@hono/node-server` 1.19.14 → 2.1.1, `hono` 4.12.26 → 4.13.7, `fast-uri` 3.1.2 → 3.1.7, `ip-address` 10.2.0 → 10.7.0, `body-parser` 2.2.2 → 2.3.0. Transitive under `vitepress`: `postcss` 8.5.13 → 8.5.28. `package-lock.json` is not part of the published package, so installs already resolved fixed versions; these bumps cover clones, CI, and the release workflow's `npm ci`. The server uses only the stdio transport, so the `hono`, `express`, and `ip-address` advisories were unreachable code paths here.
@@ -11,6 +15,16 @@
 ### Changed
 
 - Enabled Dependabot security updates on the repository, so transitive advisories now get their own pull requests instead of waiting for the monthly grouped version updates.
+- `vra8` mode now participates in the clear-token, re-authenticate, retry-once handling on `401`/`403`, because the CSP/IaaS bearer token expires; both login steps are redone with the stored credentials. Previously `vra8` treated a `401` as terminal because Basic credentials cannot expire (VCFO-067).
+- The `vra8` unsupported-operation message no longer describes the mode as "Basic-auth mode". The operation guards themselves (vRO reads plus `POST /workflows/{id}/executions`; Automation-service base URLs rejected) are unchanged and tracked for lab verification in VCFO-068 (VCFO-067).
+
+### Docs
+
+- Replaced the Basic-auth description of `vra8` mode in the README, `AGENTS.md`, `CLAUDE.md`, `.env.example`, the configuration guide, troubleshooting (new vra8 login guidance, including quoting `.env` values that contain spaces), safety (retry statement), live smoke tests, and the `vcfa-operations` skill (VCFO-067).
+
+### Tests
+
+- Rewrote the vra8 client tests for the token flow (call sequence, request bodies, no `Authorization` on the login calls, no `GET /api/versions` probe) and added coverage for CSP 400/401 hints and secret non-leakage, missing `refresh_token`, non-JSON login bodies, IaaS exchange failure, 401/403 re-login with a single retry, second-401 surfacing, shared concurrent login, the binary export path, and re-login failure after a 401 (VCFO-067).
 
 ## 3.0.0 - 2026-09-10
 

@@ -52,7 +52,7 @@ API error messages are sanitized before being surfaced to MCP callers. Only safe
 
 ## Token Refresh
 
-On the default VCFA platform, if a request receives a `401` or `403` response the server automatically clears the cached bearer token, re-authenticates, and retries the request exactly once. This covers JSON API calls, binary exports, and multipart uploads. A second consecutive failure after re-authentication is surfaced as an error without further retry. The `vra8` Basic-auth platform does not retry because a `401` means the credentials are wrong.
+If a request receives a `401` or `403` response the server automatically clears the cached bearer token, re-authenticates, and retries the request exactly once. On the default VCFA platform re-authentication repeats the Cloud API session login; in `vra8` mode it repeats both the vIDM CSP login and the `/iaas/api/login` token exchange. This covers JSON API calls, binary exports, and multipart uploads. A second consecutive failure after re-authentication is surfaced as an error without further retry.
 
 ## Destructive Operations
 

@@ -8,10 +8,15 @@ import type {
 } from "../types.js";
 
 const UNSUPPORTED_AUTOMATION_SERVICES =
-  "Automation-service APIs (catalog, deployments, templates, projects, subscriptions, and event topics) are not supported in VCFA_TARGET_PLATFORM=vra8 Basic-auth mode. This mode supports vRO /vco/api read operations plus workflow execution and execution logs.";
+  "Automation-service APIs (catalog, deployments, templates, projects, subscriptions, and event topics) are not supported in VCFA_TARGET_PLATFORM=vra8 mode. This mode supports vRO /vco/api read operations plus workflow execution and execution logs.";
 
 const UNSUPPORTED_VRO_WRITE =
   "This vRO operation is not supported in VCFA_TARGET_PLATFORM=vra8 mode. The vRA/vRO 8 compatibility phase supports read operations plus workflow execution and execution logs only.";
+
+// Appended to vRA 8 login failures. The CSP login answers wrong credentials
+// and unknown domains with 400 (not 401), so the hint covers both.
+const VRA8_LOGIN_HINT =
+  '\nHint: in VCFA_TARGET_PLATFORM=vra8 mode, VCFA_USERNAME and VCFA_PASSWORD are the vIDM (Workspace ONE Access) credentials and VCFA_ORGANIZATION is the vIDM domain shown on the login page, for example "System Domain" for local users.';
 
 // The default TypeScript lib's RequestInit lacks undici's dispatcher option.
 type DispatchedRequestInit = RequestInit & { dispatcher?: Agent };
@@ -122,6 +127,24 @@ export function sanitizeErrorBody(rawText: string, res?: Response): string {
   return parts.join("\n");
 }
 
+/**
+ * Extract a non-empty string field from a JSON object body. Returns undefined
+ * for non-JSON, non-object, missing, or non-string values and never throws, so
+ * callers can fail without echoing a 2xx body that may carry token material.
+ */
+function readStringField(text: string, key: string): string | undefined {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      return undefined;
+    }
+    const value = (parsed as Record<string, unknown>)[key];
+    return typeof value === "string" && value.length > 0 ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 // Known VCF Cloud API versions this client can speak, newest first. Version
 // negotiation picks the first entry the target server advertises via the
 // unauthenticated GET /api/versions discovery document.
@@ -210,10 +233,18 @@ export class VroHttpClient {
   private isProviderLogin: boolean;
   private pinnedApiVersion: string | undefined;
   private negotiatedApiVersion: string | null = null;
+  // Basic credentials for the VCF Cloud API session POST (vcfa platform only).
   private loginHeader: string;
+  // vra8 platform: vRA 8 rejects Basic auth on /vco/api, so the bearer token
+  // comes from the vIDM CSP login (credentials -> refresh_token) followed by
+  // the IaaS token exchange (refresh_token -> token).
+  private readonly cspLoginUrl: string;
+  private readonly iaasLoginUrl: string;
+  private readonly cspLogin: { username: string; password: string; domain: string };
   private token: string | null = null;
   // Shared in-flight authentication so concurrent requests on a fresh or
-  // expired session run one version probe and one session POST, not one each.
+  // expired session run one login sequence (vcfa: version probe plus session
+  // POST; vra8: CSP login plus token exchange), not one each.
   private authInFlight: Promise<void> | null = null;
   // Per-client dispatcher so ignoreTls relaxes TLS verification only for
   // this client's requests, never process-wide (no NODE_TLS_REJECT_UNAUTHORIZED).
@@ -240,6 +271,17 @@ export class VroHttpClient {
       : `https://${config.host}/cloudapi/1.0.0/sessions`;
     this.versionsUrl = `https://${config.host}/api/versions`;
     this.pinnedApiVersion = resolvePinnedApiVersion(config.targetPlatform);
+    // The bare `?access_token` query (no value) is required: without it the
+    // CSP login answers with a UI session token instead of refresh_token.
+    // Keep it a literal; URLSearchParams would emit `?access_token=`.
+    this.cspLoginUrl = `https://${config.host}/csp/gateway/am/api/login?access_token`;
+    this.iaasLoginUrl = `https://${config.host}/iaas/api/login`;
+    // vra8 reuses VCFA_ORGANIZATION as the vIDM domain, sent verbatim.
+    this.cspLogin = {
+      username: config.username,
+      password: config.password,
+      domain: config.organization,
+    };
     const artifactDir = resolve(
       config.artifactDir ?? join(tmpdir(), "mcp-vcf-orchestrator"),
     );
@@ -282,9 +324,6 @@ export class VroHttpClient {
   }
 
   async ensureAuthenticated(): Promise<string> {
-    if (this.targetPlatform === "vra8") {
-      return this.loginHeader;
-    }
     if (!this.token) {
       await this.startAuthentication();
     }
@@ -359,7 +398,92 @@ export class VroHttpClient {
     return this.negotiatedApiVersion;
   }
 
-  private async authenticate(): Promise<void> {
+  private authenticate(): Promise<void> {
+    return this.targetPlatform === "vra8"
+      ? this.authenticateVra8()
+      : this.authenticateVcfa();
+  }
+
+  /**
+   * vRA 8 (embedded vRO) rejects Basic auth on /vco/api with 401 and
+   * WWW-Authenticate: Bearer, so obtain a bearer token the documented way:
+   *   1. POST /csp/gateway/am/api/login?access_token {username, password, domain}
+   *      -> { refresh_token }
+   *   2. POST /iaas/api/login { refreshToken } -> { token, tokenType: "Bearer" }
+   * Both steps run on every (re-)authentication; the refresh token is not kept.
+   * Token values, refresh tokens, and passwords are never logged or surfaced,
+   * and 2xx bodies are never echoed into errors.
+   */
+  private async authenticateVra8(): Promise<void> {
+    console.error(
+      "[vro-client] Authenticating via vRA 8 CSP login and IaaS token exchange…",
+    );
+
+    const csp = await this.postLoginJson(this.cspLoginUrl, this.cspLogin);
+    if (!csp.res.ok) {
+      const hint =
+        csp.res.status === 400 || csp.res.status === 401 || csp.res.status === 403
+          ? VRA8_LOGIN_HINT
+          : "";
+      throw new Error(
+        `vRA 8 authentication failed (CSP login): ${csp.res.status} ${csp.res.statusText}\n${sanitizeErrorBody(csp.text, csp.res)}${hint}`,
+      );
+    }
+    const refreshToken = readStringField(csp.text, "refresh_token");
+    if (!refreshToken) {
+      throw new Error(
+        "vRA 8 authentication failed (CSP login): response did not include a refresh_token string. The login URL must keep the ?access_token query.",
+      );
+    }
+
+    const iaas = await this.postLoginJson(this.iaasLoginUrl, { refreshToken });
+    if (!iaas.res.ok) {
+      throw new Error(
+        `vRA 8 authentication failed (IaaS token exchange): ${iaas.res.status} ${iaas.res.statusText}\n${sanitizeErrorBody(iaas.text, iaas.res)}`,
+      );
+    }
+    const token = readStringField(iaas.text, "token");
+    if (!token) {
+      throw new Error(
+        "vRA 8 authentication failed (IaaS token exchange): response did not include a token string.",
+      );
+    }
+
+    this.token = token;
+    console.error("[vro-client] Authentication successful, bearer token acquired.");
+  }
+
+  /**
+   * POST a JSON body with no Authorization header (login requests), using this
+   * client's dispatcher and a 30 s timeout. Reads the body text so callers can
+   * sanitize or parse it.
+   */
+  private async postLoginJson(
+    url: string,
+    body: unknown,
+  ): Promise<{ res: Response; text: string }> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30_000);
+    try {
+      const init: DispatchedRequestInit = {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+        dispatcher: this.dispatcher,
+      };
+      const res = await requestFetch()(url, init);
+      const text = await res.text().catch(() => "");
+      return { res, text };
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  private async authenticateVcfa(): Promise<void> {
     const apiVersion = await this.negotiateApiVersion();
     console.error(
       `[vro-client] Authenticating via VCF Cloud API ${this.isProviderLogin ? "provider " : ""}sessions (version ${apiVersion})…`,
@@ -409,18 +533,15 @@ export class VroHttpClient {
   }
 
   async authorizationHeader(): Promise<string> {
-    if (this.targetPlatform === "vra8") {
-      return this.loginHeader;
-    }
     return `Bearer ${await this.ensureAuthenticated()}`;
   }
 
   /**
    * Perform an authenticated fetch with automatic token refresh on 401/403.
-   * On the default `vcfa` platform, if the response status is 401 or 403 the
-   * cached bearer token is cleared, a fresh token is obtained, and the request
-   * is retried exactly once.  The `vra8` Basic-auth platform never retries
-   * because a 401 means the credentials are wrong.
+   * If the response status is 401 or 403 the cached bearer token is cleared, a
+   * fresh token is obtained (vcfa: Cloud API session; vra8: CSP login plus
+   * IaaS token exchange, both redone), and the request is retried exactly
+   * once. A second 401/403 is returned to the caller as-is.
    *
    * Callers receive the raw `Response` and are responsible for checking
    * `res.ok` and reading the body.
@@ -451,10 +572,7 @@ export class VroHttpClient {
 
     const res = await doFetch();
 
-    if (
-      (res.status === 401 || res.status === 403) &&
-      this.targetPlatform !== "vra8"
-    ) {
+    if (res.status === 401 || res.status === 403) {
       // Drain the rejected response body to release the socket promptly.
       res.body?.cancel().catch(() => {});
       console.error(

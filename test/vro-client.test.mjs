@@ -42,6 +42,33 @@ function authResponse() {
   });
 }
 
+const CSP_LOGIN_URL =
+  "https://vcfa.example.test/csp/gateway/am/api/login?access_token";
+const IAAS_LOGIN_URL = "https://vcfa.example.test/iaas/api/login";
+const VRA8_WORKFLOWS_URL =
+  "https://vcfa.example.test/vco/api/workflows?maxResult=100&startIndex=0&queryCount=true";
+
+// vra8 reuses VCFA_ORGANIZATION as the vIDM domain of the CSP login.
+const vra8Config = (overrides = {}) =>
+  config({ targetPlatform: "vra8", organization: "System Domain", ...overrides });
+
+// Answers the two vra8 login calls with numbered tokens and returns null for
+// anything else so each test decides the vRO response. `counts` records how
+// many logins happened.
+function vra8LoginStub(counts = { csp: 0, iaas: 0 }) {
+  return (url) => {
+    if (String(url) === CSP_LOGIN_URL) {
+      counts.csp += 1;
+      return Response.json({ refresh_token: `refresh-${counts.csp}` });
+    }
+    if (String(url) === IAAS_LOGIN_URL) {
+      counts.iaas += 1;
+      return Response.json({ token: `jwt-${counts.iaas}`, tokenType: "Bearer" });
+    }
+    return null;
+  };
+}
+
 test("artifact directories default to temp subdirectories", () => {
   const client = new VroClient(config());
   const root = join(tmpdir(), "mcp-vcf-orchestrator");
@@ -133,33 +160,52 @@ test("default vcfa platform authenticates with Cloud API session token", async (
   assert.equal(calls[1].init.headers.Authorization, "Bearer token");
 });
 
-test("vra8 platform uses Basic auth directly against vRO APIs", async () => {
+test("vra8 platform authenticates via CSP login and IaaS token exchange, then calls vRO with a bearer token", async () => {
   const calls = [];
+  const counts = { csp: 0, iaas: 0 };
+  const login = vra8LoginStub(counts);
   globalThis.fetch = async (url, init) => {
     calls.push({ url: String(url), init });
-    return Response.json({
-      link: [
-        {
-          attributes: [
-            { name: "id", value: "workflow-1" },
-            { name: "name", value: "Workflow" },
-          ],
-        },
-      ],
-      total: 1,
-    });
+    return (
+      login(url) ??
+      Response.json({
+        link: [
+          {
+            attributes: [
+              { name: "id", value: "workflow-1" },
+              { name: "name", value: "Workflow" },
+            ],
+          },
+        ],
+        total: 1,
+      })
+    );
   };
 
-  const client = new VroClient(config({ targetPlatform: "vra8" }));
+  const client = new VroClient(vra8Config());
   const workflows = await client.listWorkflows();
 
   assert.equal(workflows.link[0].id, "workflow-1");
-  assert.equal(calls.length, 1);
-  assert.equal(
-    calls[0].url,
-    "https://vcfa.example.test/vco/api/workflows?maxResult=100&startIndex=0&queryCount=true",
-  );
-  assert.equal(calls[0].init.headers.Authorization, "Basic YWRtaW5Ab3JnOnNlY3JldA==");
+  assert.equal(calls.length, 3);
+  assert.equal(calls[0].url, CSP_LOGIN_URL);
+  assert.equal(calls[0].init.method, "POST");
+  assert.equal(calls[0].init.headers["Content-Type"], "application/json");
+  assert.equal(calls[0].init.headers.Authorization, undefined);
+  assert.deepEqual(JSON.parse(calls[0].init.body), {
+    username: "admin",
+    password: "secret",
+    domain: "System Domain",
+  });
+  assert.equal(calls[1].url, IAAS_LOGIN_URL);
+  assert.equal(calls[1].init.method, "POST");
+  assert.equal(calls[1].init.headers.Authorization, undefined);
+  assert.deepEqual(JSON.parse(calls[1].init.body), { refreshToken: "refresh-1" });
+  assert.equal(calls[2].url, VRA8_WORKFLOWS_URL);
+  assert.equal(calls[2].init.headers.Authorization, "Bearer jwt-1");
+  assert.ok(!calls.some((c) => c.url.endsWith("/api/versions")), "no version probe in vra8");
+  assert.ok(!calls.some((c) => c.url.includes("/cloudapi/")), "no Cloud API session in vra8");
+  assert.equal(counts.csp, 1);
+  assert.equal(counts.iaas, 1);
 });
 
 test("vRO list clients aggregate multiple startIndex pages and preserve filters", async () => {
@@ -649,10 +695,14 @@ test("listWorkflows falls back to categories when counted workflow pages repeat"
   );
 });
 
-test("vra8 platform paginates vRO lists with Basic auth", async () => {
+test("vra8 platform paginates vRO lists with the bearer token", async () => {
   const calls = [];
+  const counts = { csp: 0, iaas: 0 };
+  const login = vra8LoginStub(counts);
   globalThis.fetch = async (url, init) => {
     calls.push({ url: String(url), init });
+    const loginResponse = login(url);
+    if (loginResponse) return loginResponse;
     const requestUrl = new URL(String(url));
     const startIndex = Number(requestUrl.searchParams.get("startIndex"));
     return Response.json({
@@ -667,14 +717,16 @@ test("vra8 platform paginates vRO lists with Basic auth", async () => {
     });
   };
 
-  const client = new VroClient(config({ targetPlatform: "vra8" }));
+  const client = new VroClient(vra8Config());
   const workflows = await client.listWorkflows();
 
   assert.equal(workflows.link.length, 101);
-  assert.equal(calls.length, 2);
-  assert.equal(calls[0].init.headers.Authorization, "Basic YWRtaW5Ab3JnOnNlY3JldA==");
+  assert.equal(calls.length, 4);
+  assert.equal(counts.csp, 1, "one login serves both pages");
+  assert.equal(calls[2].init.headers.Authorization, "Bearer jwt-1");
+  assert.equal(calls[3].init.headers.Authorization, "Bearer jwt-1");
   assert.equal(
-    calls[1].url,
+    calls[3].url,
     "https://vcfa.example.test/vco/api/workflows?maxResult=100&startIndex=100&queryCount=true",
   );
 });
@@ -938,27 +990,27 @@ test("vra8 platform rejects Automation-service APIs with clear message", async (
 
   await assert.rejects(
     () => client.listTemplates(),
-    /Automation-service APIs .* not supported .*vra8 Basic-auth mode/,
+    /Automation-service APIs .* not supported .*vra8 mode/,
   );
   await assert.rejects(
     () => client.listDeployments(),
-    /Automation-service APIs .* not supported .*vra8 Basic-auth mode/,
+    /Automation-service APIs .* not supported .*vra8 mode/,
   );
   await assert.rejects(
     () => client.listCatalogItems(),
-    /Automation-service APIs .* not supported .*vra8 Basic-auth mode/,
+    /Automation-service APIs .* not supported .*vra8 mode/,
   );
   await assert.rejects(
     () => client.listSubscriptions(),
-    /Automation-service APIs .* not supported .*vra8 Basic-auth mode/,
+    /Automation-service APIs .* not supported .*vra8 mode/,
   );
   await assert.rejects(
     () => client.listProjects(),
-    /Automation-service APIs \(catalog, deployments, templates, projects, .* not supported .*vra8 Basic-auth mode/,
+    /Automation-service APIs \(catalog, deployments, templates, projects, .* not supported .*vra8 mode/,
   );
   await assert.rejects(
     () => client.getProject("p-1"),
-    /Automation-service APIs .* not supported .*vra8 Basic-auth mode/,
+    /Automation-service APIs .* not supported .*vra8 mode/,
   );
 });
 
@@ -2441,10 +2493,13 @@ test("listWorkflowsByCategory reports ambiguity", async () => {
   );
 });
 
-test("listWorkflowsByCategory uses vRA8 read-only requests", async () => {
+test("listWorkflowsByCategory uses vra8 read-only requests", async () => {
   const calls = [];
+  const login = vra8LoginStub();
   globalThis.fetch = async (url, init) => {
     calls.push({ url: String(url), init });
+    const loginResponse = login(url);
+    if (loginResponse) return loginResponse;
     if (String(url).includes("/categories")) {
       return Response.json({
         link: [
@@ -2461,15 +2516,17 @@ test("listWorkflowsByCategory uses vRA8 read-only requests", async () => {
     return Response.json({ link: [] });
   };
 
-  const client = new VroClient(config({ targetPlatform: "vra8" }));
+  const client = new VroClient(vra8Config());
   const result = await client.listWorkflowsByCategory({
     categoryPath: "/test",
   });
 
   assert.equal(result.workflowCount, 0);
-  assert.equal(calls.length, 2);
-  assert.equal(calls[0].init.method, "GET");
-  assert.equal(calls[1].init.method, "GET");
+  const vroCalls = calls.filter((c) => c.url.includes("/vco/api/"));
+  assert.equal(vroCalls.length, 2);
+  assert.equal(vroCalls[0].init.method, "GET");
+  assert.equal(vroCalls[1].init.method, "GET");
+  assert.equal(vroCalls[0].init.headers.Authorization, "Bearer jwt-1");
 });
 
 test("package import rejects path traversal before network calls", async () => {
@@ -3776,20 +3833,45 @@ test("403 triggers the same token refresh as 401", async () => {
   assert.equal(authCount, 2, "should re-authenticate on 403");
 });
 
-test("vra8 mode does NOT retry on 401 (Basic auth failure is terminal)", async () => {
+test("vra8 401 re-runs CSP login and token exchange, then retries once with the new token", async () => {
   const calls = [];
-  globalThis.fetch = async (url) => {
-    calls.push({ url: String(url) });
-    return new Response(JSON.stringify({ message: "Bad credentials" }), {
-      status: 401,
-      statusText: "Unauthorized",
-    });
+  const counts = { csp: 0, iaas: 0 };
+  const login = vra8LoginStub(counts);
+  globalThis.fetch = async (url, init) => {
+    // Snapshot the header: the retry rewrites the same headers object in place.
+    calls.push({ url: String(url), init, authorization: init?.headers?.Authorization });
+    const loginResponse = login(url);
+    if (loginResponse) return loginResponse;
+    if (calls.filter((c) => c.url.includes("/vco/api/")).length === 1) {
+      return new Response(JSON.stringify({ message: "Token expired" }), {
+        status: 401,
+        statusText: "Unauthorized",
+      });
+    }
+    return Response.json({ link: [], total: 0 });
   };
 
-  const client = new VroClient(config({ targetPlatform: "vra8" }));
-  await assert.rejects(() => client.listWorkflows(), /401 Unauthorized/);
-  // Only one call — no re-auth attempt for vra8
-  assert.equal(calls.length, 1, "vra8 should not retry on 401");
+  const client = new VroClient(vra8Config());
+  const result = await client.listWorkflows();
+
+  assert.equal(result.total, 0);
+  assert.deepEqual(
+    calls.map((c) => c.url),
+    [
+      CSP_LOGIN_URL,
+      IAAS_LOGIN_URL,
+      VRA8_WORKFLOWS_URL,
+      CSP_LOGIN_URL,
+      IAAS_LOGIN_URL,
+      VRA8_WORKFLOWS_URL,
+    ],
+  );
+  assert.equal(counts.csp, 2);
+  assert.equal(counts.iaas, 2);
+  assert.equal(calls[2].authorization, "Bearer jwt-1");
+  assert.equal(calls[5].authorization, "Bearer jwt-2");
+  // Re-authentication resends the credentials; the refresh token is not reused.
+  assert.equal(JSON.parse(calls[3].init.body).domain, "System Domain");
 });
 
 test("manual binary export path retries on 401 with refreshed token", async () => {
@@ -3848,4 +3930,226 @@ test("token refresh does not re-authenticate when authenticate() itself fails", 
     /VCF authentication failed: 503/,
   );
   assert.equal(authCount, 2, "should attempt re-auth once then surface the auth failure");
+});
+
+// ── vra8 bearer-token auth (VCFO-067) ─────────────────────────────────────
+
+test("vra8 CSP login 401 carries the vIDM credential hint and leaks neither password nor body secrets", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    return new Response(
+      JSON.stringify({ message: "Unauthorized", internalToken: "leaked-token" }),
+      { status: 401, statusText: "Unauthorized" },
+    );
+  };
+
+  const client = new VroClient(vra8Config());
+  await assert.rejects(
+    () => client.listWorkflows(),
+    (e) => {
+      assert.match(e.message, /vRA 8 authentication failed \(CSP login\): 401 Unauthorized/);
+      assert.ok(e.message.includes("Unauthorized"), "should include the message field");
+      assert.ok(
+        e.message.includes("VCFA_ORGANIZATION is the vIDM domain"),
+        "should include the domain hint",
+      );
+      assert.ok(e.message.includes("System Domain"), "should name the local-user domain");
+      assert.ok(!e.message.includes("secret"), "should not expose the password");
+      assert.ok(!e.message.includes("leaked-token"), "should not expose non-allowlisted fields");
+      return true;
+    },
+  );
+  assert.equal(calls.length, 1, "IaaS exchange must not run after a failed CSP login");
+  assert.equal(calls[0].url, CSP_LOGIN_URL);
+});
+
+test("vra8 CSP login 400 for an unknown domain surfaces the sanitized body and the domain hint", async () => {
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ message: "Invalid domain" }), {
+      status: 400,
+      statusText: "Bad Request",
+    });
+
+  const client = new VroClient(vra8Config());
+  await assert.rejects(
+    () => client.listWorkflows(),
+    (e) => {
+      assert.match(e.message, /CSP login\): 400 Bad Request/);
+      assert.ok(e.message.includes("Invalid domain"));
+      assert.ok(e.message.includes("vIDM domain"));
+      return true;
+    },
+  );
+});
+
+test("vra8 CSP login 200 without refresh_token fails without echoing the body", async () => {
+  globalThis.fetch = async () => Response.json({ access_token: "must-not-leak" });
+
+  const client = new VroClient(vra8Config());
+  await assert.rejects(
+    () => client.listWorkflows(),
+    (e) => {
+      assert.match(e.message, /did not include a refresh_token/);
+      assert.ok(!e.message.includes("must-not-leak"));
+      return true;
+    },
+  );
+});
+
+test("vra8 CSP login non-JSON 200 body fails without echoing the body", async () => {
+  globalThis.fetch = async () => new Response("<html>oops</html>", { status: 200 });
+
+  const client = new VroClient(vra8Config());
+  await assert.rejects(
+    () => client.listWorkflows(),
+    (e) => {
+      assert.match(e.message, /did not include a refresh_token/);
+      assert.ok(!e.message.includes("<html>"));
+      return true;
+    },
+  );
+});
+
+test("vra8 IaaS token exchange failure is surfaced without the refresh token", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (String(url) === CSP_LOGIN_URL) {
+      return Response.json({ refresh_token: "refresh-1" });
+    }
+    return new Response(JSON.stringify({ message: "boom" }), {
+      status: 500,
+      statusText: "Internal Server Error",
+    });
+  };
+
+  const client = new VroClient(vra8Config());
+  await assert.rejects(
+    () => client.listWorkflows(),
+    (e) => {
+      assert.match(e.message, /vRA 8 authentication failed \(IaaS token exchange\): 500/);
+      assert.ok(e.message.includes("boom"));
+      assert.ok(!e.message.includes("refresh-1"));
+      return true;
+    },
+  );
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].url, IAAS_LOGIN_URL);
+});
+
+test("vra8 IaaS 200 without token fails clearly", async () => {
+  globalThis.fetch = async (url) =>
+    String(url) === CSP_LOGIN_URL
+      ? Response.json({ refresh_token: "refresh-1" })
+      : Response.json({ tokenType: "Bearer" });
+
+  const client = new VroClient(vra8Config());
+  await assert.rejects(() => client.listWorkflows(), /did not include a token string/);
+});
+
+test("vra8 second consecutive 401 after re-login is surfaced without an infinite loop", async () => {
+  const counts = { csp: 0, iaas: 0 };
+  const login = vra8LoginStub(counts);
+  let vroCalls = 0;
+  globalThis.fetch = async (url) => {
+    const loginResponse = login(url);
+    if (loginResponse) return loginResponse;
+    vroCalls += 1;
+    return new Response(JSON.stringify({ message: "Bad token" }), {
+      status: 401,
+      statusText: "Unauthorized",
+    });
+  };
+
+  const client = new VroClient(vra8Config());
+  await assert.rejects(() => client.listWorkflows(), /vRO API error: 401 Unauthorized/);
+  assert.equal(vroCalls, 2, "exactly one retry");
+  assert.equal(counts.csp, 2, "one login plus one re-login");
+});
+
+test("vra8 403 triggers the same re-login as 401", async () => {
+  const counts = { csp: 0, iaas: 0 };
+  const login = vra8LoginStub(counts);
+  let vroCalls = 0;
+  globalThis.fetch = async (url) => {
+    const loginResponse = login(url);
+    if (loginResponse) return loginResponse;
+    vroCalls += 1;
+    if (vroCalls === 1) {
+      return new Response("", { status: 403, statusText: "Forbidden" });
+    }
+    return Response.json({ link: [], total: 0 });
+  };
+
+  const client = new VroClient(vra8Config());
+  const result = await client.listWorkflows();
+  assert.equal(result.total, 0);
+  assert.equal(counts.csp, 2, "should re-login on 403");
+});
+
+test("vra8 concurrent first requests share one CSP login and one token exchange", async () => {
+  const counts = { csp: 0, iaas: 0 };
+  const login = vra8LoginStub(counts);
+  globalThis.fetch = async (url) => {
+    const loginResponse = login(url);
+    if (loginResponse) return loginResponse;
+    return Response.json({ link: [], total: 0 });
+  };
+
+  const client = new VroClient(vra8Config());
+  await Promise.all([
+    client.listWorkflows(),
+    client.listWorkflows(),
+    client.listWorkflows(),
+  ]);
+  assert.equal(counts.csp, 1);
+  assert.equal(counts.iaas, 1);
+});
+
+test("vra8 binary export path sends the bearer token", async () => {
+  const calls = [];
+  const login = vra8LoginStub();
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    const loginResponse = login(url);
+    if (loginResponse) return loginResponse;
+    return new Response(new Uint8Array([0x50, 0x4b, 0x03, 0x04]), {
+      status: 200,
+      headers: { "Content-Type": "application/zip" },
+    });
+  };
+
+  const client = new VroClient(vra8Config());
+  const buffer = await client.exportWorkflowBuffer("wf-1");
+  assert.ok(Buffer.isBuffer(buffer));
+  const exportCall = calls.find((c) => c.url.includes("/content/workflows/"));
+  assert.ok(exportCall, "should call the content export endpoint");
+  assert.equal(exportCall.init.headers.Authorization, "Bearer jwt-1");
+  assert.equal(exportCall.init.headers.Accept, "application/zip");
+});
+
+test("vra8 re-login failure after a 401 surfaces the CSP error", async () => {
+  let cspCount = 0;
+  globalThis.fetch = async (url) => {
+    if (String(url) === CSP_LOGIN_URL) {
+      cspCount += 1;
+      if (cspCount === 1) return Response.json({ refresh_token: "refresh-1" });
+      return new Response(JSON.stringify({ message: "Service unavailable" }), {
+        status: 503,
+        statusText: "Service Unavailable",
+      });
+    }
+    if (String(url) === IAAS_LOGIN_URL) {
+      return Response.json({ token: "jwt-1", tokenType: "Bearer" });
+    }
+    return new Response("", { status: 401, statusText: "Unauthorized" });
+  };
+
+  const client = new VroClient(vra8Config());
+  await assert.rejects(
+    () => client.listWorkflows(),
+    /vRA 8 authentication failed \(CSP login\): 503/,
+  );
+  assert.equal(cspCount, 2, "should attempt one re-login then surface the failure");
 });
