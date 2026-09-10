@@ -235,7 +235,7 @@ export class PackageClient {
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(
-        `vRO API error: ${res.status} ${res.statusText} — export package\n${sanitizeErrorBody(text, res)}`,
+        `vRO API error: ${res.status} ${res.statusText} — export package\n${sanitizeErrorBody(text, res)}${this.http.apiErrorHint(res)}`,
       );
     }
     const buffer = Buffer.from(await res.arrayBuffer());
@@ -278,7 +278,7 @@ export class PackageClient {
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(
-        `vRO API error: ${res.status} ${res.statusText} — import package\n${sanitizeErrorBody(text, res)}`,
+        `vRO API error: ${res.status} ${res.statusText} — import package\n${sanitizeErrorBody(text, res)}${this.http.apiErrorHint(res)}`,
       );
     }
   }
@@ -310,7 +310,7 @@ export class PackageClient {
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(
-        `vRO API error: ${res.status} ${res.statusText} — package import details\n${sanitizeErrorBody(text, res)}`,
+        `vRO API error: ${res.status} ${res.statusText} — package import details\n${sanitizeErrorBody(text, res)}${this.http.apiErrorHint(res)}`,
       );
     }
     return (await res.json()) as PackageImportDetails;

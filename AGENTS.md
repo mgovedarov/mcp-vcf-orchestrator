@@ -59,7 +59,7 @@ Use the exact registered tool names. Start with list/get tools unless the user h
 
 Many write-capable tools require a `confirm: true` argument before they mutate state. That schema requirement does not replace user confirmation. Confirm the exact target, expected impact, and rollback or backup plan before calling live create, update, import, delete, deployment, day-2, package, or local overwrite tools.
 
-In `vra8` mode, support only vRO `/vco/api` read operations plus workflow execution and execution logs. Automation-service APIs such as catalog, deployments, templates, projects, subscriptions, and event topics are intentionally unsupported in Basic-auth mode until token-auth support is added.
+In `vra8` mode the client authenticates with the vRA 8 bearer-token flow, a vIDM CSP login with `VCFA_ORGANIZATION` as the domain followed by a refresh-token exchange at `/iaas/api/login`, and supports only vRO `/vco/api` read operations plus workflow execution and execution logs. Automation-service APIs such as catalog, deployments, templates, projects, subscriptions, and event topics remain intentionally unsupported in that mode pending lab verification of the vRA 8 endpoints (VCFO-068).
 
 On the default `vcfa` platform, the client auto-negotiates the VCF Cloud API version (`9.1.0` preferred, then `9.0.0`) via the unauthenticated `GET /api/versions` discovery document; `VCFA_TARGET_PLATFORM=vcfa9.1` or `vcfa9.0` pins it. Logins with `VCFA_ORGANIZATION=system` (case-insensitive) are routed to `/cloudapi/1.0.0/sessions/provider` for provider/system administrators; tenant logins use `/cloudapi/1.0.0/sessions` with the organization name (URL slug), not its display name.
 

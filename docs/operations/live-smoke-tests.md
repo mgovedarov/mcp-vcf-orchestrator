@@ -152,10 +152,11 @@ Confirm that the summary names the intended target, reports no blocking prefligh
 
 ## vRA/vRO 8 Compatibility Mode
 
-For vRA/vRO 8.12+ Basic-auth validation, set:
+For vRA/vRO 8.12+ bearer-token validation, set the platform and use the vIDM domain shown on the Workspace ONE login page as the organization:
 
 ```bash
 VCFA_TARGET_PLATFORM=vra8
+VCFA_ORGANIZATION="System Domain"
 ```
 
 Verify the intentionally reduced surface:

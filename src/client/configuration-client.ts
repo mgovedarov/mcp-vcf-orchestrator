@@ -146,7 +146,7 @@ export class ConfigurationClient {
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(
-        `vRO API error: ${res.status} ${res.statusText} — export configuration\n${sanitizeErrorBody(text, res)}`,
+        `vRO API error: ${res.status} ${res.statusText} — export configuration\n${sanitizeErrorBody(text, res)}${this.http.apiErrorHint(res)}`,
       );
     }
     const buffer = Buffer.from(await res.arrayBuffer());
@@ -186,7 +186,7 @@ export class ConfigurationClient {
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(
-        `vRO API error: ${res.status} ${res.statusText} — import configuration\n${sanitizeErrorBody(text, res)}`,
+        `vRO API error: ${res.status} ${res.statusText} — import configuration\n${sanitizeErrorBody(text, res)}${this.http.apiErrorHint(res)}`,
       );
     }
   }

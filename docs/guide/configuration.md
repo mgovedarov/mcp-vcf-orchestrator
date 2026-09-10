@@ -8,10 +8,10 @@ The server reads all runtime configuration from environment variables.
 | --- | --- | --- |
 | `VCFA_HOST` | Yes | VCF Automation hostname, for example `vcfa.example.com`. |
 | `VCFA_USERNAME` | Yes | Username without organization, for example `admin`. |
-| `VCFA_ORGANIZATION` | Yes | Organization name (the tenant URL slug, not the display name), or `system` for provider/system administrator logins. |
-| `VCFA_PASSWORD` | Yes | Password for the VCF Cloud API session, or the vRO Basic-auth password when `VCFA_TARGET_PLATFORM=vra8`. |
+| `VCFA_ORGANIZATION` | Yes | Organization name (the tenant URL slug, not the display name), or `system` for provider/system administrator logins. In `vra8` mode, the vIDM domain shown on the Workspace ONE login page, for example `System Domain`. |
+| `VCFA_PASSWORD` | Yes | Password for the VCF Cloud API session, or the vIDM password used for the vRA 8 login when `VCFA_TARGET_PLATFORM=vra8`. |
 
-The server authenticates by sending Basic Auth as `{VCFA_USERNAME}@{VCFA_ORGANIZATION}:{VCFA_PASSWORD}` to the VCF Cloud API session endpoint. Tenant logins use:
+On the default `vcfa` platform, the server authenticates by sending Basic Auth as `{VCFA_USERNAME}@{VCFA_ORGANIZATION}:{VCFA_PASSWORD}` to the VCF Cloud API session endpoint. Tenant logins use:
 
 ```text
 https://{VCFA_HOST}/cloudapi/1.0.0/sessions
@@ -29,13 +29,13 @@ It uses the returned bearer token for later VCF Automation, Service Broker, Clou
 
 VCF Automation 9.1 introduces API version `9.1.0` alongside `9.0.0`. Before authenticating, the server probes the unauthenticated discovery document at `https://{VCFA_HOST}/api/versions` and selects the newest API version it knows (`9.1.0` preferred, then `9.0.0`) for the session request. If the probe fails or advertises no known version, the server falls back to `9.0.0`, which 9.1 servers still accept. Set `VCFA_TARGET_PLATFORM` to `vcfa9.1` or `vcfa9.0` to pin the version explicitly and skip the probe.
 
-For vRA/vRO 8.12+ read/run compatibility, set `VCFA_TARGET_PLATFORM=vra8`. In that mode, the server skips the VCF Cloud API session endpoint and sends Basic auth directly to `/vco/api`. The vRA/vRO 8 mode supports vRO read operations plus workflow execution and execution logs; Automation-service APIs such as catalog, deployments, templates, projects, subscriptions, and event topics are intentionally unsupported until token-auth support is added.
+For vRA/vRO 8.12+ read/run compatibility, set `VCFA_TARGET_PLATFORM=vra8`. vRA-embedded vRO rejects Basic auth on `/vco/api`, so in that mode the server skips the VCF Cloud API session endpoint and the `GET /api/versions` probe and instead runs the vRA 8 bearer-token flow: it posts `VCFA_USERNAME`, `VCFA_PASSWORD`, and `VCFA_ORGANIZATION` as the vIDM `domain` to `POST /csp/gateway/am/api/login?access_token`, exchanges the returned refresh token at `POST /iaas/api/login`, and sends the resulting token as `Authorization: Bearer` on every `/vco/api` request. A `401` from vRO — or a `403` that carries a `WWW-Authenticate` challenge — renews the token and retries the request once: the cached refresh token is exchanged again, and the full CSP login runs only if that token is rejected, so a renewal does not re-send the password. A `403` without a challenge is surfaced directly as an authorization result. Neither login request is allowed to follow a redirect, because the request body carries the credentials. The vRA/vRO 8 mode supports vRO read operations plus workflow execution and execution logs; Automation-service APIs such as catalog, deployments, templates, projects, subscriptions, and event topics remain unsupported in that mode pending lab verification of endpoint compatibility and API-version pinning (VCFO-068).
 
 ## Optional Variables
 
 | Variable | Description |
 | --- | --- |
-| `VCFA_TARGET_PLATFORM` | Target platform mode: `vcfa` (default, auto-negotiates the VCF Cloud API version), `vcfa9.1`/`vcfa9.0` (pin the VCF Cloud API version, skipping the `GET /api/versions` probe), or `vra8`. |
+| `VCFA_TARGET_PLATFORM` | Target platform mode: `vcfa` (default, auto-negotiates the VCF Cloud API version), `vcfa9.1`/`vcfa9.0` (pin the VCF Cloud API version, skipping the `GET /api/versions` probe), or `vra8` (vRA/vRO 8.12+, vIDM bearer-token auth). |
 | `VCFA_IGNORE_TLS` | Set to `true` to disable TLS certificate verification for this server's requests to the VCFA host (lab environments only). |
 | `VCFA_ARTIFACT_DIR` | Root directory for local artifact import/export files. Defaults to `artifacts/` in the MCP server process working directory, typically the open project. |
 | `VCFA_PACKAGE_DIR` | Override the package artifact directory. |

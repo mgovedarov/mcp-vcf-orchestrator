@@ -66,7 +66,7 @@ Live objects are also available as read-only resources, e.g.
 
 ## vra8 mode caveat
 
-When the server runs with `VCFA_TARGET_PLATFORM=vra8` (vRA/vRO 8.12+ Basic auth),
+When the server runs with `VCFA_TARGET_PLATFORM=vra8` (vRA/vRO 8.12+, vIDM bearer-token auth),
 only vRO read operations plus workflow execution and execution logs are
 supported. Automation-service surfaces — catalog, deployments, templates,
 projects, subscriptions, and event topics — are intentionally unsupported in

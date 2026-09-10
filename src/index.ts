@@ -92,7 +92,7 @@ async function main(): Promise<void> {
     { name: "vcfa-server", version: SERVER_VERSION },
     {
       instructions: [
-        "This server connects to a VCF Automation instance by default, or to vRA/vRO 8.12+ when VCFA_TARGET_PLATFORM is set to vra8.",
+        "This server connects to a VCF Automation instance by default, or to vRA/vRO 8.12+ (vIDM bearer-token auth) when VCFA_TARGET_PLATFORM is set to vra8.",
         "Use list-categories before creating workflows, actions, or configuration elements to find the target category ID; pass confirm set to true only after the live target and impact are confirmed.",
         "For live mutations, prefer a two-phase confirmation flow: discover the target, pass expectedName or the relevant expected target fields, then set confirm to true so the handler can verify live metadata before mutating.",
         "Use get-workflow to inspect a workflow's input parameters before running it with run-workflow and confirm set to true; pass expectedWorkflowName and expectedInputNames when binding execution to a discovered contract.",
