@@ -67,7 +67,10 @@ Live objects are also available as read-only resources, e.g.
 ## vra8 mode caveat
 
 When the server runs with `VCFA_TARGET_PLATFORM=vra8` (vRA/vRO 8.12+, vIDM bearer-token auth),
-only vRO read operations plus workflow execution and execution logs are
-supported. Automation-service surfaces — catalog, deployments, templates,
-projects, subscriptions, and event topics — are intentionally unsupported in
-that mode.
+the whole vRO surface works, reads and writes alike, and the Automation-service
+surfaces — catalog, deployments, templates, projects, subscriptions, and event
+topics — can be read. Their **writes** are unsupported in that mode: creating a
+deployment, deleting one, running a day-2 action, creating or deleting a
+template, and creating, updating, or deleting a subscription each return an
+unsupported-mode message. `export-configuration-file` is unsupported there too;
+route a configuration element through the project package instead.

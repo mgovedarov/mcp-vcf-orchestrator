@@ -985,47 +985,161 @@ test("provider 401 failure hints at provider account verification", async () => 
   );
 });
 
-test("vra8 platform rejects Automation-service APIs with clear message", async () => {
-  const client = new VroClient(config({ targetPlatform: "vra8" }));
+// The vra8 support surface after the VCFO-068 lab verification (vRO 8.18.1):
+// every Automation-service read and the whole vRO surface go through;
+// Automation-service writes and the single-configuration artifact export do
+// not. Each case below mirrors an operation exercised against the lab.
+const AUTOMATION_WRITE_REFUSAL =
+  /Automation-service writes .* not supported .*vra8 mode pending lab verification/;
+
+// Answers the vra8 logins and then every Automation-service read with one
+// empty Spring page, the envelope vRA 8 returns.
+function vra8AutomationReadStub(seenUrls = []) {
+  const login = vra8LoginStub();
+  return async (url) => {
+    const fromLogin = login(url);
+    if (fromLogin) return fromLogin;
+    seenUrls.push(String(url));
+    return Response.json({
+      content: [],
+      totalElements: 0,
+      totalPages: 0,
+      last: true,
+      first: true,
+      number: 0,
+      size: 100,
+      numberOfElements: 0,
+    });
+  };
+}
+
+test("vra8 platform allows Automation-service reads", async () => {
+  const seenUrls = [];
+  globalThis.fetch = vra8AutomationReadStub(seenUrls);
+  const client = new VroClient(vra8Config());
+
+  assert.equal((await client.listProjects()).content.length, 0);
+  assert.equal((await client.listTemplates()).content.length, 0);
+  assert.equal((await client.listCatalogItems()).content.length, 0);
+  assert.equal((await client.listDeployments()).content.length, 0);
+  assert.equal((await client.listSubscriptions()).content.length, 0);
+  assert.equal((await client.listEventTopics()).content.length, 0);
+  await client.getProject("project-1");
+
+  // Each read must have reached its own Automation service, not /vco/api.
+  for (const fragment of [
+    "/project-service/api/projects",
+    "/blueprint/api/blueprints",
+    "/catalog/api/items",
+    "/deployment/api/deployments",
+    "/event-broker/api/subscriptions",
+    "/event-broker/api/topics",
+  ]) {
+    assert.ok(
+      seenUrls.some((url) => url.includes(fragment)),
+      `expected a request to ${fragment}`,
+    );
+  }
+});
+
+test("vra8 platform rejects Automation-service writes", async () => {
+  const client = new VroClient(vra8Config());
 
   await assert.rejects(
-    () => client.listTemplates(),
-    /Automation-service APIs .* not supported .*vra8 mode/,
+    () =>
+      client.createTemplate({
+        name: "Template",
+        projectId: "project-1",
+        content: "{}",
+      }),
+    AUTOMATION_WRITE_REFUSAL,
   );
   await assert.rejects(
-    () => client.listDeployments(),
-    /Automation-service APIs .* not supported .*vra8 mode/,
+    () => client.deleteTemplate("template-1"),
+    AUTOMATION_WRITE_REFUSAL,
   );
   await assert.rejects(
-    () => client.listCatalogItems(),
-    /Automation-service APIs .* not supported .*vra8 mode/,
+    () =>
+      client.createSubscription({
+        name: "Subscription",
+        eventTopicId: "topic-1",
+        runnableType: "extensibility.abx",
+        runnableId: "runnable-1",
+      }),
+    AUTOMATION_WRITE_REFUSAL,
   );
   await assert.rejects(
-    () => client.listSubscriptions(),
-    /Automation-service APIs .* not supported .*vra8 mode/,
+    () => client.updateSubscription("subscription-1", {}),
+    AUTOMATION_WRITE_REFUSAL,
   );
   await assert.rejects(
-    () => client.listProjects(),
-    /Automation-service APIs \(catalog, deployments, templates, projects, .* not supported .*vra8 mode/,
+    () => client.deleteSubscription("subscription-1"),
+    AUTOMATION_WRITE_REFUSAL,
   );
   await assert.rejects(
-    () => client.getProject("p-1"),
-    /Automation-service APIs .* not supported .*vra8 mode/,
+    () => client.deleteDeployment("deployment-1"),
+    AUTOMATION_WRITE_REFUSAL,
+  );
+  await assert.rejects(
+    () =>
+      client.runDeploymentAction({
+        deploymentId: "deployment-1",
+        actionId: "action-1",
+      }),
+    AUTOMATION_WRITE_REFUSAL,
+  );
+  await assert.rejects(
+    () =>
+      client.createDeploymentFromCatalogItem({
+        catalogItemId: "item-1",
+        deploymentName: "Deployment",
+        projectId: "project-1",
+      }),
+    AUTOMATION_WRITE_REFUSAL,
   );
 });
 
-test("vra8 platform rejects vRO writes other than workflow execution", async () => {
+test("vra8 platform allows vRO writes", async () => {
+  const requests = [];
+  const login = vra8LoginStub();
+  globalThis.fetch = async (url, init) => {
+    const fromLogin = login(url);
+    if (fromLogin) return fromLogin;
+    requests.push({ url: String(url), method: init?.method });
+    return Response.json({ id: "workflow-1", name: "Workflow" });
+  };
+
+  const client = new VroClient(vra8Config());
+  await client.createWorkflow("category-1", "Workflow");
+  await client.deleteWorkflow("workflow-1");
+
+  assert.deepEqual(
+    requests.map((r) => r.method),
+    ["POST", "DELETE"],
+  );
+  assert.ok(requests.every((r) => r.url.includes("/vco/api/workflows")));
+});
+
+test("vra8 platform rejects a single-configuration artifact export before local file checks", async () => {
   const client = new VroClient(config({ targetPlatform: "vra8" }));
 
+  // A file name that would otherwise fail extension validation: the platform
+  // message must win, proving the check runs before any artifact-path work.
   await assert.rejects(
-    () => client.createWorkflow("category-1", "Workflow"),
-    /read operations plus workflow execution and execution logs only/,
+    () => client.exportConfigurationFile("configuration-1", "not-a-vsoconf.txt"),
+    /Exporting a single configuration element .* not supported in VCFA_TARGET_PLATFORM=vra8 mode/,
+  );
+  await assert.rejects(
+    () => client.exportConfigurationFile("configuration-1", "missing.vsoconf"),
+    /add-configuration-to-project-package/,
   );
 });
 
-test("vra8 platform rejects artifact imports before local file checks", async () => {
+test("vra8 platform allows artifact imports past the guard", async () => {
   const client = new VroClient(config({ targetPlatform: "vra8" }));
-  const expected = /read operations plus workflow execution and execution logs only/;
+  // The guard no longer short-circuits these, so each one now reaches its
+  // local preflight and fails on the absent file instead.
+  const expected = /ENOENT|no such file/;
 
   await assert.rejects(
     () => client.importWorkflowFile("category-1", "missing.workflow"),
@@ -1039,10 +1153,7 @@ test("vra8 platform rejects artifact imports before local file checks", async ()
     () => client.importConfigurationFile("category-1", "missing.vsoconf"),
     expected,
   );
-  await assert.rejects(
-    () => client.importPackage("missing.package"),
-    expected,
-  );
+  await assert.rejects(() => client.importPackage("missing.package"), expected);
   await assert.rejects(
     () => client.getPackageImportDetails("missing.package"),
     expected,
@@ -1286,12 +1397,14 @@ test("generic bodyless 2xx responses with a Location header do not synthesize an
 });
 
 test("non-JSON 2xx responses throw a contextualized error", async () => {
-  const htmlBody = "<html><body>Maintenance</body></html>" + "x".repeat(300);
+  // Deliberately not HTML: an HTML body takes the summarizing branch instead
+  // of the truncating one (see the HTML-body tests below).
+  const textBody = "Maintenance in progress. " + "x".repeat(300);
   globalThis.fetch = async (url, init) => {
     if (String(url).includes("/sessions")) return authResponse();
-    return new Response(htmlBody, {
+    return new Response(textBody, {
       status: 200,
-      headers: { "content-type": "text/html", "x-request-id": "req-42" },
+      headers: { "content-type": "text/plain", "x-request-id": "req-42" },
     });
   };
 
@@ -1730,6 +1843,163 @@ test("createConfiguration sends singular attribute payload", async () => {
       },
     ],
   });
+});
+
+// vRA 8 requires the plural attributes key on both configuration writes and
+// answers 400 for a body carrying the singular one — including a body that
+// carries both — so the key is chosen per platform (VCFO-068). The singular
+// case is covered by the test above.
+test("createConfiguration sends the plural attributes payload in vra8 mode", async () => {
+  const calls = [];
+  const login = vra8LoginStub();
+  globalThis.fetch = async (url, init) => {
+    const fromLogin = login(url);
+    if (fromLogin) return fromLogin;
+    calls.push({ url: String(url), init });
+    return Response.json({ id: "config-1", name: "Settings" });
+  };
+
+  const client = new VroClient(vra8Config());
+  await client.createConfiguration("category-1", "Settings", "desc", [
+    { name: "host", type: "string", value: "vcfa.example.test" },
+  ]);
+
+  const body = JSON.parse(calls[0].init.body);
+  assert.deepEqual(body, {
+    name: "Settings",
+    "category-id": "category-1",
+    description: "desc",
+    attributes: [
+      {
+        name: "host",
+        type: "string",
+        value: { string: { value: "vcfa.example.test" } },
+      },
+    ],
+  });
+  assert.ok(!("attribute" in body), "the singular key must be absent");
+});
+
+test("updateConfiguration sends the plural attributes payload in vra8 mode", async () => {
+  const calls = [];
+  const login = vra8LoginStub();
+  globalThis.fetch = async (url, init) => {
+    const fromLogin = login(url);
+    if (fromLogin) return fromLogin;
+    calls.push({ url: String(url), method: init?.method, init });
+    return Response.json({ id: "config-1", name: "Settings" });
+  };
+
+  const client = new VroClient(vra8Config());
+  await client.updateConfiguration("config-1", {
+    attributes: [{ name: "host", type: "string", value: "vcfa.example.test" }],
+  });
+
+  const put = calls.find((c) => c.method === "PUT");
+  const body = JSON.parse(put.init.body);
+  assert.ok(Array.isArray(body.attributes), "expected the plural key");
+  assert.ok(!("attribute" in body), "the singular key must be absent");
+});
+
+// PUT /configurations/{id} replaces the element, and vRA 8 rejects a body with
+// no name. A call that does not rename reads the live name first (VCFO-068).
+test("updateConfiguration carries the live name forward when not renaming", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), method: init?.method ?? "GET", init });
+    if (calls.length === 1) return authResponse();
+    return Response.json({ id: "config-1", name: "Existing Name" });
+  };
+
+  const client = new VroClient(config());
+  await client.updateConfiguration("config-1", { description: "new" });
+
+  const methods = calls.slice(1).map((c) => c.method);
+  assert.deepEqual(methods, ["GET", "PUT"]);
+  const body = JSON.parse(calls.at(-1).init.body);
+  assert.equal(body.name, "Existing Name");
+  assert.equal(body.description, "new");
+});
+
+test("updateConfiguration does not re-read when given both name and attributes", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), method: init?.method ?? "GET", init });
+    if (calls.length === 1) return authResponse();
+    return Response.json({ id: "config-1", name: "Renamed" });
+  };
+
+  const client = new VroClient(config());
+  await client.updateConfiguration("config-1", {
+    name: "Renamed",
+    attributes: [{ name: "host", type: "string", value: "h" }],
+  });
+
+  assert.deepEqual(
+    calls.slice(1).map((c) => c.method),
+    ["PUT"],
+    "nothing has to be read when both replaced fields are supplied",
+  );
+  assert.equal(JSON.parse(calls.at(-1).init.body).name, "Renamed");
+});
+
+// The PUT replaces the element, so omitting attributes would delete the ones
+// it has. Carrying them forward is unsafe — a SecureString attribute reads
+// back as ciphertext with isPlainText false — so the call is refused instead
+// (VCFO-068).
+test("updateConfiguration refuses an update that would silently clear attributes", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), method: init?.method ?? "GET" });
+    if (calls.length === 1) return authResponse();
+    return Response.json({
+      id: "config-1",
+      name: "Settings",
+      attributes: [
+        { name: "host", type: "string", value: "vcfa.example.test" },
+        { name: "token", type: "SecureString" },
+      ],
+    });
+  };
+
+  const client = new VroClient(config());
+  await assert.rejects(
+    () => client.updateConfiguration("config-1", { description: "new" }),
+    (error) => {
+      assert.match(error.message, /would delete the 2 it currently has/);
+      assert.match(error.message, /host \(string\)/);
+      assert.match(error.message, /token \(SecureString\)/);
+      assert.match(error.message, /get-configuration/);
+      assert.ok(
+        !error.message.includes("vcfa.example.test"),
+        "an attribute value must never be echoed",
+      );
+      return true;
+    },
+  );
+  assert.ok(
+    !calls.some((c) => c.method === "PUT"),
+    "the destructive PUT must not be sent",
+  );
+});
+
+test("updateConfiguration clears attributes when given an empty array", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), method: init?.method ?? "GET", init });
+    if (calls.length === 1) return authResponse();
+    return Response.json({
+      id: "config-1",
+      name: "Settings",
+      attributes: [{ name: "host", type: "string" }],
+    });
+  };
+
+  const client = new VroClient(config());
+  await client.updateConfiguration("config-1", { attributes: [] });
+
+  const put = calls.find((c) => c.method === "PUT");
+  assert.deepEqual(JSON.parse(put.init.body).attribute, []);
 });
 
 test("catalog client uses service broker endpoints and request payloads", async () => {
@@ -3780,10 +4050,52 @@ test("sanitizeErrorBody strips sensitive fields from JSON", () => {
 });
 
 test("sanitizeErrorBody truncates non-JSON body", () => {
-  const longHtml = "<html>" + "x".repeat(500) + "</html>";
-  const result = sanitizeErrorBody(longHtml);
+  const longText = "stack trace: " + "x".repeat(500);
+  const result = sanitizeErrorBody(longText);
   assert.ok(result.includes("[non-JSON body:"), "should flag non-JSON");
-  assert.ok(result.length < longHtml.length, "should be shorter than input");
+  assert.ok(result.length < longText.length, "should be shorter than input");
+});
+
+// vRA 8 answers a rejected /vco/api request with a styled HTML page whose only
+// diagnostic content is the status code and reason, several hundred bytes into
+// a stylesheet — so the generic truncation returned CSS and nothing usable
+// (VCFO-068). These cover the summary that replaced it.
+test("sanitizeErrorBody summarizes an HTML error page", () => {
+  const page = [
+    "<!DOCTYPE html>",
+    "<html><head><style>.main-container { display: flex }",
+    ".text-container { flex-grow: 1 }".padEnd(400, " "),
+    "</style></head><body><div class=\"text-container\">",
+    '<div class="status-code">400</div>',
+    '<div class="status-message">Bad Request</div>',
+    "</div></body></html>",
+  ].join("\n");
+  const result = sanitizeErrorBody(page);
+  assert.equal(result, "[HTML body: 400 Bad Request — no further detail]");
+  assert.ok(!result.includes("flex"), "must not echo the page markup");
+});
+
+test("sanitizeErrorBody reports an HTML body carrying no status fields", () => {
+  const result = sanitizeErrorBody("<html><body><p>nothing useful</p></body></html>");
+  assert.equal(result, "[HTML body with no diagnostic detail]");
+});
+
+test("sanitizeErrorBody recognizes an HTML body behind leading whitespace", () => {
+  const result = sanitizeErrorBody('\n\n  <html><div class="status-code">502</div></html>');
+  assert.equal(result, "[HTML body: 502 — no further detail]");
+});
+
+test("sanitizeErrorBody caps an over-long HTML status field", () => {
+  const long = "A".repeat(200);
+  const result = sanitizeErrorBody(`<html><div class="status-message">${long}</div></html>`);
+  assert.ok(!result.includes(long), "an over-long field must not be echoed");
+  assert.equal(result, "[HTML body with no diagnostic detail]");
+});
+
+test("sanitizeErrorBody keeps JSON parsing ahead of the HTML branch", () => {
+  // A JSON body whose string value merely starts with markup is still JSON.
+  const result = sanitizeErrorBody(JSON.stringify({ message: "<html> is not allowed here" }));
+  assert.ok(result.includes("<html> is not allowed here"));
 });
 
 test("sanitizeErrorBody handles empty body", () => {

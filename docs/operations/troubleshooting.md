@@ -51,7 +51,12 @@ If a workflow was started asynchronously, use:
 
 ## vRA/vRO 8 Mode
 
-Set `VCFA_TARGET_PLATFORM=vra8` for vRA/vRO 8.12+. The server authenticates with the vRA 8 bearer-token flow described above and supports vRO `/vco/api` read operations, workflow execution, and execution logs. Catalog, deployment, template, project, subscription, and event-topic tools return an unsupported-mode message in this mode pending lab verification of the vRA 8 endpoints (VCFO-068).
+Set `VCFA_TARGET_PLATFORM=vra8` for vRA/vRO 8.12+. The server authenticates with the vRA 8 bearer-token flow described above and supports the full vRO `/vco/api` surface plus the read paths of the catalog, deployment, template, project, subscription, and event-topic tools. Three things still return an unsupported-mode message in this mode:
+
+- Automation-service **writes** — `create-deployment`, `delete-deployment`, `run-deployment-action`, `create-template`, `delete-template`, and the `create-`/`update-`/`delete-subscription` tools — pending lab verification (VCFO-068).
+- `export-configuration-file`, because vRA 8 serves a configuration element as JSON only and rejects the artifact request with `406`. Read it with `get-configuration`, or add it to the project package with `add-configuration-to-project-package` and run `export-project-package`.
+
+A `400` in this mode used to arrive with no usable detail: the vRA 8 gateway answers a rejected `/vco/api` request with a styled HTML page whose only diagnostic content is the status code and reason, buried past a stylesheet, and these responses arrive over HTTP/2, which carries no reason phrase. Such a body is now summarized as `[HTML body: 400 Bad Request — no further detail]` instead of an excerpt of CSS.
 
 ## Artifact Import Failures
 

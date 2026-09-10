@@ -537,6 +537,8 @@ Create a new configuration element in VCF Automation Orchestrator. Use `list-cat
 
 Update a configuration element name, description, or attributes. Supplied attributes replace the existing attribute set. At least one of `name`, `description`, or `attributes` must be provided; a request with none is rejected before any live update.
 
+The underlying `PUT` replaces the element rather than patching it, so an update that omits `attributes` on an element that has some is refused before the write, naming the attributes (names and types only) that would have been deleted. Re-send the attributes to keep — read them with `get-configuration` — or pass an empty array to clear them deliberately. They are not carried forward automatically because a `SecureString` attribute reads back as ciphertext, and replaying that value risks storing the ciphertext as the new secret.
+
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
@@ -544,7 +546,7 @@ Update a configuration element name, description, or attributes. Supplied attrib
 | `expectedName` | string | No | - | Expected current configuration element name to verify before update. |
 | `name` | string | No | current name | New name for the configuration element. |
 | `description` | string | No | current description | New description. |
-| `attributes` | array | No | current attributes | New attributes to replace the existing set. |
+| `attributes` | array | No | - | Attributes to store, replacing the existing set. Required unless the element has no attributes; an empty array clears them. |
 | `confirm` | boolean | Yes | - | Must be `true` to confirm update. If `false`, the configuration element is not updated. |
 
 `attributes` array item:
@@ -571,6 +573,8 @@ Delete a configuration element from VCF Automation Orchestrator. This action is 
 ### `export-configuration-file`
 
 Export a vRO configuration element as a `.vsoconf` file under the configured configuration artifact directory.
+
+Not supported in `vra8` mode: vRA 8 serves a configuration element as JSON only and answers the artifact request with `406`, while the same request for a workflow or an action returns the artifact. Use `get-configuration` to read it, or `add-configuration-to-project-package` followed by `export-project-package` to get it into a file.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |

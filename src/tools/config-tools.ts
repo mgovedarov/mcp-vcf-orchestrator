@@ -478,7 +478,7 @@ export function registerConfigTools(
     {
       title: "Update Configuration Element",
       description:
-        "Update an existing configuration element's name, description, or attributes. Only the fields you provide will be updated.",
+        "Update an existing configuration element's name, description, or attributes. The underlying call replaces the element, so an update that omits attributes on an element that has some is refused rather than deleting them: re-send the attributes to keep, or pass an empty array to clear them deliberately. Read the current set with get-configuration first.",
       inputSchema: z.object({
         id: z.string().describe("The configuration element ID to update"),
         expectedName: z
@@ -506,7 +506,9 @@ export function registerConfigTools(
             }),
           )
           .optional()
-          .describe("New attributes (replaces existing ones)"),
+          .describe(
+            "Attributes to store, replacing the existing set. Omit only on an element that has no attributes; pass an empty array to clear them deliberately.",
+          ),
         confirm: z
           .boolean()
           .describe(
