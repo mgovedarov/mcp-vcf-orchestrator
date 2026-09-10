@@ -1,16 +1,25 @@
 # Changelog
 
-## Unreleased
+## 3.0.0 - 2026-09-10
+
+This release drops end-of-life Node.js 18 and 20, routes all HTTP through the npm `undici` 8 client (fixing multipart artifact imports), adds project discovery (`list-projects`, `get-project`) and `update-action`, hardens the action tool surface and input-form authoring, and is the first version published since 2.2.1: the 2.2.2 and 2.2.3 sections below were recorded in this changelog but never tagged or published to npm, so their changes ship here as well.
 
 ### Added
 
 - **New read-only project discovery tools `list-projects` and `get-project`** backed by `GET /project-service/api/projects`, so agents can resolve the `projectId` consumed by `create-deployment`, `create-template`, `create-subscription`, and the project-scoped list tools instead of asking for it out-of-band. `list-projects` paginates the full project list and applies an optional client-side, case-insensitive name/description filter; when pagination hits the request cap, the result (even an empty match list) warns how much of the inventory was scanned and that the client-side search cannot recover the rest. Both tools are rejected in `vra8` mode like the other Automation-service APIs. Project-scoped tool descriptions, prompts, and patterns now point at them for ID discovery (VCFO-062).
+- **New `update-action` tool** that updates an existing action in place by ID: it fetches the live action, merges the supplied `script`, `inputParameters`, and/or `returnType` (unspecified fields are preserved), issues the `PUT`, and re-fetches the authoritative result because the endpoint returns only a validation envelope. It carries the `confirm: true` gate and destructive annotation like the other `update-*` tools, accepts optional `expectedName`/`expectedModule` guards verified against the live action before the write, and rejects a confirmed no-op (none of the three fields supplied). Create and update share one request-body builder so the two payloads cannot drift (VCFO-062).
+- `preflight-workflow-file` and `preflight-package` now **cross-check `input_form_` against the inputs declared in `workflow-content`**: a form field with no matching declared input is an error, a declared input without a form field is a warning, and a `dataType` that disagrees with the input's verified mapping is a warning. Because `import-workflow-file` requires a passing preflight, a stale form is blocked at import before it reaches the server (VCFO-002).
 
 ### Changed
 
 - The `vra8` unsupported-Automation-services message now lists projects alongside catalog, deployments, templates, subscriptions, and event topics (VCFO-062).
 - **BREAKING: the minimum supported Node.js version is now 22.19.** `undici` 8 requires Node `>=22.19.0`, so support for Node 18 and 20 (both end-of-life) is dropped; `engines.node` and the CI matrix are updated accordingly.
+- **BREAKING: `import-action-file` no longer accepts `expectedCategoryId`.** vRO does not expose action modules as queryable categories (`list-categories` with `type=ActionCategory` returns nothing), so the guard could never be satisfied; the tool now points module discovery at `list-actions`, and `categoryName` names the target module, which is created on import if it does not exist (VCFO-062).
+- `create-action` now **refuses to create a duplicate** of an existing `module`/`name` and points the caller at `update-action` with the existing ID (VCFO-062).
+- `scaffold-workflow-file` now **rejects an input whose type has no verified input-form mapping** with an explicit `unsupported input-form type` error instead of silently falling back to a `string`/`textField` form field. The verified mapping set (read back from vRO 9.1-authored forms, not guessed) covers `string`, `boolean`, `number`, `SecureString`, `Date`, `Properties`, `Any`, plugin reference types such as `VC:VirtualMachine`, and `Array/<supported>`; the table lives in `docs/vro-artifact-authoring.md` (VCFO-002).
 - Grouped the `github/codeql-action` `init`, `autobuild` and `analyze` bumps into a single Dependabot PR (`codeql-action` group). The CodeQL workflow requires all three steps to run the same action version, so the one-PR-per-step updates Dependabot started opening each failed CI on their own.
+- All GitHub Actions across the six workflows are pinned to full commit SHAs, every `actions/checkout` step runs with `persist-credentials: false`, and CI cancels superseded in-flight runs on the same ref; added `.nvmrc` (Node 24) and `.editorconfig`.
+- The Claude Code plugin manifests under `.claude-plugin/` now carry the server release version (3.0.0) so plugin installs pick up the updated `vcfa-operations` skill.
 
 ### Dependencies
 
@@ -20,6 +29,8 @@
 
 - Multipart artifact uploads (package/action/workflow/configuration/resource import) now build the request body with `undici`'s `FormData`. undici's `fetch` only serializes a `FormData` created by the same undici; a foreign `FormData` fails its brand check and is silently stringified to `"[object FormData]"` and sent as `text/plain`, breaking every import.
 - All requests now go through the npm `undici`'s own `fetch`, not Node's global `fetch`, so `fetch`, the multipart `FormData`, and the `VCFA_IGNORE_TLS` dispatcher `Agent` always come from the same undici. The `undici` bundled in the Node runtime is a different major (Node 22 → undici 6, Node 24 → undici 7) that neither honors an npm-`undici` `Agent` nor serializes an npm-`undici` `FormData` — the latter broke strict-TLS imports on Node 24 specifically, since undici 7 (unlike undici 6) rejects the foreign `FormData`.
+- `list-actions` **name filtering now works.** The vRO `/actions` endpoint ignores `conditions` and `maxResult` (verified live; every variant returned the full inventory), so the tool now retrieves the full set and filters by name client-side (VCFO-062).
+- `list-actions` **no longer truncates multi-segment module names.** The list endpoint returns no `module` attribute, only a slash-separated `fqn` (`<module>/<name>`); the old code split on `.` and dropped the last segment, so `com.vmware.library.snmp` was reported as `com.vmware.library`. The module is now derived by stripping the name and splitting on `/` (legacy dotted fqns are tolerated), which also repairs the `create-action` duplicate guard that compares against the derived module (VCFO-062).
 
 ## 2.2.3 - 2026-06-24
 
