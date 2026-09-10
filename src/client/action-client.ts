@@ -254,7 +254,7 @@ export class ActionClient {
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(
-        `vRO API error: ${res.status} ${res.statusText} — export action\n${sanitizeErrorBody(text, res)}`,
+        `vRO API error: ${res.status} ${res.statusText} — export action\n${sanitizeErrorBody(text, res)}${this.http.apiErrorHint(res)}`,
       );
     }
     return Buffer.from(await res.arrayBuffer());
@@ -322,7 +322,7 @@ export class ActionClient {
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(
-        `vRO API error: ${res.status} ${res.statusText} — import action\n${sanitizeErrorBody(text, res)}`,
+        `vRO API error: ${res.status} ${res.statusText} — import action\n${sanitizeErrorBody(text, res)}${this.http.apiErrorHint(res)}`,
       );
     }
   }

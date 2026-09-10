@@ -52,7 +52,9 @@ API error messages are sanitized before being surfaced to MCP callers. Only safe
 
 ## Token Refresh
 
-If a request receives a `401` or `403` response the server automatically clears the cached bearer token, re-authenticates, and retries the request exactly once. On the default VCFA platform re-authentication repeats the Cloud API session login; in `vra8` mode it repeats both the vIDM CSP login and the `/iaas/api/login` token exchange. This covers JSON API calls, binary exports, and multipart uploads. A second consecutive failure after re-authentication is surfaced as an error without further retry.
+If a request receives a `401` response — or, on the default VCFA platform, a `403` — the server invalidates the token that request used, re-authenticates, and retries the request exactly once. Only that token is invalidated: a `401` whose token a concurrent request has already replaced reuses the fresh one instead of forcing another login. This covers JSON API calls, binary exports, and multipart uploads. A second consecutive failure after re-authentication is surfaced as an error without further retry.
+
+On the default VCFA platform re-authentication repeats the Cloud API session login. In `vra8` mode it exchanges the cached refresh token at `/iaas/api/login` and repeats the full vIDM CSP login only when that refresh token is rejected, so renewing a token does not re-send the password. A `403` in `vra8` mode is retried only when it carries a `WWW-Authenticate` challenge: an expired vRA 8 token answers with `401`, while a `403` from `/vco/api` means the vIDM user lacks the vRO permission, which no amount of re-authentication changes. Neither `vra8` login request follows redirects — the request body carries the credentials, and a `307`/`308` would forward it to the redirect target — so a redirect is reported as a login failure naming that host.
 
 ## Destructive Operations
 

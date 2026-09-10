@@ -889,7 +889,7 @@ export class WorkflowClient {
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(
-        `vRO API error: ${res.status} ${res.statusText} — export workflow\n${sanitizeErrorBody(text, res)}`,
+        `vRO API error: ${res.status} ${res.statusText} — export workflow\n${sanitizeErrorBody(text, res)}${this.http.apiErrorHint(res)}`,
       );
     }
     return Buffer.from(await res.arrayBuffer());
@@ -978,7 +978,7 @@ export class WorkflowClient {
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(
-        `vRO API error: ${res.status} ${res.statusText} — import workflow\n${sanitizeErrorBody(text, res)}`,
+        `vRO API error: ${res.status} ${res.statusText} — import workflow\n${sanitizeErrorBody(text, res)}${this.http.apiErrorHint(res)}`,
       );
     }
   }

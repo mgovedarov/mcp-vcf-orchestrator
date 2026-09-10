@@ -3833,7 +3833,7 @@ test("403 triggers the same token refresh as 401", async () => {
   assert.equal(authCount, 2, "should re-authenticate on 403");
 });
 
-test("vra8 401 re-runs CSP login and token exchange, then retries once with the new token", async () => {
+test("vra8 401 renews the bearer token from the cached refresh token and retries once", async () => {
   const calls = [];
   const counts = { csp: 0, iaas: 0 };
   const login = vra8LoginStub(counts);
@@ -3861,17 +3861,16 @@ test("vra8 401 re-runs CSP login and token exchange, then retries once with the 
       CSP_LOGIN_URL,
       IAAS_LOGIN_URL,
       VRA8_WORKFLOWS_URL,
-      CSP_LOGIN_URL,
       IAAS_LOGIN_URL,
       VRA8_WORKFLOWS_URL,
     ],
   );
-  assert.equal(counts.csp, 2);
+  assert.equal(counts.csp, 1, "renewing a token must not re-send the password");
   assert.equal(counts.iaas, 2);
   assert.equal(calls[2].authorization, "Bearer jwt-1");
-  assert.equal(calls[5].authorization, "Bearer jwt-2");
-  // Re-authentication resends the credentials; the refresh token is not reused.
-  assert.equal(JSON.parse(calls[3].init.body).domain, "System Domain");
+  assert.equal(calls[4].authorization, "Bearer jwt-2");
+  // The renewal replays the refresh token cached by the first login.
+  assert.deepEqual(JSON.parse(calls[3].init.body), { refreshToken: "refresh-1" });
 });
 
 test("manual binary export path retries on 401 with refreshed token", async () => {
@@ -3983,32 +3982,157 @@ test("vra8 CSP login 400 for an unknown domain surfaces the sanitized body and t
   );
 });
 
-test("vra8 CSP login 200 without refresh_token fails without echoing the body", async () => {
+test("vra8 CSP login 200 without refresh_token names the missing field without echoing the body", async () => {
   globalThis.fetch = async () => Response.json({ access_token: "must-not-leak" });
 
   const client = new VroClient(vra8Config());
   await assert.rejects(
     () => client.listWorkflows(),
     (e) => {
-      assert.match(e.message, /did not include a refresh_token/);
+      assert.match(e.message, /JSON object that has no refresh_token string/);
       assert.ok(!e.message.includes("must-not-leak"));
       return true;
     },
   );
 });
 
-test("vra8 CSP login non-JSON 200 body fails without echoing the body", async () => {
+test("vra8 CSP login non-JSON 200 body is reported as a non-JSON body, not a missing field", async () => {
   globalThis.fetch = async () => new Response("<html>oops</html>", { status: 200 });
 
   const client = new VroClient(vra8Config());
   await assert.rejects(
     () => client.listWorkflows(),
     (e) => {
-      assert.match(e.message, /did not include a refresh_token/);
-      assert.ok(!e.message.includes("<html>"));
+      assert.match(e.message, /not a JSON object/);
+      assert.match(e.message, /content-type: text\/plain/);
+      assert.ok(!e.message.includes("<html>"), "should not echo the body");
+      assert.ok(
+        !e.message.includes("refresh_token") && !e.message.includes("access_token"),
+        "should not blame a missing field or the login URL for an HTML 200",
+      );
       return true;
     },
   );
+});
+
+test("vra8 CSP login whose body cannot be read reports the read failure", async () => {
+  globalThis.fetch = async () =>
+    new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.error(new Error("socket hang up mid-body"));
+        },
+      }),
+      { status: 200, statusText: "OK", headers: { "content-type": "application/json" } },
+    );
+
+  const client = new VroClient(vra8Config());
+  await assert.rejects(
+    () => client.listWorkflows(),
+    (e) => {
+      assert.match(e.message, /200 OK but the response body could not be read/);
+      assert.ok(
+        !e.message.includes("refresh_token"),
+        "an unreadable body must not be reported as a missing field",
+      );
+      return true;
+    },
+  );
+});
+
+test("vra8 login POSTs do not follow a redirect that would carry the password onward", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    return new Response("", {
+      status: 307,
+      statusText: "Temporary Redirect",
+      headers: { Location: "https://idp.example.invalid/sso?token=abc" },
+    });
+  };
+
+  const client = new VroClient(vra8Config());
+  await assert.rejects(
+    () => client.listWorkflows(),
+    (e) => {
+      assert.match(e.message, /CSP login\): 307 Temporary Redirect/);
+      assert.ok(e.message.includes("idp.example.invalid"), "should name the redirect host");
+      assert.ok(!e.message.includes("token=abc"), "should not echo the redirect URL query");
+      return true;
+    },
+  );
+  assert.equal(calls.length, 1, "the token exchange must not run after a redirect");
+  assert.equal(calls[0].init.redirect, "manual", "login POSTs must not follow redirects");
+});
+
+test("vra8 reports a relative login redirect without naming a host", async () => {
+  globalThis.fetch = async () =>
+    new Response("", {
+      status: 302,
+      statusText: "Found",
+      headers: { Location: "/vcfa/login" },
+    });
+
+  const client = new VroClient(vra8Config());
+  await assert.rejects(
+    () => client.listWorkflows(),
+    (e) => {
+      assert.match(e.message, /CSP login\): 302 Found/);
+      assert.match(e.message, /answered with a redirect, which is not followed/);
+      return true;
+    },
+  );
+});
+
+test("vra8 CSP login with an empty 2xx body says so", async () => {
+  globalThis.fetch = async () => new Response("", { status: 200, statusText: "OK" });
+
+  const client = new VroClient(vra8Config());
+  await assert.rejects(
+    () => client.listWorkflows(),
+    /200 OK with an empty body/,
+  );
+});
+
+test("vra8 trims the configured vIDM domain before the CSP login", async () => {
+  const calls = [];
+  const login = vra8LoginStub();
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    return login(url) ?? Response.json({ link: [], total: 0 });
+  };
+
+  const client = new VroClient(vra8Config({ organization: " System Domain \r\n" }));
+  await client.listWorkflows();
+
+  assert.equal(JSON.parse(calls[0].init.body).domain, "System Domain");
+});
+
+test("vra8 login and vRO calls carry the per-client ignoreTls dispatcher", async () => {
+  const calls = [];
+  const login = vra8LoginStub();
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    return login(url) ?? Response.json({ link: [], total: 0 });
+  };
+
+  const client = new VroClient(vra8Config({ ignoreTls: true }));
+  try {
+    await client.listWorkflows();
+    assert.deepEqual(calls.map((c) => c.url), [
+      CSP_LOGIN_URL,
+      IAAS_LOGIN_URL,
+      VRA8_WORKFLOWS_URL,
+    ]);
+    for (const call of calls) {
+      assert.ok(
+        call.init.dispatcher,
+        `${call.url} must use the TLS-relaxed dispatcher`,
+      );
+    }
+  } finally {
+    await client.close();
+  }
 });
 
 test("vra8 IaaS token exchange failure is surfaced without the refresh token", async () => {
@@ -4045,7 +4169,10 @@ test("vra8 IaaS 200 without token fails clearly", async () => {
       : Response.json({ tokenType: "Bearer" });
 
   const client = new VroClient(vra8Config());
-  await assert.rejects(() => client.listWorkflows(), /did not include a token string/);
+  await assert.rejects(
+    () => client.listWorkflows(),
+    /JSON object that has no token string/,
+  );
 });
 
 test("vra8 second consecutive 401 after re-login is surfaced without an infinite loop", async () => {
@@ -4065,10 +4192,11 @@ test("vra8 second consecutive 401 after re-login is surfaced without an infinite
   const client = new VroClient(vra8Config());
   await assert.rejects(() => client.listWorkflows(), /vRO API error: 401 Unauthorized/);
   assert.equal(vroCalls, 2, "exactly one retry");
-  assert.equal(counts.csp, 2, "one login plus one re-login");
+  assert.equal(counts.csp, 1, "the renewal reuses the cached refresh token");
+  assert.equal(counts.iaas, 2, "one login exchange plus one renewal");
 });
 
-test("vra8 403 triggers the same re-login as 401", async () => {
+test("vra8 403 with an authentication challenge renews the token and retries once", async () => {
   const counts = { csp: 0, iaas: 0 };
   const login = vra8LoginStub(counts);
   let vroCalls = 0;
@@ -4077,7 +4205,11 @@ test("vra8 403 triggers the same re-login as 401", async () => {
     if (loginResponse) return loginResponse;
     vroCalls += 1;
     if (vroCalls === 1) {
-      return new Response("", { status: 403, statusText: "Forbidden" });
+      return new Response("", {
+        status: 403,
+        statusText: "Forbidden",
+        headers: { "WWW-Authenticate": 'Bearer error="invalid_token"' },
+      });
     }
     return Response.json({ link: [], total: 0 });
   };
@@ -4085,7 +4217,84 @@ test("vra8 403 triggers the same re-login as 401", async () => {
   const client = new VroClient(vra8Config());
   const result = await client.listWorkflows();
   assert.equal(result.total, 0);
-  assert.equal(counts.csp, 2, "should re-login on 403");
+  assert.equal(vroCalls, 2, "exactly one retry");
+  assert.equal(counts.iaas, 2, "the renewal replays only the token exchange");
+  assert.equal(counts.csp, 1);
+});
+
+test("vra8 403 without a challenge is surfaced as an authorization result, with no re-login", async () => {
+  const counts = { csp: 0, iaas: 0 };
+  const login = vra8LoginStub(counts);
+  let vroCalls = 0;
+  globalThis.fetch = async (url) => {
+    const loginResponse = login(url);
+    if (loginResponse) return loginResponse;
+    vroCalls += 1;
+    return new Response(JSON.stringify({ message: "Not authorized" }), {
+      status: 403,
+      statusText: "Forbidden",
+    });
+  };
+
+  const client = new VroClient(vra8Config());
+  await assert.rejects(
+    () => client.listWorkflows(),
+    (e) => {
+      assert.match(e.message, /vRO API error: 403 Forbidden/);
+      assert.match(e.message, /authorization result/);
+      assert.ok(
+        e.message.includes("vRO permissions"),
+        "should point at permissions rather than credentials",
+      );
+      return true;
+    },
+  );
+  assert.equal(vroCalls, 1, "a permission 403 must not cost a login and a retry");
+  assert.equal(counts.csp, 1);
+  assert.equal(counts.iaas, 1);
+});
+
+test("a 401 whose token was already renewed reuses the fresh token instead of logging in again", async () => {
+  const counts = { csp: 0, iaas: 0 };
+  const login = vra8LoginStub(counts);
+  const attempts = [];
+  let releaseStale;
+  const staleGate = new Promise((resolve) => {
+    releaseStale = resolve;
+  });
+
+  globalThis.fetch = async (url, init) => {
+    const loginResponse = login(url);
+    if (loginResponse) return loginResponse;
+    const attempt = attempts.length + 1;
+    attempts.push(init?.headers?.Authorization);
+    if (attempt === 1) {
+      return new Response("", { status: 401, statusText: "Unauthorized" });
+    }
+    if (attempt === 2) {
+      // The second request's 401 is held until the first request's renewal has
+      // finished, so it arrives carrying a token that is already stale.
+      await staleGate;
+      return new Response("", { status: 401, statusText: "Unauthorized" });
+    }
+    if (attempt === 3) {
+      releaseStale();
+      return Response.json({ link: [], total: 0 });
+    }
+    return Response.json({ link: [], total: 0 });
+  };
+
+  const client = new VroClient(vra8Config());
+  await Promise.all([client.listWorkflows(), client.listWorkflows()]);
+
+  assert.equal(counts.csp, 1, "one CSP login for both requests");
+  assert.equal(counts.iaas, 2, "one login exchange plus one renewal, not two renewals");
+  assert.deepEqual(attempts, [
+    "Bearer jwt-1",
+    "Bearer jwt-1",
+    "Bearer jwt-2",
+    "Bearer jwt-2",
+  ]);
 });
 
 test("vra8 concurrent first requests share one CSP login and one token exchange", async () => {
@@ -4129,8 +4338,34 @@ test("vra8 binary export path sends the bearer token", async () => {
   assert.equal(exportCall.init.headers.Accept, "application/zip");
 });
 
+test("vra8 403 on the binary export path carries the same authorization hint", async () => {
+  const login = vra8LoginStub();
+  let exportCalls = 0;
+  globalThis.fetch = async (url) => {
+    const loginResponse = login(url);
+    if (loginResponse) return loginResponse;
+    exportCalls += 1;
+    return new Response(JSON.stringify({ message: "Not authorized" }), {
+      status: 403,
+      statusText: "Forbidden",
+    });
+  };
+
+  const client = new VroClient(vra8Config());
+  await assert.rejects(
+    () => client.exportWorkflowBuffer("wf-1"),
+    (e) => {
+      assert.match(e.message, /vRO API error: 403 Forbidden — export workflow/);
+      assert.match(e.message, /authorization result/);
+      return true;
+    },
+  );
+  assert.equal(exportCalls, 1, "a permission 403 must not cost a retry");
+});
+
 test("vra8 re-login failure after a 401 surfaces the CSP error", async () => {
   let cspCount = 0;
+  let iaasCount = 0;
   globalThis.fetch = async (url) => {
     if (String(url) === CSP_LOGIN_URL) {
       cspCount += 1;
@@ -4141,7 +4376,16 @@ test("vra8 re-login failure after a 401 surfaces the CSP error", async () => {
       });
     }
     if (String(url) === IAAS_LOGIN_URL) {
-      return Response.json({ token: "jwt-1", tokenType: "Bearer" });
+      iaasCount += 1;
+      // The first exchange succeeds; the renewal after the 401 rejects the
+      // cached refresh token, which forces the full CSP login.
+      if (iaasCount === 1) {
+        return Response.json({ token: "jwt-1", tokenType: "Bearer" });
+      }
+      return new Response(JSON.stringify({ message: "invalid_grant" }), {
+        status: 400,
+        statusText: "Bad Request",
+      });
     }
     return new Response("", { status: 401, statusText: "Unauthorized" });
   };
@@ -4151,5 +4395,48 @@ test("vra8 re-login failure after a 401 surfaces the CSP error", async () => {
     () => client.listWorkflows(),
     /vRA 8 authentication failed \(CSP login\): 503/,
   );
+  assert.equal(iaasCount, 2, "the renewal runs before the fallback login");
   assert.equal(cspCount, 2, "should attempt one re-login then surface the failure");
+});
+
+test("vra8 falls back to the full CSP login when the cached refresh token is rejected", async () => {
+  const urls = [];
+  let cspCount = 0;
+  let iaasCount = 0;
+  globalThis.fetch = async (url) => {
+    const target = String(url);
+    urls.push(target);
+    if (target === CSP_LOGIN_URL) {
+      cspCount += 1;
+      return Response.json({ refresh_token: `refresh-${cspCount}` });
+    }
+    if (target === IAAS_LOGIN_URL) {
+      iaasCount += 1;
+      if (iaasCount === 2) {
+        return new Response(JSON.stringify({ message: "invalid_grant" }), {
+          status: 400,
+          statusText: "Bad Request",
+        });
+      }
+      return Response.json({ token: `jwt-${iaasCount}`, tokenType: "Bearer" });
+    }
+    return urls.filter((u) => u.includes("/vco/api/")).length === 1
+      ? new Response("", { status: 401, statusText: "Unauthorized" })
+      : Response.json({ link: [], total: 0 });
+  };
+
+  const client = new VroClient(vra8Config());
+  const result = await client.listWorkflows();
+
+  assert.equal(result.total, 0);
+  assert.deepEqual(urls, [
+    CSP_LOGIN_URL,
+    IAAS_LOGIN_URL,
+    VRA8_WORKFLOWS_URL,
+    IAAS_LOGIN_URL,
+    CSP_LOGIN_URL,
+    IAAS_LOGIN_URL,
+    VRA8_WORKFLOWS_URL,
+  ]);
+  assert.equal(cspCount, 2, "the rejected refresh token is replaced by a full login");
 });

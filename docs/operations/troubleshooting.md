@@ -22,8 +22,10 @@ The session request sends Basic auth as `{VCFA_USERNAME}@{VCFA_ORGANIZATION}`. I
 For `VCFA_TARGET_PLATFORM=vra8` the login is the vRA 8 bearer-token flow, a vIDM CSP login followed by a refresh-token exchange at `/iaas/api/login`, rather than the Cloud API session. If it fails:
 
 - A `400` or `401` from `/csp/gateway/am/api/login` means the vIDM credentials or domain are wrong. `VCFA_USERNAME` and `VCFA_PASSWORD` are the Workspace ONE Access credentials, and `VCFA_ORGANIZATION` must be the domain shown on that login page, for example `System Domain` for local users. A VCF organization name or `system` is rejected there.
-- Values with spaces, such as `System Domain`, must be quoted in `.env` when the file is sourced by a shell. An unquoted value leaves the variable unset and the server exits at startup with a missing-variable error.
-- A `401` from `/vco/api` after a successful login is treated as an expired token: the server repeats both login steps and retries once before surfacing the error.
+- The domain must reach the server as the exact string, spaces included. In an MCP client's JSON `env` block that is simply `"VCFA_ORGANIZATION": "System Domain"` — quotes written inside the value become part of it and the CSP login rejects them with `400`. On a command line the value needs shell quoting (`VCFA_ORGANIZATION="System Domain"`), or the shell treats the word after the space as the command. Surrounding whitespace is trimmed before the login.
+- A `401` from `/vco/api` after a successful login is treated as an expired token: the server renews it (exchanging the cached refresh token, or repeating the CSP login if that is rejected) and retries once before surfacing the error.
+- A `403` from `/vco/api` is not a login problem. Unless it carries a `WWW-Authenticate` challenge, it is reported directly as an authorization result: the vIDM user has no permission for that vRO object or operation.
+- A redirect on either login endpoint is reported as a login failure naming the host it points at, and is deliberately not followed — the request body carries the credentials. Point `VCFA_HOST` at the appliance's API endpoint rather than at an SSO portal or a redirecting load balancer.
 
 ## TLS Errors In Lab Environments
 
