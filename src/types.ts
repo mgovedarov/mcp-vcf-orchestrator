@@ -656,6 +656,11 @@ export interface VroPlugin {
   version?: string;
   description?: string;
   type?: string;
+  /**
+   * Plugin state as reported by the flat vRA 8 plugin descriptor; undefined
+   * when the endpoint does not expose it (VCF Automation 9.x listings).
+   */
+  enabled?: boolean;
 }
 
 export interface VroPluginList {
