@@ -2124,6 +2124,69 @@ test("category and plugin clients parse attribute links", async () => {
   );
 });
 
+test("vra8 platform lists plugins from the flat { plugins, total } envelope", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    // The vRO embedded in vRA 8.18 answers GET /vco/api/plugins with a flat
+    // array of plugin descriptors instead of the link/attributes envelope.
+    return Response.json({
+      plugins: [
+        {
+          buildNumber: "1001",
+          description: "Core library",
+          enabled: true,
+          fileName: "o11nplugin-library.dar",
+          id: "Library",
+          logLevel: "DEFAULT",
+          moduleName: "Library",
+          version: "8.18.1",
+        },
+        {
+          buildNumber: "1002",
+          description: "SSH access",
+          enabled: false,
+          fileName: "o11nplugin-ssh.dar",
+          id: "SSH",
+          logLevel: "DEFAULT",
+          moduleName: "SSH",
+          version: "8.18.1",
+        },
+      ],
+      total: 2,
+    });
+  };
+
+  const client = new VroClient(config({ targetPlatform: "vra8" }));
+  const plugins = await client.listPlugins();
+
+  assert.equal(calls.length, 1);
+  assert.equal(
+    calls[0].url,
+    "https://vcfa.example.test/vco/api/plugins?maxResult=100&startIndex=0&queryCount=true",
+  );
+  assert.equal(plugins.total, 2);
+  assert.deepEqual(plugins.link, [
+    {
+      name: "Library",
+      displayName: undefined,
+      version: "8.18.1",
+      description: "Core library",
+      type: undefined,
+      enabled: true,
+    },
+    {
+      name: "SSH",
+      displayName: undefined,
+      version: "8.18.1",
+      description: "SSH access",
+      type: undefined,
+      enabled: false,
+    },
+  ]);
+  assert.ok(!("truncated" in plugins));
+});
+
 test("listConfigurations with categoryId fetches category relations and filters ConfigurationElements", async () => {
   const calls = [];
   globalThis.fetch = async (url, init) => {

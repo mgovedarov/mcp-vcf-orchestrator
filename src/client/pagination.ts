@@ -7,6 +7,8 @@ interface VroPage<T> {
   link?: T[];
   start?: number;
   total?: number;
+  /** Endpoint-specific item arrays selected via `itemKeys` (e.g. `plugins`). */
+  [key: string]: unknown;
 }
 
 interface AutomationPage<T> {
@@ -90,6 +92,22 @@ function hashPageItems(items: unknown): string {
   return `${h1 >>> 0}:${h2 >>> 0}`;
 }
 
+const DEFAULT_ITEM_KEYS: readonly string[] = ["link"];
+
+/**
+ * Most vRO list endpoints return page items under `link`. A few answer a flat
+ * envelope instead — the vRO embedded in vRA 8 serves `GET /vco/api/plugins`
+ * as `{ plugins: [...], total }` — so callers may name alternative keys. They
+ * are tried in order and the first array found is the page.
+ */
+function pageItems<T>(page: VroPage<T>, itemKeys: readonly string[]): T[] {
+  for (const key of itemKeys) {
+    const value = page[key];
+    if (Array.isArray(value)) return value as T[];
+  }
+  return [];
+}
+
 export async function getAllVroPages<T>(
   http: VroHttpClient,
   path: string,
@@ -98,10 +116,13 @@ export async function getAllVroPages<T>(
     pageSize?: number;
     queryCount?: boolean;
     maxPageRequests?: number;
+    /** Response keys that may hold the page items, tried in order. Defaults to `["link"]`. */
+    itemKeys?: readonly string[];
   } = {},
 ): Promise<VroPageResult<T>> {
   const pageSize = options.pageSize ?? DEFAULT_PAGE_SIZE;
   const maxPageRequests = options.maxPageRequests ?? MAX_PAGE_REQUESTS;
+  const itemKeys = options.itemKeys ?? DEFAULT_ITEM_KEYS;
   let queryCount = options.queryCount ?? true;
   const link: T[] = [];
   let start = 0;
@@ -128,7 +149,7 @@ export async function getAllVroPages<T>(
       reportedTotal = undefined;
       page = await http.get<VroPage<T>>(buildPagePath(false));
     }
-    const items = page.link ?? [];
+    const items = pageItems(page, itemKeys);
     if (firstStart === undefined) firstStart = page.start;
     if (queryCount && page.total !== undefined) reportedTotal = page.total;
 

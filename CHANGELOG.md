@@ -12,6 +12,10 @@
 
 - Enabled Dependabot security updates on the repository, so transitive advisories now get their own pull requests instead of waiting for the monthly grouped version updates.
 
+### Fixed
+
+- `list-plugins` no longer reports "No plugins found." against the vRO embedded in vRA 8 (`VCFA_TARGET_PLATFORM=vra8`). That server answers `GET /vco/api/plugins` with a flat `{ plugins: [...], total }` envelope instead of the `link`/`attributes` listing the other vRO list endpoints use, so the shared paginator saw zero items. The paginator now accepts endpoint-specific item keys and the plugin client reads both shapes, mapping the flat descriptor's `moduleName` (falling back to `id`), `version`, `description`, and `enabled` onto the existing plugin summary; a plugin the server reports as disabled is rendered with a `[disabled]` marker. `buildNumber`, `fileName`, and `logLevel` are not surfaced. Because that endpoint also ignores the `conditions` query (every name filter returned the full inventory), the `filter` argument is applied client-side to flat descriptors as a case-insensitive substring match on the module name, and the reported total then counts the matches; attribute listings keep the server-side filter (VCFO-069).
+
 ## 3.0.0 - 2026-09-10
 
 This release drops end-of-life Node.js 18 and 20, routes all HTTP through the npm `undici` 8 client (fixing multipart artifact imports), adds project discovery (`list-projects`, `get-project`) and `update-action`, hardens the action tool surface and input-form authoring, and is the first version published since 2.2.1: the 2.2.2 and 2.2.3 sections below were recorded in this changelog but never tagged or published to npm, so their changes ship here as well.

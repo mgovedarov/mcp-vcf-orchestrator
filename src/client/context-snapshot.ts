@@ -735,6 +735,7 @@ function summarizePlugin(plugin: VroPlugin) {
     description: plugin.description,
     version: plugin.version,
     type: plugin.type,
+    enabled: plugin.enabled,
   });
 }
 

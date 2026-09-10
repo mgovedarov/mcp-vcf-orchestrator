@@ -75,6 +75,8 @@ test("category and plugin tools handle empty and formatted lists", async () => {
           version: "1.0.0",
           description: "Built-in workflows",
         },
+        // Flat vRA 8 descriptor shape: no displayName, state reported.
+        { name: "SSH", version: "8.18.1", enabled: false },
       ],
     }),
   });
@@ -92,9 +94,15 @@ test("category and plugin tools handle empty and formatted lists", async () => {
   assert.match(categories.content[0].text, /path: \/Library\/Provisioning/);
 
   const plugins = await pluginHandlers.get("list-plugins")({});
+  assert.match(plugins.content[0].text, /^Found 2 plugin\(s\):/);
   assert.match(
     plugins.content[0].text,
-    /VMware Library \(com\.vmware\.library\) v1\.0\.0/,
+    /• VMware Library \(com\.vmware\.library\) v1\.0\.0 — Built-in workflows$/m,
+  );
+  assert.match(plugins.content[0].text, /• SSH v8\.18\.1 \[disabled\]$/m);
+  assert.doesNotMatch(
+    plugins.content[0].text,
+    /VMware Library[^\n]*\[disabled\]/,
   );
 });
 
