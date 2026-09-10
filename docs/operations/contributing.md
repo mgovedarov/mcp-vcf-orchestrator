@@ -46,11 +46,17 @@ Docs live under `docs/` and are built with VitePress.
 - Distinguish read-only discovery from live write or destructive operations.
 - Run `npm run validate:docs` and `npm run docs:build` before opening a docs PR.
 
-### The `vite` Override
+### Dependency Overrides
 
 `package.json` carries a single dependency override, `vite`. It exists because `vitepress` 1.6.4 declares `vite@^5.4.14`, and the 5.x line no longer receives the security patches the project needs, so the docs toolchain is pushed onto the 6.x line instead. `@vitejs/plugin-vue`, which `vitepress` pins, accepts `vite@^5.0.0 || ^6.0.0`, so 6.x is within range; 7.x and 8.x are not, and would need a second cascading override.
 
 Keep it a caret range rather than an exact version. Dependabot never edits an `overrides` block, so an exact pin silently blocks it from fixing vite advisories and the work falls back to a manual lockfile regeneration (see VCFO-066). A range lets Dependabot patch within the major on its own. The VitePress config is deliberately vanilla, with no `vite` block and no custom theme, so `npm run docs:build` in CI is a sufficient check on a vite bump.
+
+An `esbuild` override sat alongside it until VCFO-066. Do not re-add one. It began as a security floor, when esbuild 0.24.2 and earlier were vulnerable, and outlived its purpose: `vite` declares `esbuild@^0.25.0` and reaches a patched version on its own, while `tsx` declares `esbuild@~0.28.0` and was being held three minor versions back by the floor. Both consumers now resolve to non-vulnerable versions unaided, and the two land on different versions, which is why `npm ls esbuild` shows one copy under `tsx` and another under `vite`.
+
+The general rule both cases point at: reach for an override only when a dependency's own declared range cannot get you to a safe version, express it as a range, and write down here why it exists. An override with no recorded rationale is indistinguishable from an accident a year later.
+
+To check a lockfile against the overrides without network access, `npm ls --package-lock-only <package>` resolves from `package-lock.json` alone and reports an `invalid` marker when a resolved version does not satisfy the override, which is the same condition that makes `npm ci` fail.
 
 ## GitHub Actions
 
