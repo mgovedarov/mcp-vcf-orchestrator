@@ -1087,6 +1087,8 @@ Delete a vRO package by its fully qualified name. Optionally delete all workflow
 
 List installed plugins in VCF Automation Orchestrator. Optionally filter by name substring.
 
+Reads both the VCF Automation 9.x `link`/`attributes` listing and the flat `{ plugins: [...], total }` envelope served by the vRO embedded in vRA 8 (`vra8` mode). That endpoint ignores the `conditions` query, so in `vra8` mode the filter is applied client-side as a case-insensitive substring match on the plugin module name. A plugin the server reports as disabled is marked `[disabled]`.
+
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |

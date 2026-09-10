@@ -36,6 +36,7 @@ export function registerPluginTools(
           let line = `• ${label}`;
           if (p.name !== label) line += ` (${p.name})`;
           if (p.version) line += ` v${p.version}`;
+          if (p.enabled === false) line += " [disabled]";
           if (p.description) line += ` — ${p.description}`;
           return line;
         });

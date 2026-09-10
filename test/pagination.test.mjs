@@ -103,3 +103,58 @@ test("getAllAutomationPages omits truncated when the server reports the last pag
   assert.equal(result.totalElements, 3);
   assert.ok(!("truncated" in result));
 });
+
+test("getAllVroPages reads items from alternative itemKeys and paginates a flat envelope", async () => {
+  const requested = [];
+  const flatStub = {
+    get: async (path) => {
+      const startIndex = Number(
+        new URL(`https://example.test${path}`).searchParams.get("startIndex"),
+      );
+      requested.push(startIndex);
+      return {
+        plugins: startIndex < 3 ? [{ id: `plugin-${startIndex}` }] : [],
+        total: 3,
+      };
+    },
+  };
+
+  const result = await getAllVroPages(flatStub, "/plugins", undefined, {
+    pageSize: 1,
+    itemKeys: ["link", "plugins"],
+  });
+
+  assert.deepEqual(
+    result.link.map((item) => item.id),
+    ["plugin-0", "plugin-1", "plugin-2"],
+  );
+  assert.equal(result.total, 3);
+  assert.deepEqual(requested, [0, 1, 2]);
+  assert.ok(!("truncated" in result));
+});
+
+test("getAllVroPages prefers link when both link and an alternative key are present", async () => {
+  const stub = {
+    get: async () => ({
+      link: [{ id: "from-link" }],
+      plugins: [{ id: "from-plugins" }],
+      total: 1,
+    }),
+  };
+
+  const result = await getAllVroPages(stub, "/plugins", undefined, {
+    itemKeys: ["link", "plugins"],
+  });
+
+  assert.deepEqual(result.link, [{ id: "from-link" }]);
+});
+
+test("getAllVroPages ignores non-link arrays unless itemKeys names them", async () => {
+  const stub = {
+    get: async () => ({ plugins: [{ id: "plugin-0" }], total: 1 }),
+  };
+
+  const result = await getAllVroPages(stub, "/plugins");
+
+  assert.deepEqual(result.link, []);
+});

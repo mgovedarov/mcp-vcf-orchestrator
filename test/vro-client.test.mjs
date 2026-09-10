@@ -2124,6 +2124,86 @@ test("category and plugin clients parse attribute links", async () => {
   );
 });
 
+test("vra8 platform lists plugins from the flat { plugins, total } envelope", async () => {
+  const calls = [];
+  const pluginsUrl =
+    "https://vcfa.example.test/vco/api/plugins?maxResult=100&startIndex=0&queryCount=true";
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    // Keep this test independent of how vra8 authenticates: Basic auth makes
+    // no login call, while the CSP/IaaS bearer flow (VCFO-067) makes two, so
+    // any non-plugins request gets a body that satisfies both login steps.
+    if (!String(url).includes("/vco/api/plugins")) {
+      return Response.json({
+        refresh_token: "refresh",
+        token: "jwt",
+        tokenType: "Bearer",
+      });
+    }
+    // The vRO embedded in vRA 8.18 answers GET /vco/api/plugins with a flat
+    // array of plugin descriptors instead of the link/attributes envelope.
+    return Response.json({
+      plugins: [
+        {
+          buildNumber: "1001",
+          description: "Core library",
+          enabled: true,
+          fileName: "o11nplugin-library.dar",
+          id: "Library",
+          logLevel: "DEFAULT",
+          moduleName: "Library",
+          version: "8.18.1",
+        },
+        {
+          buildNumber: "1002",
+          description: "SSH access",
+          enabled: false,
+          fileName: "o11nplugin-ssh.dar",
+          id: "SSH",
+          logLevel: "DEFAULT",
+          moduleName: "SSH",
+          version: "8.18.1",
+        },
+      ],
+      total: 2,
+    });
+  };
+
+  const client = new VroClient(config({ targetPlatform: "vra8" }));
+  const plugins = await client.listPlugins();
+
+  const pageRequests = calls.filter((call) =>
+    call.url.includes("/vco/api/plugins"),
+  );
+  assert.equal(pageRequests.length, 1, "one page serves the whole inventory");
+  assert.equal(pageRequests[0].url, pluginsUrl);
+  assert.equal(calls.at(-1).url, pluginsUrl, "login calls, if any, come first");
+  assert.match(
+    pageRequests[0].init.headers.Authorization,
+    /^(Basic|Bearer) \S+$/,
+  );
+  assert.equal(plugins.total, 2);
+  assert.deepEqual(plugins.link, [
+    {
+      name: "Library",
+      displayName: undefined,
+      version: "8.18.1",
+      description: "Core library",
+      type: undefined,
+      enabled: true,
+    },
+    {
+      name: "SSH",
+      displayName: undefined,
+      version: "8.18.1",
+      description: "SSH access",
+      type: undefined,
+      enabled: false,
+    },
+  ]);
+  assert.ok(!("truncated" in plugins));
+});
+
 test("listConfigurations with categoryId fetches category relations and filters ConfigurationElements", async () => {
   const calls = [];
   globalThis.fetch = async (url, init) => {
