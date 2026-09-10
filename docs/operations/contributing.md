@@ -46,6 +46,12 @@ Docs live under `docs/` and are built with VitePress.
 - Distinguish read-only discovery from live write or destructive operations.
 - Run `npm run validate:docs` and `npm run docs:build` before opening a docs PR.
 
+### The `vite` Override
+
+`package.json` carries a single dependency override, `vite`. It exists because `vitepress` 1.6.4 declares `vite@^5.4.14`, and the 5.x line no longer receives the security patches the project needs, so the docs toolchain is pushed onto the 6.x line instead. `@vitejs/plugin-vue`, which `vitepress` pins, accepts `vite@^5.0.0 || ^6.0.0`, so 6.x is within range; 7.x and 8.x are not, and would need a second cascading override.
+
+Keep it a caret range rather than an exact version. Dependabot never edits an `overrides` block, so an exact pin silently blocks it from fixing vite advisories and the work falls back to a manual lockfile regeneration (see VCFO-066). A range lets Dependabot patch within the major on its own. The VitePress config is deliberately vanilla, with no `vite` block and no custom theme, so `npm run docs:build` in CI is a sufficient check on a vite bump.
+
 ## GitHub Actions
 
 The repository uses GitHub Actions for CI, dependency review, CodeQL analysis, package dry-runs, documentation deployment, and npm publishing. Keep workflow changes narrow and prefer official GitHub/npm actions where possible.
