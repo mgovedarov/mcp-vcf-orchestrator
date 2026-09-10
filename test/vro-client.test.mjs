@@ -2126,8 +2126,20 @@ test("category and plugin clients parse attribute links", async () => {
 
 test("vra8 platform lists plugins from the flat { plugins, total } envelope", async () => {
   const calls = [];
+  const pluginsUrl =
+    "https://vcfa.example.test/vco/api/plugins?maxResult=100&startIndex=0&queryCount=true";
   globalThis.fetch = async (url, init) => {
     calls.push({ url: String(url), init });
+    // Keep this test independent of how vra8 authenticates: Basic auth makes
+    // no login call, while the CSP/IaaS bearer flow (VCFO-067) makes two, so
+    // any non-plugins request gets a body that satisfies both login steps.
+    if (!String(url).includes("/vco/api/plugins")) {
+      return Response.json({
+        refresh_token: "refresh",
+        token: "jwt",
+        tokenType: "Bearer",
+      });
+    }
     // The vRO embedded in vRA 8.18 answers GET /vco/api/plugins with a flat
     // array of plugin descriptors instead of the link/attributes envelope.
     return Response.json({
@@ -2160,10 +2172,15 @@ test("vra8 platform lists plugins from the flat { plugins, total } envelope", as
   const client = new VroClient(config({ targetPlatform: "vra8" }));
   const plugins = await client.listPlugins();
 
-  assert.equal(calls.length, 1);
-  assert.equal(
-    calls[0].url,
-    "https://vcfa.example.test/vco/api/plugins?maxResult=100&startIndex=0&queryCount=true",
+  const pageRequests = calls.filter((call) =>
+    call.url.includes("/vco/api/plugins"),
+  );
+  assert.equal(pageRequests.length, 1, "one page serves the whole inventory");
+  assert.equal(pageRequests[0].url, pluginsUrl);
+  assert.equal(calls.at(-1).url, pluginsUrl, "login calls, if any, come first");
+  assert.match(
+    pageRequests[0].init.headers.Authorization,
+    /^(Basic|Bearer) \S+$/,
   );
   assert.equal(plugins.total, 2);
   assert.deepEqual(plugins.link, [
