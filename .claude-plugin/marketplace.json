@@ -10,7 +10,7 @@
       "name": "vcfa-orchestrator",
       "source": "./",
       "description": "Skills for safely working with the VCF Automation Orchestrator MCP server: discovery-first authoring, package-first publishing, and guided troubleshooting.",
-      "version": "3.0.0",
+      "version": "3.1.0",
       "license": "Apache-2.0",
       "keywords": ["mcp", "vcf", "vro", "orchestrator", "vmware", "automation"]
     }
