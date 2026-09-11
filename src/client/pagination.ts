@@ -220,7 +220,17 @@ export async function getAllVroPages<T>(
   }
 
   const truncated = requestCount >= maxPageRequests;
-  const matchingTotal = options.itemFilter ? undefined : reportedTotal;
+  // A server total counts what the server returned, so it is a matching total
+  // only when the local filter dropped nothing — every raw row passed it, which
+  // is what a server that honored `conditions` sends back. Otherwise it counts
+  // the unfiltered inventory and must not be reported as a match count. A
+  // completed walk reaches the same number through the `link.length` fallback
+  // below; this keeps the count when a honored filter has more matches than the
+  // item limit, which stops the walk early. An ignored filter that every
+  // fetched row happens to satisfy can still overstate the tail, so treat this
+  // as an upper bound rather than a proof the server filtered.
+  const matchingTotal =
+    options.itemFilter && rawCount !== link.length ? undefined : reportedTotal;
   const total = matchingTotal ?? (maxItems === undefined || complete ? link.length : undefined);
   let limited = false;
   if (maxItems !== undefined) {
@@ -292,8 +302,9 @@ export async function getFilteredVroList<
   // No filter: the server total describes exactly what was requested. Filter
   // without a limit: the server total describes the unfiltered inventory, so
   // report the match count instead. Filter with a limit: getAllVroPages
-  // already suppressed the server total and reported the match count, or
-  // omitted it when the walk stopped before proving one.
+  // already reported the match count, kept the server total where the filter
+  // was honored server-side, or omitted it when the walk stopped before
+  // proving one.
   const total =
     needle === undefined ? raw.total : limit === undefined ? link.length : raw.total;
   return {

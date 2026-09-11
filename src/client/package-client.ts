@@ -29,8 +29,12 @@ export class PackageClient {
 
   async listPackages(filter?: string, options?: ListOptions): Promise<VroPackageList> {
     const params = new URLSearchParams();
-    if (filter) {
-      params.set("conditions", `name~${filter}`);
+    // Trimmed so the server-side query and the client-side needle agree on
+    // what counts as a filter: a blank one is neither sent nor matched, and a
+    // padded one selects the same names on both. See getFilteredVroList.
+    const trimmedFilter = filter?.trim();
+    if (trimmedFilter) {
+      params.set("conditions", `name~${trimmedFilter}`);
     }
     const raw = await getFilteredVroList<
       { attributes?: { name: string; value: string }[] },
@@ -47,7 +51,7 @@ export class PackageClient {
           version: a["version"],
         };
       },
-      filter,
+      trimmedFilter,
       options?.limit,
     );
     return {

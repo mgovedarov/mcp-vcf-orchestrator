@@ -15,8 +15,12 @@ export class ResourceClient {
 
   async listResources(filter?: string, options?: ListOptions): Promise<ResourceElementList> {
     const params = new URLSearchParams();
-    if (filter) {
-      params.set("conditions", `name~${filter}`);
+    // Trimmed so the server-side query and the client-side needle agree on
+    // what counts as a filter: a blank one is neither sent nor matched, and a
+    // padded one selects the same names on both. See getFilteredVroList.
+    const trimmedFilter = filter?.trim();
+    if (trimmedFilter) {
+      params.set("conditions", `name~${trimmedFilter}`);
     }
     const raw = await getFilteredVroList<AttributeLink, ResourceElement>(
       this.http,
@@ -36,7 +40,7 @@ export class ResourceClient {
           href: item.href,
         };
       },
-      filter,
+      trimmedFilter,
       options?.limit,
     );
     return {
