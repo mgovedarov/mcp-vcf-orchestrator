@@ -8,7 +8,7 @@ Tools are grouped by operating domain. Each tool carries an MCP annotation hint 
 
 Each tool lists its input schema in a collapsible parameters section. Required confirmation fields such as `confirm` must be set to `true` before the tool performs the write or destructive operation.
 
-Discovery list tools automatically follow server-side pagination for both vRO `/vco/api` list responses and VCF Automation service pages. Tool inputs stay focused on filters and selectors; callers do not need to provide page cursors for normal discovery. If a listing stops at the pagination request cap before reaching the server's full total, the result carries a `truncated` flag and the tool output ends with a visible truncation warning (and context snapshots record a per-domain warning) instead of silently returning partial data.
+Discovery list tools automatically follow server-side pagination for both vRO `/vco/api` list responses and VCF Automation service pages. Tool inputs stay focused on filters and selectors; callers do not need to provide page cursors for normal discovery. If a listing stops at the pagination request cap before reaching the server's full total, the result carries a `truncated` flag and the tool output ends with a visible truncation warning (and context snapshots record a per-domain warning) instead of silently returning partial data. `list-workflows` also accepts an optional `limit` to cap the number of items returned; when it drops items that exist on the server, the result carries a `limited` flag and the tool output ends with a visible notice.
 
 ## Two-Phase Confirmation Fields
 
@@ -101,6 +101,7 @@ List workflows from VCF Automation Orchestrator. Optionally filter by name subst
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `filter` | string | No | - | Filter workflows by name using a substring match. |
+| `limit` | integer | No | - | Maximum number of items to return (1–1000). Omit for the full inventory. |
 :::
 
 ### `list-workflows-by-category`

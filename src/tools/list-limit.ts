@@ -22,10 +22,6 @@ export function limitNote(
   total?: number,
 ): string {
   if (!list.limited) return "";
-  const reportedTotal =
-    total !== undefined && total > shown ? ` of ${total}` : "";
-  if (reportedTotal) {
-    return `\n\nℹ️ Showing the first ${shown}${reportedTotal} item(s) (limit ${shown}). Raise limit or narrow the query with a filter to see the rest.`;
-  }
-  return `\n\nℹ️ Showing the first ${shown} item(s) (limit ${shown}); the server did not report a total, so more exist. Raise limit or narrow the query with a filter to see the rest.`;
+  const ofTotal = total !== undefined && total > shown ? ` of ~${total}` : "";
+  return `\n\n⚠️ Results limited: showing the first ${shown}${ofTotal} item(s) (limit ${shown}). Raise the limit or narrow the query with a filter to see the rest.`;
 }

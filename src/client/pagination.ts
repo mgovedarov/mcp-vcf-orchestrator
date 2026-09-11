@@ -113,6 +113,17 @@ function pageItems<T>(page: VroPage<T>, itemKeys: readonly string[]): T[] {
 }
 
 /**
+ * A reported total is only usable when the server actually knows it; some
+ * endpoints (e.g. vRA 8's `/workflows`) send `-1` as an "unknown count"
+ * sentinel, which must be treated the same as no total at all.
+ */
+function knownTotal(reportedTotal: number | undefined): number | undefined {
+  return reportedTotal !== undefined && reportedTotal >= 0
+    ? reportedTotal
+    : undefined;
+}
+
+/**
  * Applies an item limit to a client-side-filtered list, slicing to the limit
  * and reporting whether items were dropped.
  */
@@ -195,15 +206,8 @@ export async function getAllVroPages<T>(
 
     // NEW: early stop when limit is reached
     if (maxItems !== undefined) {
-      const knownTotal =
-        reportedTotal !== undefined && reportedTotal >= 0
-          ? reportedTotal
-          : undefined;
-      if (
-        knownTotal !== undefined
-          ? link.length >= maxItems
-          : link.length > maxItems
-      ) {
+      const haveKnownTotal = knownTotal(reportedTotal) !== undefined;
+      if (haveKnownTotal ? link.length >= maxItems : link.length > maxItems) {
         break;
       }
     }
@@ -212,22 +216,19 @@ export async function getAllVroPages<T>(
   }
 
   const truncated = requestCount >= maxPageRequests;
+  const total = reportedTotal ?? link.length;
   // NEW: compute limited flag
   let limited = false;
   if (maxItems !== undefined) {
-    const knownTotal =
-      reportedTotal !== undefined && reportedTotal >= 0
-        ? reportedTotal
-        : undefined;
-    limited =
-      knownTotal !== undefined ? knownTotal > maxItems : link.length > maxItems;
+    const known = knownTotal(reportedTotal);
+    limited = known !== undefined ? known > maxItems : link.length > maxItems;
     if (link.length > maxItems) link.length = maxItems;
   }
 
   return {
     link,
     ...(firstStart !== undefined ? { start: firstStart } : {}),
-    total: reportedTotal ?? link.length,
+    total,
     ...(truncated ? { truncated } : {}),
     ...(limited ? { limited } : {}),
   };
@@ -262,7 +263,8 @@ export async function getAllAutomationPages<T>(
       baseUrl,
     );
     const items = page.content ?? [];
-    if (page.totalElements !== undefined) reportedTotal = page.totalElements;
+    if (page.totalElements !== undefined && page.totalElements >= 0)
+      reportedTotal = page.totalElements;
     if (page.totalPages !== undefined) totalPages = page.totalPages;
 
     if (items.length > 0) {
@@ -291,12 +293,9 @@ export async function getAllAutomationPages<T>(
 
     // NEW: early stop when limit is reached
     if (maxItems !== undefined) {
-      const knownTotal =
-        reportedTotal !== undefined && reportedTotal >= 0
-          ? reportedTotal
-          : undefined;
+      const haveKnownTotal = knownTotal(reportedTotal) !== undefined;
       if (
-        knownTotal !== undefined
+        haveKnownTotal
           ? content.length >= maxItems
           : content.length > maxItems
       ) {
@@ -306,24 +305,20 @@ export async function getAllAutomationPages<T>(
   }
 
   const truncated = pageNumber >= maxPageRequests;
+  const totalElements = reportedTotal ?? content.length;
   // NEW: compute limited flag
   let limited = false;
   if (maxItems !== undefined) {
-    const knownTotal =
-      reportedTotal !== undefined && reportedTotal >= 0
-        ? reportedTotal
-        : undefined;
+    const known = knownTotal(reportedTotal);
     limited =
-      knownTotal !== undefined
-        ? knownTotal > maxItems
-        : content.length > maxItems;
+      known !== undefined ? known > maxItems : content.length > maxItems;
     if (content.length > maxItems) content.length = maxItems;
   }
 
   return {
     content,
     numberOfElements: content.length,
-    totalElements: reportedTotal ?? content.length,
+    totalElements,
     ...(truncated ? { truncated } : {}),
     ...(limited ? { limited } : {}),
   };

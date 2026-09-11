@@ -630,6 +630,85 @@ test("listWorkflows falls back to categories when workflow pages repeat", async 
   );
 });
 
+test("listWorkflows applies limit on the categories fallback", async () => {
+  // A known total (250) that exceeds the limit (150) lets pagination survive
+  // the first page without the new early-stop cutting it short, so the
+  // repeated second page still trips the "did not advance" fallback trigger
+  // exercised by the tests above — this time with `limit` in play.
+  const LIMIT = 150;
+  const WORKFLOW_COUNT = 160;
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+
+    const requestUrl = new URL(String(url));
+    if (requestUrl.pathname.endsWith("/workflows")) {
+      return Response.json({
+        start: 0,
+        total: 250,
+        link: Array.from({ length: 100 }, (_, index) => ({
+          attributes: [
+            { name: "id", value: `repeated-${index}` },
+            { name: "name", value: `Repeated ${index}` },
+          ],
+        })),
+      });
+    }
+
+    if (requestUrl.pathname.endsWith("/categories")) {
+      return Response.json({
+        total: 1,
+        link: [
+          {
+            attributes: [
+              { name: "id", value: "root" },
+              { name: "name", value: "Root" },
+              { name: "type", value: "WorkflowCategory" },
+            ],
+          },
+        ],
+      });
+    }
+
+    if (requestUrl.pathname.endsWith("/categories/root")) {
+      return Response.json({
+        id: "root",
+        name: "Root",
+        type: "WorkflowCategory",
+        relations: {
+          link: Array.from({ length: WORKFLOW_COUNT }, (_, index) => {
+            const id = `workflow-${String(index).padStart(3, "0")}`;
+            return {
+              rel: "down",
+              attributes: [
+                { name: "type", value: "Workflow" },
+                { name: "id", value: id },
+                { name: "name", value: id },
+              ],
+            };
+          }),
+        },
+      });
+    }
+
+    throw new Error(`Unexpected URL: ${url}`);
+  };
+
+  const client = new VroClient(config());
+  const workflows = await client.listWorkflows(undefined, { limit: LIMIT });
+
+  assert.equal(workflows.link.length, LIMIT);
+  assert.equal(workflows.limited, true);
+  assert.equal(
+    workflows.total,
+    WORKFLOW_COUNT,
+    "total reflects the full matched count, not the capped one",
+  );
+  assert.equal(workflows.link[0].id, "workflow-000");
+  assert.equal(workflows.link[LIMIT - 1].id, "workflow-149");
+});
+
 test("listWorkflows falls back to categories when counted workflow pages repeat", async () => {
   const calls = [];
   globalThis.fetch = async (url, init) => {

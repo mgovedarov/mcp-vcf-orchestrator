@@ -36,7 +36,7 @@ import {
   rejectSymlink,
   resolveFileInDirectory,
 } from "./files.js";
-import { getAllVroPages } from "./pagination.js";
+import { applyListLimit, getAllVroPages } from "./pagination.js";
 import { toVroParameters } from "./parameters.js";
 import { buildWorkflowArtifact } from "./workflow-artifact.js";
 
@@ -520,7 +520,10 @@ export class WorkflowClient {
     return { groups, truncated: false };
   }
 
-  private async listWorkflowsFromCategories(filter?: string): Promise<WorkflowList> {
+  private async listWorkflowsFromCategories(
+    filter?: string,
+    options?: ListOptions,
+  ): Promise<WorkflowList> {
     const rawCategories = await getAllVroPages<{
       href?: string;
       attributes?: { name: string; value: string }[];
@@ -549,13 +552,15 @@ export class WorkflowClient {
       }
     }
 
-    const link = [...workflowsById.values()].sort((a, b) =>
+    const sorted = [...workflowsById.values()].sort((a, b) =>
       a.name.localeCompare(b.name),
     );
+    const { items: link, limited } = applyListLimit(sorted, options?.limit);
     return {
-      total: link.length,
+      total: sorted.length,
       link,
       ...(rawCategories.truncated ? { truncated: true } : {}),
+      ...(limited ? { limited: true } : {}),
     };
   }
 
@@ -576,7 +581,7 @@ export class WorkflowClient {
       }>(this.http, "/workflows", params, { maxItems: options?.limit });
     } catch (error) {
       if (!isWorkflowListPaginationFailure(error)) throw error;
-      return this.listWorkflowsFromCategories(filter);
+      return this.listWorkflowsFromCategories(filter, options);
     }
     const link: Workflow[] = (raw.link ?? []).map((item) => {
       const a = parseAttrs(item.attributes);
