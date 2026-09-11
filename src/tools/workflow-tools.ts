@@ -27,6 +27,7 @@ import {
 import type { VroClient } from "../vro-client.js";
 import { truncationNote } from "./truncation.js";
 import { listLimitSchema, limitNote } from "./list-limit.js";
+import { formatVroValue } from "./parameter-values.js";
 
 const DEFAULT_WORKFLOW_WAIT_TIMEOUT_SECONDS = 300;
 const DEFAULT_WORKFLOW_POLL_INTERVAL_SECONDS = 2;
@@ -111,29 +112,6 @@ export function getExecutionOutputParameters(
   return execution.outputParameters ?? execution["output-parameters"] ?? [];
 }
 
-export function unwrapVroParameterValue(parameter: VroParameter): unknown {
-  const value = parameter.value;
-  if (value === undefined || value === null || typeof value !== "object") {
-    return value;
-  }
-
-  const byType = value[parameter.type];
-  if (hasValueProperty(byType)) {
-    return byType.value;
-  }
-
-  const entries = Object.values(value);
-  if (entries.length === 1 && hasValueProperty(entries[0])) {
-    return entries[0].value;
-  }
-
-  return value;
-}
-
-function hasValueProperty(value: unknown): value is { value: unknown } {
-  return typeof value === "object" && value !== null && "value" in value;
-}
-
 function formatWorkflowsByCategory(result: WorkflowsByCategoryResult): string {
   const root = result.rootCategory.path ?? result.rootCategory.name;
   const header = `Found ${result.workflowCount} workflow(s) under ${root} (id: ${result.rootCategory.id})`;
@@ -191,11 +169,6 @@ function sleep(ms: number): Promise<void> {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-function stringifyValue(value: unknown): string {
-  const json = JSON.stringify(value);
-  return json === undefined ? String(value) : json;
 }
 
 function validateParameterValue(type: string, value: unknown): string | null {
@@ -347,8 +320,7 @@ function formatOutputParameters(execution: WorkflowExecution): string {
   }
 
   const lines = outputs.map(
-    (p) =>
-      `  • ${p.name} (${p.type}): ${stringifyValue(unwrapVroParameterValue(p))}`,
+    (p) => `  • ${p.name} (${p.type}): ${formatVroValue(p.value, p.type)}`,
   );
   return `Output Parameters:\n${lines.join("\n")}`;
 }
@@ -1025,7 +997,7 @@ export function registerWorkflowTools(
         if (outputs.length > 0) {
           text += `\nOutput Parameters:\n`;
           for (const p of outputs) {
-            text += `  • ${p.name} (${p.type}): ${stringifyValue(unwrapVroParameterValue(p))}\n`;
+            text += `  • ${p.name} (${p.type}): ${formatVroValue(p.value, p.type)}\n`;
           }
         }
         return { content: [{ type: "text", text }] };

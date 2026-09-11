@@ -522,7 +522,11 @@ List configuration elements from VCF Automation Orchestrator. Optionally filter 
 
 ### `get-configuration`
 
-Get detailed information about a specific configuration element including its attributes. Secure-typed attribute values (e.g. `SecureString`) are redacted in the output and shown as `[redacted]`, consistent with the context-snapshot redaction policy.
+Get detailed information about a specific configuration element including its attributes.
+
+Attribute values are printed as values, not as the vRO type envelope they arrive in: a `string` reads `"probe-2"`, an `Array/string` reads `["one"]`, and an SDK-object attribute reads its `{type, href, id}` descriptor. An envelope shape the server has not seen before is printed raw rather than guessed at. An attribute vRO returned with no value at all — the built-in `BatchAction` element declares several — reads `(no value)`; an attribute holding `""`, `0` or `false` prints that value.
+
+Secure-typed attribute values (e.g. `SecureString`) are redacted in the output and shown as `[redacted]`, consistent with the context-snapshot redaction policy, as is any attribute whose value arrives in a secure or encrypted envelope regardless of its declared type.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
