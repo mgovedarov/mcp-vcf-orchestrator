@@ -706,7 +706,7 @@ List VCF Automation projects so agents can resolve the `projectId` consumed by `
 
 ### `get-project`
 
-Get details for a specific project by its ID. Use `list-projects` to discover project IDs.
+Get details for a specific project by its ID. Beyond the name, ID, and description the output renders the fields the project-service response carries: the owning organization ID, the shared-resources flag, the operation timeout, the machine naming template and placement policy, custom properties (a value is shown as `[redacted]` when its key suggests a password, token, secret, credential, or key), the administrators, members, viewers, and supervisors, and a per-kind count of placement constraints. Sections the response does not carry are omitted. Cloud zones are not part of the project-service view and are not shown. The endpoint, page envelope, and `page`/`size` pagination were lab-verified on vRA 8.18 in `vra8` mode (VCFO-065); the VCFA 9.x check is still open. Use `list-projects` to discover project IDs.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |

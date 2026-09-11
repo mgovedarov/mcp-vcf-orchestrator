@@ -134,6 +134,76 @@ test("get-project renders id, name, and optional description", async () => {
   assert.equal(withoutDescription.content[0].text, "Project: Prod\nID: p-2\n");
 });
 
+test("get-project renders the project-service fields verified on vRA 8.18", async () => {
+  // Shape observed on the vRA 8.18 lab under VCFO-065 (names and IDs only).
+  const handlers = registeredTools(registerProjectTools, {
+    getProject: async (id) => ({
+      id,
+      name: "Development",
+      description: "",
+      orgId: "org-1",
+      administrators: [],
+      members: [{ email: "dev@example.test", type: "user" }],
+      viewers: [{ email: "ops@example.test", type: "group" }, {}],
+      supervisors: [],
+      constraints: { network: [{ mandatory: true }], storage: [] },
+      properties: {
+        __namingTemplate: "${project.name}-${###}",
+        __projectPlacementPolicy: "DEFAULT",
+        costCenter: "CC-42",
+        vaultToken: "must-not-print",
+        tags: ["a", "b"],
+      },
+      operationTimeout: 7200,
+      sharedResources: false,
+    }),
+  });
+
+  const result = await handlers.get("get-project")({ id: "p-1" });
+  assert.equal(result.isError, undefined);
+  assert.equal(
+    result.content[0].text,
+    [
+      "Project: Development",
+      "ID: p-1",
+      "Organization ID: org-1",
+      "Shared resources: no",
+      "Operation timeout: 7200s",
+      "Machine naming template: ${project.name}-${###}",
+      "Placement policy: DEFAULT",
+      "Custom properties:",
+      "  costCenter: CC-42",
+      "  vaultToken: [redacted]",
+      '  tags: ["a","b"]',
+      "Administrators: none",
+      "Members: 1 — dev@example.test (user)",
+      "Viewers: 2 — ops@example.test (group), (unnamed)",
+      "Supervisors: none",
+      "Constraints: network 1",
+      "",
+    ].join("\n"),
+  );
+  assert.doesNotMatch(result.content[0].text, /must-not-print/);
+});
+
+test("get-project omits sections the response does not carry", async () => {
+  const handlers = registeredTools(registerProjectTools, {
+    getProject: async (id) => ({
+      id,
+      name: "Sparse",
+      sharedResources: true,
+      constraints: {},
+      properties: {},
+    }),
+  });
+
+  const result = await handlers.get("get-project")({ id: "p-3" });
+  assert.equal(
+    result.content[0].text,
+    "Project: Sparse\nID: p-3\nShared resources: yes\nConstraints: none\n",
+  );
+});
+
 test("project tools return isError text when the client fails", async () => {
   const handlers = registeredTools(registerProjectTools, {
     listProjects: async () => {
