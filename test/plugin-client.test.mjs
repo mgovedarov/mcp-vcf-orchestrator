@@ -30,7 +30,7 @@ test("limited plugin filtering reaches later flat matches and trusts attribute i
     const params = new URL(`https://example.test${path}`).searchParams;
     const start = Number(params.get("startIndex"));
     starts.push(start);
-    assert.equal(params.get("maxResult"), "1");
+    assert.equal(params.get("maxResult"), "100");
     return { plugins: items.slice(start, start + 1), total: items.length };
   } };
   const result = await new PluginClient(http).listPlugins(" MATCH ", { limit: 1 });
@@ -40,7 +40,7 @@ test("limited plugin filtering reaches later flat matches and trusts attribute i
   assert.deepEqual(starts, [0, 1, 2, 3]);
 });
 
-test("limited flat plugins report exact matches when an oversized response completes inventory", async () => {
+test("limited flat plugins report exact matches when a response completes inventory", async () => {
   const http = httpStub({ total: 4, plugins: [
     { moduleName: "other" }, { id: "match-a", enabled: false },
     { moduleName: "match-b" }, { moduleName: "other-last" },

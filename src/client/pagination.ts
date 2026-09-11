@@ -153,7 +153,7 @@ export async function getAllVroPages<T>(
 ): Promise<VroPageResult<T>> {
   const maxItems = options.maxItems;
   const pageSize =
-    maxItems === undefined
+    maxItems === undefined || options.itemFilter
       ? options.pageSize ?? DEFAULT_PAGE_SIZE
       : Math.min(options.pageSize ?? DEFAULT_PAGE_SIZE, maxItems);
   const maxPageRequests = options.maxPageRequests ?? MAX_PAGE_REQUESTS;
@@ -251,7 +251,7 @@ export async function getAllAutomationPages<T>(
 ): Promise<AutomationPageResult<T>> {
   const maxItems = options.maxItems;
   const pageSize =
-    maxItems === undefined
+    maxItems === undefined || options.itemFilter
       ? options.pageSize ?? DEFAULT_PAGE_SIZE
       : Math.min(options.pageSize ?? DEFAULT_PAGE_SIZE, maxItems);
   const maxPageRequests = options.maxPageRequests ?? MAX_PAGE_REQUESTS;

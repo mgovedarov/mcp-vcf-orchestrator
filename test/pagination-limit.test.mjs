@@ -78,6 +78,7 @@ for (const kind of ["vro", "automation"]) {
   test(`${kind}: local filtering counts matches but advances through raw rows`, async () => {
     const fixture = pagedInventory(kind, 100, {
       maxItems: 2,
+      pageSize: 2,
       itemFilter: (item) => item.id >= 6 && item.id % 2 === 0,
     });
     const result = await fixture.run();
@@ -88,13 +89,45 @@ for (const kind of ["vro", "automation"]) {
   });
 
   test(`${kind}: complete local matches have an exact matching total`, async () => {
-    const fixture = pagedInventory(kind, 10, { maxItems: 2, itemFilter: (item) => item.id >= 8 });
+    const fixture = pagedInventory(kind, 10, { maxItems: 2, pageSize: 2, itemFilter: (item) => item.id >= 8 });
     const result = await fixture.run();
     assert.deepEqual(rows(result), [{ id: 8 }, { id: 9 }]);
     assert.equal(total(result), 2);
     assert.equal(result.limited, undefined);
     assert.equal(fixture.calls.length, 5);
   });
+
+  for (const known of [true, false]) {
+    test(`${kind}: a single sparse match does not exhaust the request cap, known=${known}`, async () => {
+      const fixture = pagedInventory(kind, 1002, {
+        known,
+        maxItems: 1,
+        itemFilter: (item) => item.id === 1001,
+      });
+      const result = await fixture.run();
+      assert.deepEqual(rows(result), [{ id: 1001 }]);
+      assert.equal(total(result), 1);
+      assert.equal(result.limited, undefined);
+      assert.equal(result.truncated, undefined);
+      assert.deepEqual(fixture.calls, Array.from({ length: 11 },
+        (_, index) => ({ start: index * 100, size: 100 })));
+    });
+
+    test(`${kind}: sparse filtering stops after proving another match, known=${known}`, async () => {
+      const fixture = pagedInventory(kind, 2000, {
+        known,
+        maxItems: 1,
+        itemFilter: (item) => item.id === 1001 || item.id === 1501,
+      });
+      const result = await fixture.run();
+      assert.deepEqual(rows(result), [{ id: 1001 }]);
+      assert.equal(total(result), undefined);
+      assert.equal(result.limited, true);
+      assert.equal(result.truncated, undefined);
+      assert.deepEqual(fixture.calls, Array.from({ length: 16 },
+        (_, index) => ({ start: index * 100, size: 100 })));
+    });
+  }
 
   test(`${kind}: cap before limit is not a caller limit`, async () => {
     const fixture = pagedInventory(kind, 100, { maxItems: 5, pageSize: 1, maxPageRequests: 2 });
@@ -125,7 +158,7 @@ for (const kind of ["vro", "automation"]) {
 
   test(`${kind}: raw repeats are detected even when no items match`, async () => {
     const http = { get: async () => ({ link: [{ id: 0 }], content: [{ id: 0 }] }) };
-    const options = { maxItems: 1, itemFilter: () => false };
+    const options = { maxItems: 1, pageSize: 1, itemFilter: () => false };
     await assert.rejects(kind === "vro"
       ? getAllVroPages(http, "/things", undefined, options)
       : getAllAutomationPages(http, "/things", "https://example.test", undefined, options), /did not advance/);

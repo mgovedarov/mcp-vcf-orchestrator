@@ -97,10 +97,10 @@ for (const [method, args, endpoint, selectors, automation, localFilter] of inven
         assert.equal((result.link ?? result.content).length, 2);
         assert.equal(result.limited, true);
         assert.equal(result.truncated, undefined);
-        assert.equal(result.total ?? result.totalElements, known && !localFilter ? 8 : undefined);
-        assert.equal(calls.length, known && !localFilter ? 1 : 2);
+        assert.equal(result.total ?? result.totalElements, known || localFilter ? 8 : undefined);
+        assert.equal(calls.length, known || localFilter ? 1 : 2);
         for (const request of calls) {
-          assert.equal(request.searchParams.get(automation ? "size" : "maxResult"), "2");
+          assert.equal(request.searchParams.get(automation ? "size" : "maxResult"), localFilter ? "100" : "2");
           for (const [key, value] of Object.entries(selectors)) assert.equal(request.searchParams.get(key), value);
           if (method === "listActions") assert.equal(request.searchParams.has("conditions"), false);
         }
@@ -121,8 +121,9 @@ test("action limit filters an oversized server response before slicing", async (
   globalThis.fetch = async (url) => {
     if (String(url).includes("/sessions")) return authResponse();
     requests += 1;
-    assert.equal(new URL(String(url)).searchParams.get("maxResult"), "1");
-    return Response.json({ total: 5, link: ["other", "other", "match-a", "match-b", "match-c"].map((name, index) => ({
+    assert.equal(new URL(String(url)).searchParams.get("maxResult"), "100");
+    const names = [...Array(98).fill("other"), "match-a", "match-b", "match-c"];
+    return Response.json({ total: names.length, link: names.map((name, index) => ({
       attributes: [{ name: "id", value: String(index) }, { name: "name", value: name }],
     })) });
   };
@@ -165,31 +166,34 @@ test("configuration category limit follows relation selection and filtering", as
 });
 
 test("limited project search counts late name and description matches after HTTP 400", async () => {
-  const pages = [];
-  globalThis.fetch = async (url) => {
-    const request = new URL(String(url));
-    if (request.pathname.includes("/sessions")) return authResponse();
-    if (request.searchParams.has("$filter")) return Response.json({}, { status: 400 });
-    const page = Number(request.searchParams.get("page"));
-    pages.push(page);
-    assert.equal(request.searchParams.get("size"), "1");
-    const items = [
-      { id: "0", name: "other" }, { id: "1", name: "other" },
-      { id: "2", name: "other", description: "Dev description" },
-      { id: "3", name: "Dev name" }, { id: "4", name: "Dev later" },
-    ];
-    return Response.json({ content: [items[page]], totalElements: 5 });
-  };
-  const client = new VroClient(config());
-  try {
-    const result = await client.listProjects("  DEV  ", { limit: 1 });
-    assert.deepEqual(result.content.map((item) => item.id), ["2"]);
-    assert.equal(result.totalElements, undefined);
-    assert.equal(result.numberOfElements, 1);
-    assert.equal(result.limited, true);
-    assert.deepEqual(pages, [0, 1, 2, 3]);
-  } finally {
-    await client.close();
+  for (const count of [1002, 1500]) {
+    const pages = [];
+    const items = Array.from({ length: count }, (_, index) => ({
+      id: String(index),
+      name: index === 1201 || index === 1401 ? "Dev name" : "other",
+      ...(index === 1001 ? { description: "Dev description" } : {}),
+    }));
+    globalThis.fetch = async (url) => {
+      const request = new URL(String(url));
+      if (request.pathname.includes("/sessions")) return authResponse();
+      if (request.searchParams.has("$filter")) return Response.json({}, { status: 400 });
+      const page = Number(request.searchParams.get("page"));
+      pages.push(page);
+      assert.equal(request.searchParams.get("size"), "100");
+      return Response.json({ content: items.slice(page * 100, (page + 1) * 100), totalElements: count });
+    };
+    const client = new VroClient(config());
+    try {
+      const result = await client.listProjects("  DEV  ", { limit: 1 });
+      assert.deepEqual(result.content.map((item) => item.id), ["1001"]);
+      assert.equal(result.totalElements, count === 1002 ? 1 : undefined);
+      assert.equal(result.numberOfElements, 1);
+      assert.equal(result.limited, count === 1002 ? undefined : true);
+      assert.equal(result.truncated, undefined);
+      assert.deepEqual(pages, Array.from({ length: count === 1002 ? 11 : 13 }, (_, index) => index));
+    } finally {
+      await client.close();
+    }
   }
 });
 
@@ -773,11 +777,6 @@ test("listWorkflows falls back to categories when workflow pages repeat", async 
 });
 
 test("listWorkflows applies limit on the categories fallback", async () => {
-  // A known total (250) that exceeds the limit (150) lets pagination survive
-  // the first page without the new early-stop cutting it short, so the
-  // repeated second page still trips the "did not advance" fallback trigger
-  // exercised by the tests above — this time with `limit` in play.
-  const LIMIT = 150;
   const WORKFLOW_COUNT = 160;
   const calls = [];
   globalThis.fetch = async (url, init) => {
@@ -837,18 +836,29 @@ test("listWorkflows applies limit on the categories fallback", async () => {
     throw new Error(`Unexpected URL: ${url}`);
   };
 
-  const client = new VroClient(config());
-  const workflows = await client.listWorkflows("workflow-", { limit: LIMIT });
+  for (const limit of [1, 5, 150]) {
+    calls.length = 0;
+    const client = new VroClient(config());
+    try {
+      const workflows = await client.listWorkflows("workflow-", { limit });
 
-  assert.equal(workflows.link.length, LIMIT);
-  assert.equal(workflows.limited, true);
-  assert.equal(
-    workflows.total,
-    WORKFLOW_COUNT,
-    "total reflects the full matched count, not the capped one",
-  );
-  assert.equal(workflows.link[0].id, "workflow-000");
-  assert.equal(workflows.link[LIMIT - 1].id, "workflow-149");
+      assert.equal(workflows.link.length, limit);
+      assert.equal(workflows.limited, true);
+      assert.equal(
+        workflows.total,
+        WORKFLOW_COUNT,
+        "total reflects the full matched count, not the capped one",
+      );
+      assert.deepEqual(
+        workflows.link.map((workflow) => workflow.id),
+        Array.from({ length: limit }, (_, index) => `workflow-${String(index).padStart(3, "0")}`),
+      );
+      assert.equal(calls.filter((call) => new URL(call.url).pathname.endsWith("/workflows")).length, limit > 100 ? 2 : 1);
+      assert.ok(calls.some((call) => new URL(call.url).pathname.endsWith("/categories/root")));
+    } finally {
+      await client.close();
+    }
+  }
 });
 
 test("listWorkflows falls back to categories when counted workflow pages repeat", async () => {

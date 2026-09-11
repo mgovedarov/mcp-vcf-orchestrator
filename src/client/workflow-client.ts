@@ -594,6 +594,14 @@ export class WorkflowClient {
         categoryName: a["categoryName"] ?? a["category-name"],
       };
     });
+    const normalizedFilter = normalizeFilter(filter);
+    if (
+      options?.limit !== undefined &&
+      normalizedFilter &&
+      link.some((workflow) => !matchesFilter(workflow.name, normalizedFilter))
+    ) {
+      return this.listWorkflowsFromCategories(filter, options);
+    }
     return {
       ...(raw.total !== undefined ? { total: raw.total } : {}),
       link,
