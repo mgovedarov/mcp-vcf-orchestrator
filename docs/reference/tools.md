@@ -8,7 +8,19 @@ Tools are grouped by operating domain. Each tool carries an MCP annotation hint 
 
 Each tool lists its input schema in a collapsible parameters section. Required confirmation fields such as `confirm` must be set to `true` before the tool performs the write or destructive operation.
 
-Discovery list tools automatically follow server-side pagination for both vRO `/vco/api` list responses and VCF Automation service pages. Tool inputs stay focused on filters and selectors; callers do not need to provide page cursors for normal discovery. If a listing stops at the pagination request cap before reaching the server's full total, the result carries a `truncated` flag and the tool output ends with a visible truncation warning (and context snapshots record a per-domain warning) instead of silently returning partial data. `list-workflows` also accepts an optional `limit` to cap the number of items returned; when it drops items that exist on the server, the result carries a `limited` flag and the tool output ends with a visible notice.
+Discovery list tools automatically follow server-side pagination for both vRO `/vco/api` list responses and VCF Automation service pages. Callers do not need page cursors. A listing stopped by the pagination request cap carries `truncated` and a visible warning; context snapshots also record a per-domain warning.
+
+### Optional Inventory Limits
+
+All 13 flat inventory tools accept an optional integer `limit` from 1 to 1000: `list-workflows`, `list-actions`, `list-configurations`, `list-categories`, `list-resource-elements`, `list-packages`, `list-plugins`, `list-catalog-items`, `list-projects`, `list-deployments`, `list-templates`, `list-event-topics`, and `list-subscriptions`. The limit applies **after** any supported filters/search, preserving the existing result order. Event topics have no filter/search parameter. Omit `limit` for the full inventory; snapshots, promotion and internal discovery continue using unlimited calls. The separately scoped `list-workflows-by-category`, `list-workflow-executions`, and `list-deployment-actions` retain their existing controls.
+
+Both pagers request a fixed page size of `min(pageSize, limit)` (`pageSize` defaults to 100), using vRO `maxResult` or Automation `size`. Once enough matches are collected, pagination stops if the matching total is known. An unknown total may require another page, or several pages with sparse local matches, to distinguish an exact boundary from additional matches. Automation page size stays fixed to avoid shifting page offsets; repeated-page detection and the request cap remain active.
+
+Client results carry `limited` only when the caller's limit withholds proven additional matches. Tool output then says how many are shown, with the matching total only when known. An unknown total from an incomplete limited call is omitted, not estimated from prefetched rows. `numberOfElements` counts returned rows. `truncated` still means the page-request cap, not the item limit; both flags can occur when a truncated category traversal is subsequently sliced. Empty capped searches retain a warning rather than claiming the entire inventory has no matches.
+
+Limits reduce requests where the API supports pagination, but cannot guarantee a bounded fetch cost for every path. Actions and flat plugin descriptors filter locally; project search falls back to local matching when the service rejects its OData filter with HTTP 400. These paths count matches during pagination, not raw rows. Some action endpoints ignore `maxResult` and return the full list anyway. Configuration listing by category reads one category response and selects/filters its relations before slicing. The workflow category fallback still traverses fully, deduplicates and sorts before applying the limit, preserving its globally sorted results.
+
+Omitted-limit output and defaults are unchanged except for the negative-total correctness fix: `total: -1` / `totalElements: -1` means unknown, so discovery now continues instead of incorrectly stopping after the first page. Complete traversal reports the collected count. This fix also applies to full-inventory consumers.
 
 ## Two-Phase Confirmation Fields
 
@@ -101,7 +113,7 @@ List workflows from VCF Automation Orchestrator. Optionally filter by name subst
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `filter` | string | No | - | Filter workflows by name using a substring match. |
-| `limit` | integer | No | - | Maximum number of items to return (1–1000). Omit for the full inventory. |
+| `limit` | integer | No | - | Maximum matching workflows returned (1–1000), after filtering. Omit for the full inventory. |
 :::
 
 ### `list-workflows-by-category`
@@ -365,6 +377,7 @@ List actions from VCF Automation Orchestrator. Optionally filter by name.
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `filter` | string | No | - | Filter actions by name using a substring match. |
+| `limit` | integer | No | - | Maximum matching actions returned (1–1000), after filtering. Omit for the full inventory. |
 :::
 
 ### `get-action`
@@ -501,6 +514,7 @@ List configuration elements from VCF Automation Orchestrator. Optionally filter 
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `filter` | string | No | - | Filter configuration elements by name using a substring match. |
+| `limit` | integer | No | - | Maximum matching elements returned (1–1000), after category selection and filtering. Omit for the full inventory. |
 | `categoryId` | string | No | - | Filter configuration elements by ConfigurationElementCategory ID. Use `list-categories` with `type ConfigurationElementCategory` to find a category ID. |
 :::
 
@@ -623,6 +637,7 @@ List resource elements from VCF Automation Orchestrator. Optionally filter by na
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `filter` | string | No | - | Filter resource elements by name using a substring match. |
+| `limit` | integer | No | - | Maximum matching resources returned (1–1000), after filtering. Omit for the full inventory. |
 :::
 
 ### `export-resource-element`
@@ -691,6 +706,7 @@ List categories by type. Categories are needed to create or import workflows, ac
 | --- | --- | --- | --- | --- |
 | `type` | enum | Yes | - | Category type: `WorkflowCategory`, `ActionCategory`, `ConfigurationElementCategory`, or `ResourceElementCategory`. |
 | `filter` | string | No | - | Filter categories by name using a substring match. |
+| `limit` | integer | No | - | Maximum matching categories returned (1–1000), after type selection and filtering. Omit for the full inventory. |
 :::
 
 ## Projects
@@ -703,6 +719,7 @@ List VCF Automation projects so agents can resolve the `projectId` consumed by `
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `search` | string | No | - | Case-insensitive substring matched against project name and description. |
+| `limit` | integer | No | - | Maximum matching projects returned (1–1000), after search. Omit for the full inventory. |
 :::
 
 ### `get-project`
@@ -725,6 +742,7 @@ List available Service Broker catalog items. Optionally search by name or keywor
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `search` | string | No | - | Search catalog items by name or keyword. |
+| `limit` | integer | No | - | Maximum matching catalog items returned (1–1000), after search. Omit for the full inventory. |
 :::
 
 ### `get-catalog-item`
@@ -747,6 +765,7 @@ List deployments, optionally filtered by name or keyword and project ID. Use `li
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `search` | string | No | - | Search deployments by name or keyword. |
+| `limit` | integer | No | - | Maximum matching deployments returned (1–1000), after search and project selection. Omit for the full inventory. |
 | `projectId` | string | No | - | Filter deployments by project ID (discover with `list-projects`). |
 :::
 
@@ -830,6 +849,7 @@ List blueprint templates in VCF Automation Cloud Assembly. Optionally filter by 
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `search` | string | No | - | Search templates by name or keyword. |
+| `limit` | integer | No | - | Maximum matching templates returned (1–1000), after search and project selection. Omit for the full inventory. |
 | `projectId` | string | No | - | Filter templates by project ID (discover with `list-projects`). |
 :::
 
@@ -884,6 +904,7 @@ List vRO packages available on the Orchestrator instance. Optionally filter by n
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `filter` | string | No | - | Filter packages by name using a substring match. |
+| `limit` | integer | No | - | Maximum matching packages returned (1–1000), after filtering. Omit for the full inventory. |
 :::
 
 ### `get-package`
@@ -1102,6 +1123,7 @@ Reads both the VCF Automation 9.x `link`/`attributes` listing and the flat `{ pl
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `filter` | string | No | - | Filter plugins by name using a substring match. |
+| `limit` | integer | No | - | Maximum matching plugins returned (1–1000), after filtering. Omit for the full inventory. |
 :::
 
 ## Extensibility Subscriptions
@@ -1111,7 +1133,9 @@ Reads both the VCF Automation 9.x `link`/`attributes` listing and the flat `{ pl
 List available Event Broker topics.
 
 ::: details Parameters
-This tool takes no parameters.
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `limit` | integer | No | - | Maximum event topics returned (1–1000). Omit for the full inventory. |
 :::
 
 ### `list-subscriptions`
@@ -1122,6 +1146,7 @@ List extensibility subscriptions, optionally filtered by project ID.
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `projectId` | string | No | - | Filter subscriptions by project ID (discover with `list-projects`). |
+| `limit` | integer | No | - | Maximum matching subscriptions returned (1–1000), after project selection. Omit for the full inventory. |
 :::
 
 ### `get-subscription`

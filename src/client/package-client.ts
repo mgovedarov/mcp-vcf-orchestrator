@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { extname } from "node:path";
 import type {
+  ListOptions,
   PackageExportOptions,
   PackageImportDetails,
   PackageImportOptions,
@@ -26,14 +27,14 @@ import { getAllVroPages } from "./pagination.js";
 export class PackageClient {
   constructor(private http: VroHttpClient) {}
 
-  async listPackages(filter?: string): Promise<VroPackageList> {
+  async listPackages(filter?: string, options?: ListOptions): Promise<VroPackageList> {
     const params = new URLSearchParams();
     if (filter) {
       params.set("conditions", `name~${filter}`);
     }
     const raw = await getAllVroPages<{
       attributes?: { name: string; value: string }[];
-    }>(this.http, "/packages", params);
+    }>(this.http, "/packages", params, { maxItems: options?.limit });
     const link: VroPackage[] = (raw.link ?? []).map((item) => {
       const a = parseAttrs(item.attributes);
       return {
@@ -43,9 +44,10 @@ export class PackageClient {
       };
     });
     return {
-      total: raw.total ?? link.length,
+      ...(raw.total !== undefined ? { total: raw.total } : {}),
       link,
       ...(raw.truncated ? { truncated: true } : {}),
+      ...(raw.limited ? { limited: true } : {}),
     };
   }
 

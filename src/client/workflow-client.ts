@@ -557,7 +557,7 @@ export class WorkflowClient {
     );
     const { items: link, limited } = applyListLimit(sorted, options?.limit);
     return {
-      total: sorted.length,
+      ...(options?.limit !== undefined && rawCategories.truncated ? {} : { total: sorted.length }),
       link,
       ...(rawCategories.truncated ? { truncated: true } : {}),
       ...(limited ? { limited: true } : {}),
@@ -595,7 +595,7 @@ export class WorkflowClient {
       };
     });
     return {
-      total: raw.total ?? link.length,
+      ...(raw.total !== undefined ? { total: raw.total } : {}),
       link,
       ...(raw.truncated ? { truncated: true } : {}),
       ...(raw.limited ? { limited: true } : {}),

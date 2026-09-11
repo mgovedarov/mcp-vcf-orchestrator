@@ -3,6 +3,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import type { VroClient } from "../vro-client.js";
 import { truncationNote } from "./truncation.js";
+import { listLimitSchema, limitNote } from "./list-limit.js";
 import { DESTRUCTIVE_LIVE_WRITE } from "./annotations.js";
 import { omittedContentSummary } from "./content-summary.js";
 import {
@@ -25,6 +26,7 @@ export function registerTemplateTools(
           .string()
           .optional()
           .describe("Search templates by name or keyword"),
+        limit: listLimitSchema,
         projectId: z
           .string()
           .optional()
@@ -34,13 +36,13 @@ export function registerTemplateTools(
       }),
       annotations: { readOnlyHint: true },
     },
-    async ({ search, projectId }): Promise<CallToolResult> => {
+    async ({ search, projectId, limit }): Promise<CallToolResult> => {
       try {
-        const result = await client.listTemplates(search, projectId);
+        const result = await client.listTemplates(search, projectId, { limit });
         const items = result.content ?? [];
         if (items.length === 0) {
           return {
-            content: [{ type: "text", text: "No templates found." }],
+            content: [{ type: "text", text: `No templates found.${limit !== undefined ? truncationNote(result, 0, result.totalElements) : ""}` }],
           };
         }
         const lines = items.map((t) => {
@@ -51,12 +53,12 @@ export function registerTemplateTools(
           if (t.description) line += ` — ${t.description}`;
           return line;
         });
-        const total = result.totalElements ?? items.length;
+        const total = limit === undefined ? result.totalElements ?? items.length : items.length;
         return {
           content: [
             {
               type: "text",
-              text: `Found ${total} template(s):\n\n${lines.join("\n")}${truncationNote(result, items.length, result.totalElements)}`,
+              text: `Found ${total} template(s):\n\n${lines.join("\n")}${truncationNote(result, items.length, result.totalElements)}${limitNote(result, items.length, result.totalElements)}`,
             },
           ],
         };

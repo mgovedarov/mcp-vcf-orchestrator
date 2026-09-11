@@ -3,6 +3,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import type { VroClient } from "../vro-client.js";
 import { truncationNote } from "./truncation.js";
+import { listLimitSchema, limitNote } from "./list-limit.js";
 
 export function registerPluginTools(
   server: McpServer,
@@ -19,16 +20,17 @@ export function registerPluginTools(
           .string()
           .optional()
           .describe("Filter plugins by name (substring match)"),
+        limit: listLimitSchema,
       }),
       annotations: { readOnlyHint: true },
     },
-    async ({ filter }): Promise<CallToolResult> => {
+    async ({ filter, limit }): Promise<CallToolResult> => {
       try {
-        const result = await client.listPlugins(filter);
+        const result = await client.listPlugins(filter, { limit });
         const plugins = result.link ?? [];
         if (plugins.length === 0) {
           return {
-            content: [{ type: "text", text: "No plugins found." }],
+            content: [{ type: "text", text: `No plugins found.${limit !== undefined ? truncationNote(result, 0, result.total) : ""}` }],
           };
         }
         const lines = plugins.map((p) => {
@@ -44,7 +46,7 @@ export function registerPluginTools(
           content: [
             {
               type: "text",
-              text: `Found ${plugins.length} plugin(s):\n\n${lines.join("\n")}${truncationNote(result, plugins.length, result.total)}`,
+              text: `Found ${plugins.length} plugin(s):\n\n${lines.join("\n")}${truncationNote(result, plugins.length, result.total)}${limitNote(result, plugins.length, result.total)}`,
             },
           ],
         };

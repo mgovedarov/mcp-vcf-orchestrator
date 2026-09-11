@@ -146,6 +146,7 @@ export async function getAllVroPages<T>(
     queryCount?: boolean;
     maxPageRequests?: number;
     maxItems?: number;
+    itemFilter?: (item: T) => boolean;
     /** Response keys that may hold the page items, tried in order. Defaults to `["link"]`. */
     itemKeys?: readonly string[];
   } = {},
@@ -154,7 +155,7 @@ export async function getAllVroPages<T>(
   const pageSize =
     maxItems === undefined
       ? options.pageSize ?? DEFAULT_PAGE_SIZE
-      : Math.min(options.pageSize ?? DEFAULT_PAGE_SIZE, maxItems + 1);
+      : Math.min(options.pageSize ?? DEFAULT_PAGE_SIZE, maxItems);
   const maxPageRequests = options.maxPageRequests ?? MAX_PAGE_REQUESTS;
   const itemKeys = options.itemKeys ?? DEFAULT_ITEM_KEYS;
   let queryCount = options.queryCount ?? true;
@@ -162,6 +163,8 @@ export async function getAllVroPages<T>(
   let start = 0;
   let firstStart: number | undefined;
   let reportedTotal: number | undefined;
+  let rawCount = 0;
+  let complete = false;
   const seenPageSignatures = new Set<string>();
 
   let requestCount = 0;
@@ -198,15 +201,15 @@ export async function getAllVroPages<T>(
       seenPageSignatures.add(signature);
     }
 
-    link.push(...items);
+    rawCount += items.length;
+    link.push(...(options.itemFilter ? items.filter(options.itemFilter) : items));
+    complete = items.length === 0 ||
+      (reportedTotal !== undefined && rawCount >= reportedTotal) ||
+      (items.length < pageSize && reportedTotal === undefined);
+    if (complete) break;
 
-    if (items.length === 0) break;
-    if (reportedTotal !== undefined && link.length >= reportedTotal) break;
-    if (items.length < pageSize && reportedTotal === undefined) break;
-
-    // NEW: early stop when limit is reached
     if (maxItems !== undefined) {
-      const haveKnownTotal = knownTotal(reportedTotal) !== undefined;
+      const haveKnownTotal = !options.itemFilter && knownTotal(reportedTotal) !== undefined;
       if (haveKnownTotal ? link.length >= maxItems : link.length > maxItems) {
         break;
       }
@@ -216,19 +219,19 @@ export async function getAllVroPages<T>(
   }
 
   const truncated = requestCount >= maxPageRequests;
-  const total = reportedTotal ?? link.length;
-  // NEW: compute limited flag
+  const matchingTotal = options.itemFilter ? undefined : reportedTotal;
+  const total = matchingTotal ?? (maxItems === undefined || complete ? link.length : undefined);
   let limited = false;
   if (maxItems !== undefined) {
-    const known = knownTotal(reportedTotal);
-    limited = known !== undefined ? known > maxItems : link.length > maxItems;
+    limited = link.length > maxItems ||
+      (link.length >= maxItems && matchingTotal !== undefined && matchingTotal > maxItems);
     if (link.length > maxItems) link.length = maxItems;
   }
 
   return {
     link,
     ...(firstStart !== undefined ? { start: firstStart } : {}),
-    total,
+    ...(total !== undefined ? { total } : {}),
     ...(truncated ? { truncated } : {}),
     ...(limited ? { limited } : {}),
   };
@@ -239,17 +242,24 @@ export async function getAllAutomationPages<T>(
   path: string,
   baseUrl: string,
   params: URLSearchParams = new URLSearchParams(),
-  options: { pageSize?: number; maxPageRequests?: number; maxItems?: number } = {},
+  options: {
+    pageSize?: number;
+    maxPageRequests?: number;
+    maxItems?: number;
+    itemFilter?: (item: T) => boolean;
+  } = {},
 ): Promise<AutomationPageResult<T>> {
   const maxItems = options.maxItems;
   const pageSize =
     maxItems === undefined
       ? options.pageSize ?? DEFAULT_PAGE_SIZE
-      : Math.min(options.pageSize ?? DEFAULT_PAGE_SIZE, maxItems + 1);
+      : Math.min(options.pageSize ?? DEFAULT_PAGE_SIZE, maxItems);
   const maxPageRequests = options.maxPageRequests ?? MAX_PAGE_REQUESTS;
   const content: T[] = [];
   let reportedTotal: number | undefined;
   let totalPages: number | undefined;
+  let rawCount = 0;
+  let complete = false;
   const seenPageSignatures = new Set<string>();
 
   let pageNumber = 0;
@@ -277,23 +287,16 @@ export async function getAllAutomationPages<T>(
       seenPageSignatures.add(signature);
     }
 
-    content.push(...items);
+    rawCount += items.length;
+    content.push(...(options.itemFilter ? items.filter(options.itemFilter) : items));
+    complete = items.length === 0 || page.last === true ||
+      (totalPages !== undefined && pageNumber + 1 >= totalPages) ||
+      (reportedTotal !== undefined && rawCount >= reportedTotal) ||
+      (items.length < pageSize && reportedTotal === undefined && totalPages === undefined);
+    if (complete) break;
 
-    if (items.length === 0) break;
-    if (page.last === true) break;
-    if (totalPages !== undefined && pageNumber + 1 >= totalPages) break;
-    if (reportedTotal !== undefined && content.length >= reportedTotal) break;
-    if (
-      items.length < pageSize &&
-      reportedTotal === undefined &&
-      totalPages === undefined
-    ) {
-      break;
-    }
-
-    // NEW: early stop when limit is reached
     if (maxItems !== undefined) {
-      const haveKnownTotal = knownTotal(reportedTotal) !== undefined;
+      const haveKnownTotal = !options.itemFilter && knownTotal(reportedTotal) !== undefined;
       if (
         haveKnownTotal
           ? content.length >= maxItems
@@ -305,20 +308,19 @@ export async function getAllAutomationPages<T>(
   }
 
   const truncated = pageNumber >= maxPageRequests;
-  const totalElements = reportedTotal ?? content.length;
-  // NEW: compute limited flag
+  const matchingTotal = options.itemFilter ? undefined : reportedTotal;
+  const totalElements = matchingTotal ?? (maxItems === undefined || complete ? content.length : undefined);
   let limited = false;
   if (maxItems !== undefined) {
-    const known = knownTotal(reportedTotal);
-    limited =
-      known !== undefined ? known > maxItems : content.length > maxItems;
+    limited = content.length > maxItems ||
+      (content.length >= maxItems && matchingTotal !== undefined && matchingTotal > maxItems);
     if (content.length > maxItems) content.length = maxItems;
   }
 
   return {
     content,
     numberOfElements: content.length,
-    totalElements,
+    ...(totalElements !== undefined ? { totalElements } : {}),
     ...(truncated ? { truncated } : {}),
     ...(limited ? { limited } : {}),
   };

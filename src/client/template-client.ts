@@ -1,11 +1,11 @@
-import type { Template, TemplateList } from "../types.js";
+import type { ListOptions, Template, TemplateList } from "../types.js";
 import type { VroHttpClient } from "./core.js";
 import { getAllAutomationPages } from "./pagination.js";
 
 export class TemplateClient {
   constructor(private http: VroHttpClient) {}
 
-  listTemplates(search?: string, projectId?: string): Promise<TemplateList> {
+  listTemplates(search?: string, projectId?: string, options?: ListOptions): Promise<TemplateList> {
     const params = new URLSearchParams();
     if (search) {
       params.set("$search", search);
@@ -18,6 +18,7 @@ export class TemplateClient {
       "/blueprints",
       this.http.blueprintBaseUrl,
       params,
+      { maxItems: options?.limit },
     );
   }
 

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { formatPreflightReport } from "../client/artifact-preflight.js";
 import type { VroClient } from "../vro-client.js";
 import { truncationNote } from "./truncation.js";
+import { listLimitSchema, limitNote } from "./list-limit.js";
 import { DESTRUCTIVE_LIVE_WRITE } from "./annotations.js";
 import {
   appendGuardGuidance,
@@ -32,6 +33,7 @@ export function registerConfigTools(
           .string()
           .optional()
           .describe("Filter configuration elements by name (substring match)"),
+        limit: listLimitSchema,
         categoryId: z
           .string()
           .optional()
@@ -41,16 +43,16 @@ export function registerConfigTools(
       }),
       annotations: { readOnlyHint: true },
     },
-    async ({ filter, categoryId }): Promise<CallToolResult> => {
+    async ({ filter, categoryId, limit }): Promise<CallToolResult> => {
       try {
-        const result = await client.listConfigurations(filter, categoryId);
+        const result = await client.listConfigurations(filter, categoryId, { limit });
         const configs = result.link ?? [];
         if (configs.length === 0) {
           return {
             content: [
               {
                 type: "text",
-                text: "No configuration elements found.",
+                text: `No configuration elements found.${limit !== undefined ? truncationNote(result, 0, result.total) : ""}`,
               },
             ],
           };
@@ -63,7 +65,7 @@ export function registerConfigTools(
           content: [
             {
               type: "text",
-              text: `Found ${configs.length} configuration element(s):\n\n${lines.join("\n")}${truncationNote(result, configs.length, result.total)}`,
+              text: `Found ${configs.length} configuration element(s):\n\n${lines.join("\n")}${truncationNote(result, configs.length, result.total)}${limitNote(result, configs.length, result.total)}`,
             },
           ],
         };

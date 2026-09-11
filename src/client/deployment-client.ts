@@ -4,6 +4,7 @@ import type {
   DeploymentActionRequestParams,
   DeploymentList,
   DeploymentRequest,
+  ListOptions,
 } from "../types.js";
 import type { VroHttpClient } from "./core.js";
 import { getAllAutomationPages } from "./pagination.js";
@@ -14,6 +15,7 @@ export class DeploymentClient {
   listDeployments(
     search?: string,
     projectId?: string,
+    options?: ListOptions,
   ): Promise<DeploymentList> {
     const params = new URLSearchParams();
     if (search) {
@@ -27,6 +29,7 @@ export class DeploymentClient {
       "/deployments",
       this.http.deploymentBaseUrl,
       params,
+      { maxItems: options?.limit },
     );
   }
 

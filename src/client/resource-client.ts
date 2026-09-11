@@ -1,5 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
-import type { ResourceElement, ResourceElementList } from "../types.js";
+import type { ListOptions, ResourceElement, ResourceElementList } from "../types.js";
 import { getLinkAttrs, type AttributeLink } from "./attrs.js";
 import { createUploadForm, type VroHttpClient } from "./core.js";
 import {
@@ -13,7 +13,7 @@ import { getAllVroPages } from "./pagination.js";
 export class ResourceClient {
   constructor(private http: VroHttpClient) {}
 
-  async listResources(filter?: string): Promise<ResourceElementList> {
+  async listResources(filter?: string, options?: ListOptions): Promise<ResourceElementList> {
     const params = new URLSearchParams();
     if (filter) {
       params.set("conditions", `name~${filter}`);
@@ -22,6 +22,7 @@ export class ResourceClient {
       this.http,
       "/resources",
       params,
+      { maxItems: options?.limit },
     );
     const link: ResourceElement[] = (raw.link ?? []).map((item) => {
       const a = getLinkAttrs(item);
@@ -38,10 +39,11 @@ export class ResourceClient {
       };
     });
     return {
-      total: raw.total ?? link.length,
+      ...(raw.total !== undefined ? { total: raw.total } : {}),
       start: raw.start,
       link,
       ...(raw.truncated ? { truncated: true } : {}),
+      ...(raw.limited ? { limited: true } : {}),
     };
   }
 

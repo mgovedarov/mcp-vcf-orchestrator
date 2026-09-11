@@ -1,4 +1,4 @@
-import type { VroPlugin, VroPluginList } from "../types.js";
+import type { ListOptions, VroPlugin, VroPluginList } from "../types.js";
 import { matchesFilter, normalizeFilter } from "./filter.js";
 import { parseAttrs } from "./attrs.js";
 import type { VroHttpClient } from "./core.js";
@@ -60,23 +60,29 @@ function fromFlat(item: FlatPluginItem): VroPlugin {
 export class PluginClient {
   constructor(private http: VroHttpClient) {}
 
-  async listPlugins(filter?: string): Promise<VroPluginList> {
+  async listPlugins(filter?: string, options?: ListOptions): Promise<VroPluginList> {
     const params = new URLSearchParams();
     if (filter) {
       params.set("conditions", `name~${filter}`);
     }
+    const needle = normalizeFilter(filter);
     const raw = await getAllVroPages<RawPluginItem>(
       this.http,
       "/plugins",
       params,
-      { itemKeys: ["link", "plugins"] },
+      {
+        itemKeys: ["link", "plugins"],
+        maxItems: options?.limit,
+        itemFilter: options?.limit !== undefined && needle
+          ? (item) => isAttributeItem(item) || matchesFilter(fromFlat(item).name, needle)
+          : undefined,
+      },
     );
     // The flat vRA 8 endpoint ignores `conditions` (verified against vRA
     // 8.18.1, where every name filter returned the full inventory), so the
     // filter is applied client-side to flat descriptors as a case-insensitive
     // substring match on the module name. Attribute listings are trusted to
     // have been filtered by the server.
-    const needle = normalizeFilter(filter);
     const mapped = raw.link.map((item) =>
       isAttributeItem(item)
         ? { plugin: fromAttributes(item), flat: false }
@@ -93,9 +99,12 @@ export class PluginClient {
     return {
       // After a client-side filter the server total describes the unfiltered
       // inventory, so report the match count instead.
-      total: filteredClientSide ? link.length : (raw.total ?? link.length),
+      ...(options?.limit === undefined
+        ? { total: filteredClientSide ? link.length : (raw.total ?? link.length) }
+        : raw.total !== undefined ? { total: raw.total } : {}),
       link,
       ...(raw.truncated ? { truncated: true } : {}),
+      ...(raw.limited ? { limited: true } : {}),
     };
   }
 }

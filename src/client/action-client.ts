@@ -1,6 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { extname } from "node:path";
-import type { Action, ActionList, DiffActionFileParams } from "../types.js";
+import type { Action, ActionList, DiffActionFileParams, ListOptions } from "../types.js";
 import { matchesFilter, normalizeFilter } from "./filter.js";
 import { getLinkAttrs, type AttributeLink } from "./attrs.js";
 import {
@@ -101,14 +101,24 @@ function buildActionBody(params: {
 export class ActionClient {
   constructor(private http: VroHttpClient) {}
 
-  async listActions(filter?: string): Promise<ActionList> {
+  async listActions(filter?: string, options?: ListOptions): Promise<ActionList> {
     // The vRO /actions endpoint ignores `conditions`/`maxResult` query params
     // (verified against vRO 9.1: it always returns the full list), so the name
     // filter must be applied client-side rather than relying on the server.
+    const needle = normalizeFilter(filter);
     const raw = await getAllVroPages<AttributeLink>(
       this.http,
       "/actions",
       new URLSearchParams(),
+      {
+        maxItems: options?.limit,
+        itemFilter: options?.limit !== undefined && needle
+          ? (item) => {
+              const attrs = getLinkAttrs(item);
+              return matchesFilter(attrs["name"] ?? attrs["@name"], needle);
+            }
+          : undefined,
+      },
     );
     let link: Action[] = (raw.link ?? []).map((item) => {
       const a = getLinkAttrs(item);
@@ -121,14 +131,16 @@ export class ActionClient {
         fqn: a["fqn"],
       };
     });
-    const needle = normalizeFilter(filter);
     if (needle) {
       link = link.filter((a) => matchesFilter(a.name, needle));
     }
     return {
-      total: link.length,
+      ...(options?.limit === undefined
+        ? { total: link.length }
+        : raw.total !== undefined ? { total: raw.total } : {}),
       link,
       ...(raw.truncated ? { truncated: true } : {}),
+      ...(raw.limited ? { limited: true } : {}),
     };
   }
 

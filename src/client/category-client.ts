@@ -1,4 +1,4 @@
-import type { Category, CategoryList } from "../types.js";
+import type { Category, CategoryList, ListOptions } from "../types.js";
 import { parseAttrs } from "./attrs.js";
 import type { VroHttpClient } from "./core.js";
 import { getAllVroPages } from "./pagination.js";
@@ -9,6 +9,7 @@ export class CategoryClient {
   async listCategories(
     categoryType: string,
     filter?: string,
+    options?: ListOptions,
   ): Promise<CategoryList> {
     const params = new URLSearchParams();
     params.set("categoryType", categoryType);
@@ -17,7 +18,7 @@ export class CategoryClient {
     }
     const raw = await getAllVroPages<{
       attributes?: { name: string; value: string }[];
-    }>(this.http, "/categories", params);
+    }>(this.http, "/categories", params, { maxItems: options?.limit });
     const link: Category[] = (raw.link ?? []).map((item) => {
       const a = parseAttrs(item.attributes);
       const category: Category = {
@@ -52,9 +53,10 @@ export class CategoryClient {
       return category;
     });
     return {
-      total: raw.total ?? link.length,
+      ...(raw.total !== undefined ? { total: raw.total } : {}),
       link,
       ...(raw.truncated ? { truncated: true } : {}),
+      ...(raw.limited ? { limited: true } : {}),
     };
   }
 }

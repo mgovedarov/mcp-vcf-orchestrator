@@ -3,6 +3,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import type { VroClient } from "../vro-client.js";
 import { truncationNote } from "./truncation.js";
+import { listLimitSchema, limitNote } from "./list-limit.js";
 
 export function registerCategoryTools(
   server: McpServer,
@@ -27,16 +28,17 @@ export function registerCategoryTools(
           .string()
           .optional()
           .describe("Filter categories by name (substring match)"),
+        limit: listLimitSchema,
       }),
       annotations: { readOnlyHint: true },
     },
-    async ({ type, filter }): Promise<CallToolResult> => {
+    async ({ type, filter, limit }): Promise<CallToolResult> => {
       try {
-        const result = await client.listCategories(type, filter);
+        const result = await client.listCategories(type, filter, { limit });
         const categories = result.link ?? [];
         if (categories.length === 0) {
           return {
-            content: [{ type: "text", text: `No ${type} categories found.` }],
+            content: [{ type: "text", text: `No ${type} categories found.${limit !== undefined ? truncationNote(result, 0, result.total) : ""}` }],
           };
         }
         const lines = categories.map(
@@ -47,7 +49,7 @@ export function registerCategoryTools(
           content: [
             {
               type: "text",
-              text: `Found ${categories.length} ${type} category(ies):\n\n${lines.join("\n")}${truncationNote(result, categories.length, result.total)}`,
+              text: `Found ${categories.length} ${type} category(ies):\n\n${lines.join("\n")}${truncationNote(result, categories.length, result.total)}${limitNote(result, categories.length, result.total)}`,
             },
           ],
         };

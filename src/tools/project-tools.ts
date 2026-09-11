@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { Project, ProjectPrincipal } from "../types.js";
 import type { VroClient } from "../vro-client.js";
 import { truncationNote } from "./truncation.js";
+import { listLimitSchema, limitNote } from "./list-limit.js";
 
 const NAMING_TEMPLATE_KEY = "__namingTemplate";
 const PLACEMENT_POLICY_KEY = "__projectPlacementPolicy";
@@ -105,12 +106,13 @@ export function registerProjectTools(
           .describe(
             "Case-insensitive substring matched against project name and description",
           ),
+        limit: listLimitSchema,
       }),
       annotations: { readOnlyHint: true },
     },
-    async ({ search }): Promise<CallToolResult> => {
+    async ({ search, limit }): Promise<CallToolResult> => {
       try {
-        const result = await client.listProjects(search);
+        const result = await client.listProjects(search, { limit });
         const items = result.content ?? [];
         const note = truncationNote(result, items.length, result.totalElements);
         if (items.length === 0) {
@@ -127,12 +129,12 @@ export function registerProjectTools(
           if (project.description) line += ` — ${project.description}`;
           return line;
         });
-        const total = result.totalElements ?? items.length;
+        const total = limit === undefined ? result.totalElements ?? items.length : items.length;
         return {
           content: [
             {
               type: "text",
-              text: `Found ${total} project(s):\n\n${lines.join("\n")}${note}`,
+              text: `Found ${total} project(s):\n\n${lines.join("\n")}${note}${limitNote(result, items.length, result.totalElements)}`,
             },
           ],
         };

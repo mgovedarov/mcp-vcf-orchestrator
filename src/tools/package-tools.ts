@@ -4,6 +4,7 @@ import { z } from "zod";
 import { formatPreflightReport } from "../client/artifact-preflight.js";
 import type { VroClient } from "../vro-client.js";
 import { truncationNote } from "./truncation.js";
+import { listLimitSchema, limitNote } from "./list-limit.js";
 import { DESTRUCTIVE_LIVE_WRITE } from "./annotations.js";
 import {
   appendGuardGuidance,
@@ -96,16 +97,17 @@ export function registerPackageTools(
           .string()
           .optional()
           .describe("Filter packages by name (substring match)"),
+        limit: listLimitSchema,
       }),
       annotations: { readOnlyHint: true },
     },
-    async ({ filter }): Promise<CallToolResult> => {
+    async ({ filter, limit }): Promise<CallToolResult> => {
       try {
-        const result = await client.listPackages(filter);
+        const result = await client.listPackages(filter, { limit });
         const packages = result.link ?? [];
         if (packages.length === 0) {
           return {
-            content: [{ type: "text", text: "No packages found." }],
+            content: [{ type: "text", text: `No packages found.${limit !== undefined ? truncationNote(result, 0, result.total) : ""}` }],
           };
         }
         const lines = packages.map(
@@ -116,7 +118,7 @@ export function registerPackageTools(
           content: [
             {
               type: "text",
-              text: `Found ${packages.length} package(s):\n\n${lines.join("\n")}${truncationNote(result, packages.length, result.total)}`,
+              text: `Found ${packages.length} package(s):\n\n${lines.join("\n")}${truncationNote(result, packages.length, result.total)}${limitNote(result, packages.length, result.total)}`,
             },
           ],
         };
