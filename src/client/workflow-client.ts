@@ -5,6 +5,7 @@ import type {
   DiffWorkflowFileParams,
   ExportWorkflowExecutionLogsParams,
   ExportWorkflowExecutionLogsResult,
+  ListOptions,
   ListWorkflowsByCategoryParams,
   ScaffoldWorkflowFileParams,
   SimpleParameter,
@@ -558,7 +559,7 @@ export class WorkflowClient {
     };
   }
 
-  async listWorkflows(filter?: string): Promise<WorkflowList> {
+  async listWorkflows(filter?: string, options?: ListOptions): Promise<WorkflowList> {
     const params = new URLSearchParams();
     if (filter) {
       params.set("conditions", `name~${filter}`);
@@ -567,11 +568,12 @@ export class WorkflowClient {
       link: { attributes?: { name: string; value: string }[] }[];
       total?: number;
       truncated?: boolean;
+      limited?: boolean;
     };
     try {
       raw = await getAllVroPages<{
         attributes?: { name: string; value: string }[];
-      }>(this.http, "/workflows", params);
+      }>(this.http, "/workflows", params, { maxItems: options?.limit });
     } catch (error) {
       if (!isWorkflowListPaginationFailure(error)) throw error;
       return this.listWorkflowsFromCategories(filter);
@@ -591,6 +593,7 @@ export class WorkflowClient {
       total: raw.total ?? link.length,
       link,
       ...(raw.truncated ? { truncated: true } : {}),
+      ...(raw.limited ? { limited: true } : {}),
     };
   }
 

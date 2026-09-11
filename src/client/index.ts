@@ -15,6 +15,7 @@ import type {
   DiffWorkflowFileParams,
   ExportWorkflowExecutionLogsParams,
   ExportWorkflowExecutionLogsResult,
+  ListOptions,
   PackageExportOptions,
   PackageImportDetails,
   PackageImportOptions,
@@ -111,8 +112,8 @@ export class VroClient {
     return this.http.close();
   }
 
-  listWorkflows(filter?: string): Promise<WorkflowList> {
-    return this.workflows.listWorkflows(filter);
+  listWorkflows(filter?: string, options?: ListOptions): Promise<WorkflowList> {
+    return this.workflows.listWorkflows(filter, options);
   }
 
   listWorkflowsByCategory(
