@@ -107,6 +107,11 @@ test("fromVroParameterValue leaves values it does not recognize untouched", () =
   // A malformed array envelope keeps its raw shape rather than becoming [].
   const malformed = { array: { elements: "not-a-list" } };
   assert.deepEqual(fromVroParameterValue(malformed, "Array/string"), malformed);
+
+  // Same for a properties envelope that does not carry a property list: the
+  // wrapper stays on rather than being silently dropped.
+  const collapsed = { properties: { property: { key: "host", value: "a" } } };
+  assert.deepEqual(fromVroParameterValue(collapsed, "Properties"), collapsed);
 });
 
 test("fromVroParameterValue unwraps an unfamiliar single-key envelope", () => {

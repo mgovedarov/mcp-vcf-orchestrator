@@ -528,7 +528,7 @@ export function registerConfigTools(
                 .string()
                 .optional()
                 .describe(
-                  "Attribute value as a string. Required for secure types, whose current value cannot be read back.",
+                  "Attribute value as a string. get-configuration renders values as JSON, so send probe-2 rather than the rendered \"probe-2\". Required for secure types, whose current value cannot be read back.",
                 ),
             }),
           )

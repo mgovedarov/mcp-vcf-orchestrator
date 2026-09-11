@@ -131,7 +131,7 @@ export function fromVroParameterValue(value: unknown, type?: string): unknown {
   }
 
   if (key === "properties") {
-    if (!isRecord(body) || !Array.isArray(body.property)) return body;
+    if (!isRecord(body) || !Array.isArray(body.property)) return value;
     const entries: Record<string, unknown> = {};
     for (const property of body.property) {
       if (!isRecord(property) || typeof property.key !== "string") continue;
