@@ -18,7 +18,9 @@ Both pagers request a fixed page size of `min(pageSize, limit)` (`pageSize` defa
 
 Client results carry `limited` only when the caller's limit withholds proven additional matches. Tool output then says how many are shown, with the matching total only when known. An unknown total from an incomplete limited call is omitted, not estimated from prefetched rows. `numberOfElements` counts returned rows. `truncated` still means the page-request cap, not the item limit; both flags can occur when a truncated category traversal is subsequently sliced. Empty capped searches retain a warning rather than claiming the entire inventory has no matches.
 
-Limits reduce requests where the API supports pagination, but cannot guarantee a bounded fetch cost for every path. Actions and flat plugin descriptors filter locally; project search falls back to local matching when the service rejects its OData filter with HTTP 400. These paths count matches during pagination, not raw rows. Some action endpoints ignore `maxResult` and return the full list anyway. Configuration listing by category reads one category response and selects/filters its relations before slicing. A limited workflow listing also uses the category fallback if returned names do not match the requested filter, even when early stopping prevents repeated-page detection. The workflow category fallback still traverses fully, deduplicates and sorts before applying the limit, preserving its globally sorted results.
+Limits reduce requests where the API supports pagination, but cannot guarantee a bounded fetch cost for every path. Actions, flat plugin descriptors, packages, categories, flat configuration elements and resource elements filter locally; project search falls back to local matching when the service rejects its OData filter with HTTP 400. These paths count matches during pagination, not raw rows. Some action endpoints ignore `maxResult` and return the full list anyway. Configuration listing by category reads one category response and selects/filters its relations before slicing. A limited workflow listing also uses the category fallback if returned names do not match the requested filter, even when early stopping prevents repeated-page detection. The workflow category fallback still traverses fully, deduplicates and sorts before applying the limit, preserving its globally sorted results.
+
+Name filters on `list-packages`, `list-categories`, `list-configurations` (without `categoryId`) and `list-resource-elements` are matched client-side as case-insensitive substrings, because the vRO embedded in vRA 8 ignores the `conditions` query these endpoints are sent and answers with the full inventory. The query is still sent, so a server that honors it returns the same rows over a smaller payload; only the requested page size differs, staying at the configured 100 rather than clamping to the limit. `total` then reports the number of matches, never the unfiltered inventory count, so a limit notice reads against matching rows; it is omitted only when a limit stopped the walk before the matching total was proven. `list-configurations` scoped with `categoryId` already matched locally and is unchanged: it reads one category response, so its matching total is always known. Listings called without a filter are unaffected.
 
 Omitted-limit output and defaults are unchanged except for the negative-total correctness fix: `total: -1` / `totalElements: -1` means unknown, so discovery now continues instead of incorrectly stopping after the first page. Complete traversal reports the collected count. This fix also applies to full-inventory consumers.
 
@@ -513,7 +515,7 @@ List configuration elements from VCF Automation Orchestrator. Optionally filter 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
-| `filter` | string | No | - | Filter configuration elements by name using a substring match. |
+| `filter` | string | No | - | Filter configuration elements by name using a case-insensitive substring match, applied client-side. |
 | `limit` | integer | No | - | Maximum matching elements returned (1–1000), after category selection and filtering. Omit for the full inventory. |
 | `categoryId` | string | No | - | Filter configuration elements by ConfigurationElementCategory ID. Use `list-categories` with `type ConfigurationElementCategory` to find a category ID. |
 :::
@@ -636,7 +638,7 @@ List resource elements from VCF Automation Orchestrator. Optionally filter by na
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
-| `filter` | string | No | - | Filter resource elements by name using a substring match. |
+| `filter` | string | No | - | Filter resource elements by name using a case-insensitive substring match, applied client-side. |
 | `limit` | integer | No | - | Maximum matching resources returned (1–1000), after filtering. Omit for the full inventory. |
 :::
 
@@ -705,7 +707,7 @@ List categories by type. Categories are needed to create or import workflows, ac
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `type` | enum | Yes | - | Category type: `WorkflowCategory`, `ActionCategory`, `ConfigurationElementCategory`, or `ResourceElementCategory`. |
-| `filter` | string | No | - | Filter categories by name using a substring match. |
+| `filter` | string | No | - | Filter categories by name using a case-insensitive substring match, applied client-side. |
 | `limit` | integer | No | - | Maximum matching categories returned (1–1000), after type selection and filtering. Omit for the full inventory. |
 :::
 
@@ -903,7 +905,7 @@ List vRO packages available on the Orchestrator instance. Optionally filter by n
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
-| `filter` | string | No | - | Filter packages by name using a substring match. |
+| `filter` | string | No | - | Filter packages by name using a case-insensitive substring match, applied client-side. |
 | `limit` | integer | No | - | Maximum matching packages returned (1–1000), after filtering. Omit for the full inventory. |
 :::
 

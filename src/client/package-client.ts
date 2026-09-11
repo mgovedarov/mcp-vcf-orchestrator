@@ -22,7 +22,7 @@ import {
   rejectSymlink,
   resolveFileInDirectory,
 } from "./files.js";
-import { getAllVroPages } from "./pagination.js";
+import { getFilteredVroList } from "./pagination.js";
 
 export class PackageClient {
   constructor(private http: VroHttpClient) {}
@@ -32,20 +32,27 @@ export class PackageClient {
     if (filter) {
       params.set("conditions", `name~${filter}`);
     }
-    const raw = await getAllVroPages<{
-      attributes?: { name: string; value: string }[];
-    }>(this.http, "/packages", params, { maxItems: options?.limit });
-    const link: VroPackage[] = (raw.link ?? []).map((item) => {
-      const a = parseAttrs(item.attributes);
-      return {
-        name: a["name"] ?? a["@name"],
-        description: a["description"],
-        version: a["version"],
-      };
-    });
+    const raw = await getFilteredVroList<
+      { attributes?: { name: string; value: string }[] },
+      VroPackage
+    >(
+      this.http,
+      "/packages",
+      params,
+      (item) => {
+        const a = parseAttrs(item.attributes);
+        return {
+          name: a["name"] ?? a["@name"],
+          description: a["description"],
+          version: a["version"],
+        };
+      },
+      filter,
+      options?.limit,
+    );
     return {
       ...(raw.total !== undefined ? { total: raw.total } : {}),
-      link,
+      link: raw.link,
       ...(raw.truncated ? { truncated: true } : {}),
       ...(raw.limited ? { limited: true } : {}),
     };

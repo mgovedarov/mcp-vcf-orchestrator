@@ -54,10 +54,10 @@ const VRA8_WORKFLOWS_URL =
 const inventoryLists = [
   ["listWorkflows", ["sample"], "/workflows", { conditions: "name~sample" }],
   ["listActions", ["sample"], "/actions", {}, false, true],
-  ["listConfigurations", ["sample", undefined], "/configurations", { conditions: "name~sample" }],
-  ["listCategories", ["WorkflowCategory", "sample"], "/categories", { categoryType: "WorkflowCategory", conditions: "name~sample" }],
-  ["listResources", ["sample"], "/resources", { conditions: "name~sample" }],
-  ["listPackages", ["sample"], "/packages", { conditions: "name~sample" }],
+  ["listConfigurations", ["sample", undefined], "/configurations", { conditions: "name~sample" }, false, true],
+  ["listCategories", ["WorkflowCategory", "sample"], "/categories", { categoryType: "WorkflowCategory", conditions: "name~sample" }, false, true],
+  ["listResources", ["sample"], "/resources", { conditions: "name~sample" }, false, true],
+  ["listPackages", ["sample"], "/packages", { conditions: "name~sample" }, false, true],
   ["listPlugins", ["sample"], "/plugins", { conditions: "name~sample" }, false, true],
   ["listCatalogItems", ["sample"], "/items", { $search: "sample" }, true],
   ["listProjects", ["sample"], "/projects", { $filter: projectSearchFilter("sample") }, true],
@@ -115,6 +115,176 @@ for (const [method, args, endpoint, selectors, automation, localFilter] of inven
     }
   });
 }
+
+// VCFO-073: the vRO embedded in vRA 8 ignores `conditions` on these four
+// endpoints and answers with the whole inventory, so each listing matches
+// names client-side. `listWorkflows` is excluded: vRO honors the filter there.
+const localNameFilterLists = [
+  ["listPackages", (client, filter, options) => client.listPackages(filter, options)],
+  ["listCategories", (client, filter, options) => client.listCategories("WorkflowCategory", filter, options)],
+  ["listConfigurations", (client, filter, options) => client.listConfigurations(filter, undefined, options)],
+  ["listResources", (client, filter, options) => client.listResources(filter, options)],
+];
+
+/**
+ * Serves `names` as a paginated vRO listing. With `honorConditions` the server
+ * applies `conditions=name~…` itself (the vRO 9.x contract); without it the
+ * filter is ignored and the full inventory comes back (the vRA 8 behavior).
+ */
+function nameInventory(names, { honorConditions = false } = {}) {
+  const calls = [];
+  globalThis.fetch = async (url) => {
+    const request = new URL(String(url));
+    if (request.pathname.includes("/sessions")) return authResponse();
+    calls.push(request);
+    const conditions = request.searchParams.get("conditions");
+    const rows =
+      honorConditions && conditions
+        ? names.filter((name) =>
+            name.toLowerCase().includes(conditions.replace(/^name~/, "").toLowerCase()),
+          )
+        : names;
+    const start = Number(request.searchParams.get("startIndex"));
+    const size = Number(request.searchParams.get("maxResult"));
+    return Response.json({
+      start,
+      total: rows.length,
+      link: rows.slice(start, start + size).map((name, index) => ({
+        href: `https://vcfa.example.test/vco/api/things/${start + index}`,
+        attributes: [
+          { name: "id", value: `id-${start + index}` },
+          { name: "name", value: name },
+        ],
+      })),
+    });
+  };
+  return calls;
+}
+
+const sparseInventory = Array.from({ length: 250 }, (_, index) =>
+  index % 10 === 0 ? `amqp-${index}` : `other-${index}`,
+);
+
+for (const [method, call] of localNameFilterLists) {
+  test(`${method} filters names client-side when the server ignores conditions`, async () => {
+    const calls = nameInventory([
+      ...Array.from({ length: 22 }, (_, index) => `other-${index}`),
+      "amqp-a",
+      "AMQP-b",
+      "amqp-c",
+    ]);
+    const client = new VroClient(config());
+    try {
+      const result = await call(client, "amqp");
+      assert.deepEqual(
+        result.link.map((item) => item.name),
+        ["amqp-a", "AMQP-b", "amqp-c"],
+      );
+      // The server total describes the unfiltered inventory, so the match
+      // count is reported instead — the limit notice must never say "of 25".
+      assert.equal(result.total, 3);
+      assert.equal(result.limited, undefined);
+      // `conditions` is still sent: it reduces the payload where honored.
+      assert.equal(calls[0].searchParams.get("conditions"), "name~amqp");
+    } finally {
+      await client.close();
+    }
+  });
+
+  test(`${method} counts matches, not raw rows, when a limit accompanies the filter`, async () => {
+    const calls = nameInventory(sparseInventory);
+    const client = new VroClient(config());
+    try {
+      const result = await call(client, "amqp", { limit: 2 });
+      assert.deepEqual(
+        result.link.map((item) => item.name),
+        ["amqp-0", "amqp-10"],
+      );
+      assert.equal(result.limited, true);
+      // The walk stopped before proving a matching total, so none is reported
+      // and the notice reads "showing the first 2 item(s)" without a total.
+      assert.equal(result.total, undefined);
+      assert.equal(result.truncated, undefined);
+      // A local filter keeps the full raw page size instead of clamping to the
+      // limit, so sparse matches do not cost one request per row.
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].searchParams.get("maxResult"), "100");
+    } finally {
+      await client.close();
+    }
+  });
+
+  test(`${method} leaves a server-honored filter unchanged`, async () => {
+    nameInventory(["amqp-a", "amqp-b", "amqp-c", "other-1", "other-2"], {
+      honorConditions: true,
+    });
+    const client = new VroClient(config());
+    try {
+      const all = await call(client, "amqp");
+      assert.deepEqual(
+        all.link.map((item) => item.name),
+        ["amqp-a", "amqp-b", "amqp-c"],
+      );
+      assert.equal(all.total, 3);
+
+      const limited = await call(client, "amqp", { limit: 2 });
+      assert.deepEqual(
+        limited.link.map((item) => item.name),
+        ["amqp-a", "amqp-b"],
+      );
+      assert.equal(limited.total, 3);
+      assert.equal(limited.limited, true);
+    } finally {
+      await client.close();
+    }
+  });
+
+  test(`${method} reports no matches instead of an unrelated page`, async () => {
+    const client = new VroClient(config());
+    try {
+      for (const options of [undefined, { limit: 3 }]) {
+        nameInventory(Array.from({ length: 134 }, (_, index) => `other-${index}`));
+        const result = await call(client, "zzz-no-such", options);
+        assert.deepEqual(result.link, []);
+        // No limit notice: an empty match set withholds nothing.
+        assert.equal(result.limited, undefined);
+        assert.equal(result.total, 0);
+      }
+    } finally {
+      await client.close();
+    }
+  });
+
+  test(`${method} passes the server total through when no filter is given`, async () => {
+    const calls = nameInventory(Array.from({ length: 8 }, (_, index) => `thing-${index}`));
+    const client = new VroClient(config());
+    try {
+      const result = await call(client, undefined);
+      assert.equal(result.link.length, 8);
+      assert.equal(result.total, 8);
+      assert.equal(result.limited, undefined);
+      assert.equal(calls[0].searchParams.has("conditions"), false);
+    } finally {
+      await client.close();
+    }
+  });
+}
+
+// guardExpectedCategory filters by the expected name and then requires strict
+// equality, so client-side filtering must not hide the row it looks for.
+test("an exact category name survives the client-side filter for expected-target guards", async () => {
+  nameInventory(["Provisioning", "Provisioning Helpers", "Library"]);
+  const client = new VroClient(config());
+  try {
+    const result = await client.listCategories("WorkflowCategory", "Provisioning");
+    assert.deepEqual(
+      result.link.map((item) => item.name),
+      ["Provisioning", "Provisioning Helpers"],
+    );
+  } finally {
+    await client.close();
+  }
+});
 
 test("action limit filters an oversized server response before slicing", async () => {
   let requests = 0;
@@ -372,7 +542,7 @@ test("vRO list clients aggregate multiple startIndex pages and preserve filters"
       link: Array.from({ length: count }, (_, index) => ({
         attributes: [
           { name: "id", value: `action-${startIndex + index}` },
-          { name: "name", value: `Action ${startIndex + index}` },
+          { name: "name", value: `Deploy VM ${startIndex + index}` },
           { name: "module", value: "com.example" },
         ],
       })),

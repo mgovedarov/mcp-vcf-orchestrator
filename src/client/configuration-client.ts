@@ -19,7 +19,7 @@ import {
   rejectSymlink,
   resolveFileInDirectory,
 } from "./files.js";
-import { applyListLimit, getAllVroPages } from "./pagination.js";
+import { applyListLimit, getFilteredVroList } from "./pagination.js";
 import { toVroParameters } from "./parameters.js";
 
 export class ConfigurationClient {
@@ -37,22 +37,29 @@ export class ConfigurationClient {
     if (filter) {
       params.set("conditions", `name~${filter}`);
     }
-    const raw = await getAllVroPages<{
-      attributes?: { name: string; value: string }[];
-    }>(this.http, "/configurations", params, { maxItems: options?.limit });
-    const link: ConfigElement[] = (raw.link ?? []).map((item) => {
-      const a = parseAttrs(item.attributes);
-      return {
-        id: a["id"] ?? a["@id"],
-        name: a["name"] ?? a["@name"],
-        description: a["description"],
-        version: a["version"],
-        categoryId: a["categoryId"] ?? a["category-id"] ?? a["categoryid"],
-      };
-    });
+    const raw = await getFilteredVroList<
+      { attributes?: { name: string; value: string }[] },
+      ConfigElement
+    >(
+      this.http,
+      "/configurations",
+      params,
+      (item) => {
+        const a = parseAttrs(item.attributes);
+        return {
+          id: a["id"] ?? a["@id"],
+          name: a["name"] ?? a["@name"],
+          description: a["description"],
+          version: a["version"],
+          categoryId: a["categoryId"] ?? a["category-id"] ?? a["categoryid"],
+        };
+      },
+      filter,
+      options?.limit,
+    );
     return {
       ...(raw.total !== undefined ? { total: raw.total } : {}),
-      link,
+      link: raw.link,
       ...(raw.truncated ? { truncated: true } : {}),
       ...(raw.limited ? { limited: true } : {}),
     };

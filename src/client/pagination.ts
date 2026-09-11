@@ -1,4 +1,5 @@
 import type { VroHttpClient } from "./core.js";
+import { matchesFilter, normalizeFilter } from "./filter.js";
 
 const DEFAULT_PAGE_SIZE = 100;
 const MAX_PAGE_REQUESTS = 1_000;
@@ -234,6 +235,73 @@ export async function getAllVroPages<T>(
     ...(total !== undefined ? { total } : {}),
     ...(truncated ? { truncated } : {}),
     ...(limited ? { limited } : {}),
+  };
+}
+
+/**
+ * Collects a paginated vRO list and applies the name filter client-side.
+ *
+ * Several vRO list endpoints accept `conditions=name~<filter>` and ignore it:
+ * the vRO embedded in vRA 8.18.1 answers `/packages`, `/categories`,
+ * `/configurations` and `/resources` with the full inventory whatever the
+ * filter says (verified in the lab, VCFO-073), while `/workflows` honors it.
+ * `conditions` is still sent — it reduces the payload where it is honored, and
+ * post-filtering a list the server already filtered is a no-op — but the
+ * result is matched locally so the filter is never silently dropped.
+ *
+ * `itemFilter` is passed only when a limit is set: without one there is
+ * nothing to window and the single post-map pass below suffices, but with one
+ * the filter has to run inside pagination or `maxItems` would count
+ * non-matching rows. Mapping a raw row twice on that path is cheap and avoids
+ * a second per-call-site name extractor, since `map` already encodes each
+ * type's name fallbacks.
+ *
+ * Unlike `WorkflowClient.listWorkflows`, which only *detects* a filter
+ * violation and then re-lists via the category tree, these listings have no
+ * fallback to reach for and simply filter.
+ *
+ * `total` is reported three ways, deliberately differing from
+ * `ActionClient.listActions` (which always reports the match count when no
+ * limit is set). Keep the no-filter branch as a pass-through: unfiltered
+ * listings must reproduce the server's own total exactly, unchanged by this
+ * fix.
+ */
+export async function getFilteredVroList<
+  TRaw,
+  TItem extends { name?: string | undefined },
+>(
+  http: VroHttpClient,
+  path: string,
+  params: URLSearchParams,
+  map: (raw: TRaw) => TItem,
+  filter: string | undefined,
+  limit: number | undefined,
+): Promise<VroPageResult<TItem>> {
+  const needle = normalizeFilter(filter);
+  const raw = await getAllVroPages<TRaw>(http, path, params, {
+    maxItems: limit,
+    itemFilter:
+      limit !== undefined && needle
+        ? (item) => matchesFilter(map(item).name, needle)
+        : undefined,
+  });
+  let link: TItem[] = (raw.link ?? []).map(map);
+  if (needle) {
+    link = link.filter((item) => matchesFilter(item.name, needle));
+  }
+  // No filter: the server total describes exactly what was requested. Filter
+  // without a limit: the server total describes the unfiltered inventory, so
+  // report the match count instead. Filter with a limit: getAllVroPages
+  // already suppressed the server total and reported the match count, or
+  // omitted it when the walk stopped before proving one.
+  const total =
+    needle === undefined ? raw.total : limit === undefined ? link.length : raw.total;
+  return {
+    link,
+    ...(raw.start !== undefined ? { start: raw.start } : {}),
+    ...(total !== undefined ? { total } : {}),
+    ...(raw.truncated ? { truncated: true } : {}),
+    ...(raw.limited ? { limited: true } : {}),
   };
 }
 

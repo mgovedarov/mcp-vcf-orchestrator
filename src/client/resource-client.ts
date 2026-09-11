@@ -8,7 +8,7 @@ import {
   rejectSymlink,
   resolveFileInDirectory,
 } from "./files.js";
-import { getAllVroPages } from "./pagination.js";
+import { getFilteredVroList } from "./pagination.js";
 
 export class ResourceClient {
   constructor(private http: VroHttpClient) {}
@@ -18,30 +18,31 @@ export class ResourceClient {
     if (filter) {
       params.set("conditions", `name~${filter}`);
     }
-    const raw = await getAllVroPages<AttributeLink>(
+    const raw = await getFilteredVroList<AttributeLink, ResourceElement>(
       this.http,
       "/resources",
       params,
-      { maxItems: options?.limit },
+      (item) => {
+        const a = getLinkAttrs(item);
+        const id = a["id"] ?? a["@id"] ?? item.href?.split("/").pop() ?? "";
+        return {
+          id,
+          name: a["name"] ?? a["@name"] ?? id,
+          description: a["description"],
+          version: a["version"],
+          categoryId: a["categoryId"],
+          categoryName: a["categoryName"],
+          mimeType: a["mimeType"] ?? a["mime-type"] ?? a["mimetype"],
+          href: item.href,
+        };
+      },
+      filter,
+      options?.limit,
     );
-    const link: ResourceElement[] = (raw.link ?? []).map((item) => {
-      const a = getLinkAttrs(item);
-      const id = a["id"] ?? a["@id"] ?? item.href?.split("/").pop() ?? "";
-      return {
-        id,
-        name: a["name"] ?? a["@name"] ?? id,
-        description: a["description"],
-        version: a["version"],
-        categoryId: a["categoryId"],
-        categoryName: a["categoryName"],
-        mimeType: a["mimeType"] ?? a["mime-type"] ?? a["mimetype"],
-        href: item.href,
-      };
-    });
     return {
       ...(raw.total !== undefined ? { total: raw.total } : {}),
       start: raw.start,
-      link,
+      link: raw.link,
       ...(raw.truncated ? { truncated: true } : {}),
       ...(raw.limited ? { limited: true } : {}),
     };
