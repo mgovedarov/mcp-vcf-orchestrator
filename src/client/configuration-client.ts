@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { extname } from "node:path";
 import type { ConfigElement, ConfigElementList } from "../types.js";
+import { matchesFilter, normalizeFilter } from "./filter.js";
 import { parseAttrs } from "./attrs.js";
 import {
   ensurePreflightPassed,
@@ -9,7 +10,6 @@ import {
 } from "./artifact-preflight.js";
 import {
   createUploadForm,
-  sanitizeErrorBody,
   UNSUPPORTED_VRA8_CONFIGURATION_EXPORT,
   type VroHttpClient,
 } from "./core.js";
@@ -84,9 +84,9 @@ export class ConfigurationClient {
         href: l.href,
       }];
     });
-    if (filter) {
-      const lower = filter.toLowerCase();
-      link = link.filter((item) => item.name?.toLowerCase().includes(lower) ?? false);
+    const needle = normalizeFilter(filter);
+    if (needle) {
+      link = link.filter((item) => matchesFilter(item.name, needle));
     }
     return { total: link.length, link };
   }
@@ -144,7 +144,6 @@ export class ConfigurationClient {
     }
 
     const path = `/configurations/${encodeURIComponent(id)}`;
-    this.http.assertOperationSupported("GET", path);
     const url = `${this.http.baseUrl}${path}`;
     console.error(`[vro-client] GET ${path}`);
 
@@ -154,10 +153,7 @@ export class ConfigurationClient {
       { timeout: 60_000 },
     );
     if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(
-        `vRO API error: ${res.status} ${res.statusText} — export configuration\n${sanitizeErrorBody(text, res)}${this.http.apiErrorHint(res)}`,
-      );
+      throw await this.http.apiError(res, "export configuration");
     }
     const buffer = Buffer.from(await res.arrayBuffer());
     await writeFile(destPath, buffer, { flag: overwrite ? "w" : "wx" });
@@ -169,7 +165,6 @@ export class ConfigurationClient {
     fileName: string,
   ): Promise<void> {
     const path = "/configurations";
-    this.http.assertOperationSupported("POST", path);
     ensurePreflightPassed(await this.preflightConfigurationFile(fileName));
     const srcPath = await this.resolveConfigurationPath(fileName);
     await rejectSymlink(
@@ -194,10 +189,7 @@ export class ConfigurationClient {
       { timeout: 60_000 },
     );
     if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(
-        `vRO API error: ${res.status} ${res.statusText} — import configuration\n${sanitizeErrorBody(text, res)}${this.http.apiErrorHint(res)}`,
-      );
+      throw await this.http.apiError(res, "import configuration");
     }
   }
 
@@ -242,60 +234,114 @@ export class ConfigurationClient {
     await this.http.del<unknown>(`/configurations/${encodeURIComponent(id)}`);
   }
 
+  /**
+   * Update a configuration element in place.
+   *
+   * `PUT /configurations/{id}` replaces the element rather than patching it,
+   * so every field the caller does not supply is carried forward from the live
+   * element — `current` when the caller has already read it (the tool handler
+   * does, for its expected-name guard), otherwise one GET here — with a single
+   * exception: attributes. A SecureString attribute reads back as ciphertext
+   * with `isPlainText: false`, so replaying a read value risks storing that
+   * blob as the new secret. An update that omits `attributes` on an element
+   * that has some is therefore refused (see assertConfigurationUpdateSafe),
+   * and the caller re-sends the ones it wants to keep.
+   *
+   * vRA 8 additionally rejects a body whose name is absent with `The
+   * configuration element name contains invalid characters (\, /).Name: null`
+   * (verified on vRO 8.18.1, VCFO-068), which the carry-forward also covers.
+   */
   async updateConfiguration(
     id: string,
-    params: {
-      name?: string;
-      description?: string;
-      attributes?: { name: string; type: string; value?: string }[];
-    },
+    params: ConfigurationUpdate,
+    current?: ConfigElement,
   ): Promise<void> {
-    const body: Record<string, unknown> = {};
-
-    // PUT /configurations/{id} replaces the element rather than patching it,
-    // which has two consequences the caller does not ask for.
-    //
-    // First, vRA 8 rejects a body whose name is absent with `The configuration
-    // element name contains invalid characters (\, /).Name: null` (verified on
-    // vRO 8.18.1, VCFO-068), so the live name is carried forward when the
-    // caller is not renaming — the way updateAction re-reads the current
-    // action before its PUT.
-    //
-    // Second, a body that omits the attributes drops every attribute the
-    // element had, which contradicts this method's contract that only the
-    // provided fields change. Carrying them forward is not an option: a
-    // SecureString attribute reads back as ciphertext with
-    // `isPlainText: false`, so replaying a read value risks storing that blob
-    // as the new secret. So an update that would silently clear attributes is
-    // refused instead, and the caller re-sends the ones it wants to keep.
-    //
-    // One read serves both: it is skipped only for a call that renames and
-    // sets attributes, and so needs neither.
     const needsLiveRead =
-      params.name === undefined || params.attributes === undefined;
-    const current = needsLiveRead ? await this.getConfiguration(id) : undefined;
+      params.name === undefined ||
+      params.description === undefined ||
+      params.attributes === undefined;
+    const live =
+      current ?? (needsLiveRead ? await this.getConfiguration(id) : undefined);
 
-    if (params.attributes === undefined) {
-      const existing = current?.attributes ?? [];
-      if (existing.length > 0) {
-        // Names and types only — an attribute value is never echoed.
-        const summary = existing
-          .map((attribute) => `${attribute.name} (${attribute.type})`)
-          .join(", ");
-        throw new Error(
-          `Updating configuration element ${id} replaces it, so omitting attributes would delete the ${existing.length} it currently has: ${summary}. Pass the attributes to keep (read them with get-configuration), or pass an empty array to clear them deliberately.`,
-        );
-      }
-    }
+    assertConfigurationUpdateSafe(id, live, params);
 
-    body.name = params.name ?? current?.name;
-    if (params.description !== undefined) body.description = params.description;
+    const body: Record<string, unknown> = {};
+    body.name = params.name ?? live?.name;
+    const description = params.description ?? live?.description;
+    if (description !== undefined) body.description = description;
     if (params.attributes !== undefined) {
       body[this.attributeBodyKey()] = toVroParameters(params.attributes);
     }
     await this.http.put<unknown>(
       `/configurations/${encodeURIComponent(id)}`,
       body,
+    );
+  }
+}
+
+/** The fields update-configuration may change; anything omitted is kept. */
+export interface ConfigurationUpdate {
+  name?: string;
+  description?: string;
+  attributes?: { name: string; type: string; value?: string }[];
+}
+
+/**
+ * Detect secure/encrypted configuration attribute types whose values vRO never
+ * returns in plaintext (e.g. `SecureString`). The `includes` checks are
+ * defensive against any encrypted/secure variant the API reports. Mirrors the
+ * redaction posture of the context-snapshot path.
+ */
+export function isSecureAttributeType(type: string | undefined): boolean {
+  if (!type) return false;
+  const t = type.toLowerCase();
+  return t === "securestring" || t.includes("secure") || t.includes("encrypted");
+}
+
+/**
+ * Refuse a configuration update that the replacing PUT would turn into data
+ * loss the caller did not ask for. Pure, so the tool handler can run it in the
+ * discovery phase — before `confirm: true` is spent — and the client runs it
+ * again before the write.
+ *
+ * - Omitting `attributes` on an element that has some would delete them all.
+ *   They are named (names and types only, never values) and the caller is told
+ *   how to keep them. Plain values can be read back with get-configuration;
+ *   secure values cannot, and must be supplied fresh.
+ * - A secure-typed attribute supplied without a value would be stored as an
+ *   empty secret, which is what a caller who copied a `[redacted]` listing
+ *   would otherwise do by accident.
+ */
+export function assertConfigurationUpdateSafe(
+  id: string,
+  current: Pick<ConfigElement, "attributes"> | undefined,
+  params: Pick<ConfigurationUpdate, "attributes">,
+): void {
+  if (params.attributes === undefined) {
+    const existing = current?.attributes ?? [];
+    if (existing.length === 0) return;
+    const summary = existing
+      .map((attribute) => `${attribute.name} (${attribute.type})`)
+      .join(", ");
+    const secure = existing.filter((attribute) =>
+      isSecureAttributeType(attribute.type),
+    );
+    const secureNote =
+      secure.length > 0
+        ? ` Secure values (${secure.map((attribute) => attribute.name).join(", ")}) are never returned by get-configuration and must be supplied fresh.`
+        : "";
+    throw new Error(
+      `Updating configuration element ${id} replaces it, so omitting attributes would delete the ${existing.length} it currently has: ${summary}. Pass the attributes to keep, or pass an empty array to clear them deliberately. Plain values can be read with get-configuration.${secureNote}`,
+    );
+  }
+
+  const blankSecrets = params.attributes.filter(
+    (attribute) => isSecureAttributeType(attribute.type) && !attribute.value,
+  );
+  if (blankSecrets.length > 0) {
+    const names = blankSecrets.map((attribute) => attribute.name).join(", ");
+    throw new Error(
+      `Refusing to store an empty secret: secure attribute${blankSecrets.length === 1 ? "" : "s"} ${names} ${blankSecrets.length === 1 ? "was" : "were"} supplied without a value. Secure values cannot be read back from get-configuration, so supply the value to store, or leave the attribute out of the list to delete it deliberately.`,
     );
   }
 }

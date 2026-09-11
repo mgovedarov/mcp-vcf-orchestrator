@@ -14,7 +14,7 @@ import {
   preflightPackageFile,
   type ArtifactPreflightReport,
 } from "./artifact-preflight.js";
-import { createUploadForm, sanitizeErrorBody, type VroHttpClient } from "./core.js";
+import { createUploadForm, type VroHttpClient } from "./core.js";
 import {
   assertRealPathInside,
   getExistingFile,
@@ -223,7 +223,6 @@ export class PackageClient {
     }
     const query = packageExportQuery(options);
     const path = `/content/packages/${encodeURIComponent(name)}${query}`;
-    this.http.assertOperationSupported("GET", path);
     const url = `${this.http.baseUrl}${path}`;
     console.error(`[vro-client] GET ${path}`);
 
@@ -233,10 +232,7 @@ export class PackageClient {
       { timeout: 60_000 },
     );
     if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(
-        `vRO API error: ${res.status} ${res.statusText} — export package\n${sanitizeErrorBody(text, res)}${this.http.apiErrorHint(res)}`,
-      );
+      throw await this.http.apiError(res, "export package");
     }
     const buffer = Buffer.from(await res.arrayBuffer());
     await writeFile(destPath, buffer, { flag: overwrite ? "w" : "wx" });
@@ -253,7 +249,6 @@ export class PackageClient {
   ): Promise<void> {
     const query = packageImportQuery(options);
     const path = `/packages${query}`;
-    this.http.assertOperationSupported("POST", path);
     ensurePreflightPassed(await this.preflightPackageFile(fileName));
     const srcPath = await this.resolvePackagePath(fileName);
     await rejectSymlink(
@@ -276,16 +271,12 @@ export class PackageClient {
       { timeout: 60_000 },
     );
     if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(
-        `vRO API error: ${res.status} ${res.statusText} — import package\n${sanitizeErrorBody(text, res)}${this.http.apiErrorHint(res)}`,
-      );
+      throw await this.http.apiError(res, "import package");
     }
   }
 
   async getPackageImportDetails(fileName: string): Promise<PackageImportDetails> {
     const path = "/packages/import-details";
-    this.http.assertOperationSupported("POST", path);
     ensurePreflightPassed(await this.preflightPackageFile(fileName));
     const srcPath = await this.resolvePackagePath(fileName);
     await rejectSymlink(
@@ -308,10 +299,7 @@ export class PackageClient {
       { timeout: 60_000 },
     );
     if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(
-        `vRO API error: ${res.status} ${res.statusText} — package import details\n${sanitizeErrorBody(text, res)}${this.http.apiErrorHint(res)}`,
-      );
+      throw await this.http.apiError(res, "package import details");
     }
     return (await res.json()) as PackageImportDetails;
   }

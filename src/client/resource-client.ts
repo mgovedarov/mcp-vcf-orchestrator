@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import type { ResourceElement, ResourceElementList } from "../types.js";
 import { getLinkAttrs, type AttributeLink } from "./attrs.js";
-import { createUploadForm, sanitizeErrorBody, type VroHttpClient } from "./core.js";
+import { createUploadForm, type VroHttpClient } from "./core.js";
 import {
   assertRealPathInside,
   getExistingFile,
@@ -88,7 +88,6 @@ export class ResourceClient {
       );
     }
     const path = `/resources/${encodeURIComponent(id)}`;
-    this.http.assertOperationSupported("GET", path);
     const url = `${this.http.baseUrl}${path}`;
     console.error(`[vro-client] GET ${path}`);
 
@@ -98,10 +97,7 @@ export class ResourceClient {
       { timeout: 60_000 },
     );
     if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(
-        `vRO API error: ${res.status} ${res.statusText} — export resource\n${sanitizeErrorBody(text, res)}${this.http.apiErrorHint(res)}`,
-      );
+      throw await this.http.apiError(res, "export resource");
     }
     const buffer = Buffer.from(await res.arrayBuffer());
     await writeFile(destPath, buffer, { flag: overwrite ? "w" : "wx" });
@@ -127,7 +123,6 @@ export class ResourceClient {
     form: ReturnType<typeof createUploadForm>,
     changesetSha?: string,
   ): Promise<void> {
-    this.http.assertOperationSupported("POST", path);
     const url = `${this.http.baseUrl}${path}`;
     console.error(`[vro-client] POST ${path}`);
 
@@ -144,15 +139,11 @@ export class ResourceClient {
       { timeout: 60_000 },
     );
     if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(
-        `vRO API error: ${res.status} ${res.statusText} — POST ${path}\n${sanitizeErrorBody(text, res)}${this.http.apiErrorHint(res)}`,
-      );
+      throw await this.http.apiError(res, `POST ${path}`);
     }
   }
 
   async importResource(categoryId: string, fileName: string): Promise<void> {
-    this.http.assertOperationSupported("POST", "/resources");
     const buffer = await this.readResourceFile(fileName);
     const form = createUploadForm(buffer, fileName);
     form.append("categoryId", categoryId);
@@ -165,7 +156,6 @@ export class ResourceClient {
     changesetSha?: string,
   ): Promise<void> {
     const path = `/resources/${encodeURIComponent(id)}`;
-    this.http.assertOperationSupported("POST", path);
     const buffer = await this.readResourceFile(fileName);
     const form = createUploadForm(buffer, fileName);
     await this.postResourceForm(path, form, changesetSha);

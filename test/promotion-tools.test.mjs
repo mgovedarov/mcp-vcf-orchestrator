@@ -142,6 +142,32 @@ test("prepareArtifactPromotion prepares configuration promotion summary", async 
   );
 });
 
+// vRA 8 cannot export a .vsoconf, so the optional backup is skipped with a note
+// instead of aborting the whole preparation (VCFO-071).
+test("prepareArtifactPromotion skips the configuration backup in vra8 mode and keeps the report", async () => {
+  const client = new VroClient(config({ targetPlatform: "vra8" }));
+  client.preflightConfigurationFile = async (fileName) =>
+    validReport("configuration", fileName, { name: "Settings" });
+  client.exportConfigurationFile = async () => {
+    throw new Error("the vra8 export refusal must not be reached");
+  };
+
+  const text = await client.prepareArtifactPromotion({
+    kind: "configuration",
+    fileName: "settings.vsoconf",
+    target: { categoryId: "config-category", configurationId: "config-1" },
+    backup: { enabled: true },
+  });
+
+  assert.match(text, /Configuration artifact preflight passed/);
+  assert.match(text, /Backup skipped: exporting a single configuration element .*VCFA_TARGET_PLATFORM=vra8 mode/);
+  assert.match(text, /get-configuration/);
+  assert.match(
+    text,
+    /import-configuration-file\({ categoryId: "config-category", fileName: "settings.vsoconf", confirm: true }\)/,
+  );
+});
+
 test("prepareArtifactPromotion prepares package promotion summary", async () => {
   const client = new VroClient(config());
   client.preflightPackageFile = async (fileName) =>

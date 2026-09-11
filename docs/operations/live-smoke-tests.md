@@ -195,7 +195,17 @@ create-deployment(...)        # and delete-deployment, run-deployment-action
 export-configuration-file(...)
 ```
 
-The Automation-service write tools name the pending verification; `export-configuration-file` explains that vRA 8 serves a configuration element as JSON only and points at the project-package route.
+The Automation-service write tools name the pending verification; `export-configuration-file` explains that vRA 8 serves a configuration element as JSON only and points at the project-package route. `prepare-artifact-promotion(kind: "configuration", backup: { enabled: true }, ...)` does not fail in this mode: it reports `Backup skipped:` with the same pointer and still returns the preflight report and the import recommendation.
+
+With the disposable configuration element from the write checks, verify the `update-configuration` two-phase flow (both platforms):
+
+```text
+update-configuration(id: "<configuration-id>", attributes: [{ name: "setting", type: "string", value: "probe-2" }], confirm: false)   # confirmation prompt naming the element
+update-configuration(id: "<configuration-id>", attributes: [{ name: "setting", type: "string", value: "probe-2" }], confirm: true)
+get-configuration(id: "<configuration-id>")                                          # description unchanged, value probe-2
+update-configuration(id: "<configuration-id>", description: "changed", confirm: false) # refused: would delete the attribute
+update-configuration(id: "<configuration-id>", attributes: [{ name: "token", type: "SecureString" }], confirm: false) # refused: empty secret
+```
 
 ## Negative And Safety Checks
 
