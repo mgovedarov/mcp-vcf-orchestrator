@@ -174,7 +174,7 @@ run-workflow-and-wait(id: "<workflow-id>", inputs: [], timeoutSeconds: 60, confi
 get-workflow-execution-logs(workflowId: "<workflow-id>", executionId: "<execution-id>", level: "info")
 ```
 
-The Automation-service list tools return the same shapes as on VCFA 9.x. Note that `list-catalog-items` and `list-deployments` were both empty in the environment VCFO-068 verified, so their item shapes are still unconfirmed on vRA 8 — an environment with released catalog content is the one worth re-running them against.
+The Automation-service list tools return the same shapes as on VCFA 9.x. Note that `list-catalog-items` and `list-deployments` were both empty in the environment VCFO-068 and VCFO-070 verified, so their item shapes are still unconfirmed on vRA 8 — an environment with released catalog content is the one worth re-running them against, and the same environment is what the catalog-service and deployment-service write checks need.
 
 The vRO write surface is verified on vRA 8 but still mutates a live environment, so run it only against a disposable category and disposable content, and clean up afterwards:
 
@@ -186,16 +186,37 @@ delete-workflow(id: "<workflow-id>", confirm: true)
 delete-configuration(id: "<configuration-id>", confirm: true)
 ```
 
+Template and subscription writes are supported in this mode (VCFO-070). They mutate a live environment, so use disposable objects and clean up. Create the subscription **disabled** and **non-blocking**, on a non-blockable topic, so it cannot stall provisioning:
+
+```text
+list-projects()
+list-event-topics()
+create-subscription(
+  name: "zz-smoke",
+  eventTopicId: "<non-blockable topic id>",
+  runnableType: "extensibility.vro",
+  runnableId: "<harmless workflow id>",
+  blocking: false,
+  disabled: true,
+  confirm: true
+)
+update-subscription(id: "<subscription-id>", expectedName: "zz-smoke", description: "changed", confirm: true)
+get-subscription(id: "<subscription-id>")     # topic and runnable carried forward
+create-template(name: "zz-smoke", projectId: "<project-id>", content: "formatVersion: 1\ninputs: {}\nresources: {}\n", confirm: true)
+delete-template(id: "<template-id>", expectedName: "zz-smoke", confirm: true)
+delete-subscription(id: "<subscription-id>", expectedName: "zz-smoke", confirm: true)
+```
+
+A DRAFT template provisions nothing, but its create and delete do fire `blueprint.configuration`, which the platform's own content-sync subscribers listen on.
+
 Expected unsupported-mode messages in this mode:
 
 ```text
-create-template(...)          # and delete-template
-create-subscription(...)      # and update-subscription, delete-subscription
 create-deployment(...)        # and delete-deployment, run-deployment-action
 export-configuration-file(...)
 ```
 
-The Automation-service write tools name the pending verification; `export-configuration-file` explains that vRA 8 serves a configuration element as JSON only and points at the project-package route. `prepare-artifact-promotion(kind: "configuration", backup: { enabled: true }, ...)` does not fail in this mode: it reports `Backup skipped:` with the same pointer and still returns the preflight report and the import recommendation.
+The catalog-service and deployment-service refusals name what verifying each one would take — released catalog content for the request path, an existing deployment for the delete and day-2 paths; `export-configuration-file` explains that vRA 8 serves a configuration element as JSON only and points at the project-package route. `prepare-artifact-promotion(kind: "configuration", backup: { enabled: true }, ...)` does not fail in this mode: it reports `Backup skipped:` with the same pointer and still returns the preflight report and the import recommendation.
 
 With the disposable configuration element from the write checks, verify the `update-configuration` two-phase flow (both platforms):
 

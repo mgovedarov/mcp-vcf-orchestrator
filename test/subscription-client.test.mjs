@@ -36,3 +36,152 @@ test("listSubscriptions omits the filter when no projectId is given", async () =
   const url = new URL(`https://eventbroker.test${calls[0]}`);
   assert.equal(url.searchParams.has("$filter"), false);
 });
+
+// The vcfa path must stay byte-identical to what it shipped: VCFA 9.x assigns
+// the subscription id and serves PUT on the element, and neither was re-verified
+// under VCFO-070, so only the vra8 branch changed.
+function captureWrites(targetPlatform, element = { id: "subscription-1" }) {
+  const calls = [];
+  return {
+    calls,
+    http: {
+      targetPlatform,
+      eventBrokerBaseUrl: "https://eventbroker.test",
+      get: async (path) => {
+        calls.push({ method: "GET", path });
+        return element;
+      },
+      post: async (path, body) => {
+        calls.push({ method: "POST", path, body });
+        return element;
+      },
+      put: async (path, body) => {
+        calls.push({ method: "PUT", path, body });
+        return element;
+      },
+    },
+  };
+}
+
+test("createSubscription on vcfa posts without an id and returns the response", async () => {
+  const { http, calls } = captureWrites("vcfa");
+  const client = new SubscriptionClient(http);
+
+  await client.createSubscription({
+    name: "Subscription",
+    eventTopicId: "topic-1",
+    runnableType: "extensibility.vro",
+    runnableId: "runnable-1",
+  });
+
+  assert.deepEqual(
+    calls.map((c) => c.method),
+    ["POST"],
+    "no read-back on vcfa: the response carries the created element",
+  );
+  assert.ok(!("id" in calls[0].body), "VCFA 9.x assigns the id");
+  assert.equal(calls[0].body.type, "RUNNABLE");
+});
+
+test("createSubscription on vcfa sends the body it shipped with, field for field", async () => {
+  const { http, calls } = captureWrites("vcfa");
+  const client = new SubscriptionClient(http);
+
+  // Every settable field at once: the vcfa path was verified under VCFO-068 and
+  // must not drift while the vra8 branch changes around it.
+  await client.createSubscription({
+    name: "Subscription",
+    eventTopicId: "topic-1",
+    runnableType: "extensibility.vro",
+    runnableId: "runnable-1",
+    projectId: "project-1",
+    description: "A subscription",
+    blocking: true,
+    priority: 5,
+    timeout: 30,
+    disabled: false,
+    constraints: { foo: "bar" },
+  });
+
+  assert.deepEqual(calls[0].body, {
+    type: "RUNNABLE",
+    name: "Subscription",
+    eventTopicId: "topic-1",
+    runnableType: "extensibility.vro",
+    runnableId: "runnable-1",
+    projectId: "project-1",
+    description: "A subscription",
+    blocking: true,
+    priority: 5,
+    timeout: 30,
+    disabled: false,
+    constraints: { foo: "bar" },
+  });
+});
+
+test("updateSubscription on vcfa puts only the supplied fields", async () => {
+  const { http, calls } = captureWrites("vcfa");
+  const client = new SubscriptionClient(http);
+
+  await client.updateSubscription("subscription-1", { disabled: true });
+
+  assert.deepEqual(calls, [
+    {
+      method: "PUT",
+      path: "/subscriptions/subscription-1",
+      body: { disabled: true },
+    },
+  ]);
+});
+
+test("updateSubscription on vra8 reads, merges, upserts, and re-reads", async () => {
+  const { http, calls } = captureWrites("vra8", {
+    id: "subscription-1",
+    type: "SUBSCRIBABLE",
+    name: "Existing",
+    eventTopicId: "topic-1",
+    runnableType: "extensibility.vro",
+    runnableId: "runnable-1",
+    blocking: false,
+    disabled: false,
+    unmodeledField: "keep me",
+  });
+  const client = new SubscriptionClient(http);
+
+  await client.updateSubscription("subscription-1", { disabled: true });
+
+  assert.deepEqual(
+    calls.map((c) => c.method),
+    ["GET", "POST", "GET"],
+  );
+  assert.equal(calls[1].path, "/subscriptions");
+  assert.equal(calls[1].body.disabled, true);
+  assert.equal(calls[1].body.name, "Existing");
+  // The live element is the merge base, so its own type and any field the
+  // Subscription type does not model survive the replace.
+  assert.equal(calls[1].body.type, "SUBSCRIBABLE");
+  assert.equal(calls[1].body.unmodeledField, "keep me");
+});
+
+test("updateSubscription on vra8 merges onto a caller-supplied snapshot", async () => {
+  const { http, calls } = captureWrites("vra8", {
+    id: "subscription-1",
+    name: "Should not be read",
+    eventTopicId: "topic-1",
+  });
+  const client = new SubscriptionClient(http);
+
+  // The update tool passes the element its expected-target guard already read.
+  await client.updateSubscription(
+    "subscription-1",
+    { disabled: true },
+    { id: "subscription-1", name: "Guarded", eventTopicId: "topic-1" },
+  );
+
+  assert.deepEqual(
+    calls.map((c) => c.method),
+    ["POST", "GET"],
+    "no second pre-write read when the caller supplies the snapshot",
+  );
+  assert.equal(calls[0].body.name, "Guarded");
+});

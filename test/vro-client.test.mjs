@@ -1389,12 +1389,16 @@ test("provider 401 failure hints at provider account verification", async () => 
   );
 });
 
-// The vra8 support surface after the VCFO-068 lab verification (vRO 8.18.1):
-// every Automation-service read and the whole vRO surface go through;
-// Automation-service writes and the single-configuration artifact export do
-// not. Each case below mirrors an operation exercised against the lab.
-const AUTOMATION_WRITE_REFUSAL =
-  /Automation-service writes .* not supported .*vra8 mode pending lab verification/;
+// The vra8 support surface after the VCFO-068 (vRO 8.18.1) and VCFO-070 (vRA
+// 8.18 Automation services) lab verifications: every Automation-service read,
+// the whole vRO surface, and the blueprint-service and event-broker writes go
+// through; catalog-service and deployment-service writes and the single-
+// configuration artifact export do not. Each case below mirrors an operation
+// exercised against the lab.
+const CATALOG_WRITE_REFUSAL =
+  /Catalog item requests .* not supported .*vra8 mode pending lab verification/;
+const DEPLOYMENT_WRITE_REFUSAL =
+  /Deployment deletion and day-2 actions .* not supported .*vra8 mode pending lab verification/;
 
 // Answers the vra8 logins and then every Automation-service read with one
 // empty Spring page, the envelope vRA 8 returns.
@@ -1446,43 +1450,211 @@ test("vra8 platform allows Automation-service reads", async () => {
   }
 });
 
-test("vra8 platform rejects Automation-service writes", async () => {
+// Answers the vra8 logins, the empty 201 that vRA 8's event-broker returns for
+// a subscription upsert, the 204 a delete returns, and a single-element GET for
+// the read-backs the vra8 create/update paths perform. Records every request.
+function vra8AutomationWriteStub(requests = [], element = {}) {
+  const login = vra8LoginStub();
+  return async (url, init = {}) => {
+    const fromLogin = login(url);
+    if (fromLogin) return fromLogin;
+    const method = init.method ?? "GET";
+    requests.push({
+      method,
+      url: String(url),
+      body: init.body ? JSON.parse(init.body) : undefined,
+    });
+    if (method === "GET") return Response.json(element);
+    // vRA 8 answers a subscription upsert 201 with an empty body, and a delete
+    // 204; blueprint-service answers a create with the created element.
+    if (String(url).includes("/event-broker/")) {
+      return new Response(null, { status: method === "DELETE" ? 204 : 201 });
+    }
+    return method === "DELETE"
+      ? new Response(null, { status: 204 })
+      : Response.json(element);
+  };
+}
+
+test("vra8 platform allows blueprint-service and event-broker writes", async () => {
+  const requests = [];
+  globalThis.fetch = vra8AutomationWriteStub(requests, {
+    id: "subscription-1",
+    name: "Subscription",
+    eventTopicId: "topic-1",
+    runnableType: "extensibility.abx",
+    runnableId: "runnable-1",
+  });
+  const client = new VroClient(vra8Config());
+
+  await client.createTemplate({
+    name: "Template",
+    projectId: "project-1",
+    content: "{}",
+  });
+  await client.deleteTemplate("template-1");
+  await client.createSubscription({
+    name: "Subscription",
+    eventTopicId: "topic-1",
+    runnableType: "extensibility.abx",
+    runnableId: "runnable-1",
+  });
+  await client.updateSubscription("subscription-1", { disabled: true });
+  await client.deleteSubscription("subscription-1");
+
+  // Every write reached its own Automation service, never /vco/api.
+  assert.ok(
+    requests.every((r) => !r.url.includes("/vco/api")),
+    "no Automation write should reach /vco/api",
+  );
+  const writes = requests.filter((r) => r.method !== "GET");
+  assert.deepEqual(
+    writes.map((r) => `${r.method} ${new URL(r.url).pathname}`),
+    [
+      "POST /blueprint/api/blueprints",
+      "DELETE /blueprint/api/blueprints/template-1",
+      "POST /event-broker/api/subscriptions",
+      "POST /event-broker/api/subscriptions",
+      "DELETE /event-broker/api/subscriptions/subscription-1",
+    ],
+  );
+});
+
+test("vra8 createSubscription supplies an id and re-reads the created element", async () => {
+  const requests = [];
+  globalThis.fetch = vra8AutomationWriteStub(requests, {
+    id: "read-back",
+    name: "Subscription",
+  });
+  const client = new VroClient(vra8Config());
+
+  // vRA 8 answers a bodyless 201, so the caller must still get a real element.
+  const created = await client.createSubscription({
+    name: "Subscription",
+    eventTopicId: "topic-1",
+    runnableType: "extensibility.abx",
+    runnableId: "runnable-1",
+  });
+  assert.equal(created.id, "read-back");
+
+  const post = requests.find((r) => r.method === "POST");
+  // vRA 8 answers a body without an id with 500 "The given id must not be null".
+  assert.match(
+    String(post.body.id),
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+  );
+  assert.equal(post.body.type, "RUNNABLE");
+  const readBack = requests.filter((r) => r.method === "GET");
+  assert.equal(readBack.length, 1);
+  assert.ok(readBack[0].url.endsWith(`/subscriptions/${post.body.id}`));
+});
+
+test("vra8 updateSubscription upserts a full body and never issues a PUT", async () => {
+  const requests = [];
+  globalThis.fetch = vra8AutomationWriteStub(requests, {
+    id: "subscription-1",
+    // Not every subscription vRA 8 serves is RUNNABLE — the verification lab
+    // had 5 SUBSCRIBABLE service subscribers — and the upsert replaces the
+    // element, so an update that never mentioned the type must not retype it.
+    type: "SUBSCRIBABLE",
+    name: "Existing",
+    eventTopicId: "topic-1",
+    runnableType: "extensibility.vro",
+    runnableId: "runnable-1",
+    description: "Existing description",
+    blocking: false,
+    disabled: false,
+    // Stands in for any field vRA 8 stores that `Subscription` does not model.
+    // The upsert replaces what it does not carry, so these must survive too.
+    unmodeledField: "keep me",
+    orgId: "org-1",
+    system: true,
+    contextual: true,
+  });
+  const client = new VroClient(vra8Config());
+
+  await client.updateSubscription("subscription-1", { disabled: true });
+
+  // vRA 8 answers PUT and PATCH on this path with 405, so the update is a POST
+  // upsert carrying the whole element.
+  assert.ok(
+    requests.every((r) => r.method !== "PUT" && r.method !== "PATCH"),
+    "vra8 update must not issue a PUT or PATCH",
+  );
+  const post = requests.find((r) => r.method === "POST");
+  assert.equal(post.body.id, "subscription-1");
+  assert.equal(post.body.disabled, true, "the caller's change is applied");
+  // Unspecified fields carry forward, modeled or not: the merge starts from the
+  // live element rather than rebuilding an allow-listed one.
+  assert.equal(post.body.type, "SUBSCRIBABLE");
+  assert.equal(post.body.name, "Existing");
+  assert.equal(post.body.eventTopicId, "topic-1");
+  assert.equal(post.body.runnableId, "runnable-1");
+  assert.equal(post.body.description, "Existing description");
+  assert.equal(post.body.unmodeledField, "keep me");
+  // Server-owned fields are never echoed back into the upsert.
+  assert.ok(!("orgId" in post.body));
+  assert.ok(!("system" in post.body));
+  assert.ok(!("contextual" in post.body));
+});
+
+test("vra8 updateSubscription refuses an element with no event topic", async () => {
+  const requests = [];
+  globalThis.fetch = vra8AutomationWriteStub(requests, {
+    id: "subscription-1",
+    name: "Existing",
+  });
+  const client = new VroClient(vra8Config());
+
+  // vRA 8 requires eventTopicId on the upsert, and the element carries none to
+  // merge, so refuse before the write rather than let the server 400 decide.
+  await assert.rejects(
+    () => client.updateSubscription("subscription-1", { disabled: true }),
+    /carries no eventTopicId/,
+  );
+  assert.equal(
+    requests.filter((r) => r.method !== "GET").length,
+    0,
+    "nothing was mutated",
+  );
+});
+
+test("vra8 createSubscription returns the posted element when the read-back fails", async () => {
+  const requests = [];
+  const login = vra8LoginStub();
+  globalThis.fetch = async (url, init = {}) => {
+    const fromLogin = login(url);
+    if (fromLogin) return fromLogin;
+    const method = init.method ?? "GET";
+    requests.push({ method, url: String(url) });
+    // The POST landed; the read-after-write has not caught up yet.
+    if (method === "GET") return new Response("", { status: 404 });
+    return new Response(null, { status: 201 });
+  };
+  const client = new VroClient(vra8Config());
+
+  // A throw here would report a failed create for a subscription that exists,
+  // and the natural retry would create a second one under a fresh UUID.
+  const created = await client.createSubscription({
+    name: "Subscription",
+    eventTopicId: "topic-1",
+    runnableType: "extensibility.abx",
+    runnableId: "runnable-1",
+  });
+  assert.equal(created.name, "Subscription");
+  assert.match(
+    created.id,
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+  );
+  assert.equal(requests.filter((r) => r.method === "POST").length, 1);
+});
+
+test("vra8 platform rejects catalog-service and deployment-service writes", async () => {
   const client = new VroClient(vra8Config());
 
   await assert.rejects(
-    () =>
-      client.createTemplate({
-        name: "Template",
-        projectId: "project-1",
-        content: "{}",
-      }),
-    AUTOMATION_WRITE_REFUSAL,
-  );
-  await assert.rejects(
-    () => client.deleteTemplate("template-1"),
-    AUTOMATION_WRITE_REFUSAL,
-  );
-  await assert.rejects(
-    () =>
-      client.createSubscription({
-        name: "Subscription",
-        eventTopicId: "topic-1",
-        runnableType: "extensibility.abx",
-        runnableId: "runnable-1",
-      }),
-    AUTOMATION_WRITE_REFUSAL,
-  );
-  await assert.rejects(
-    () => client.updateSubscription("subscription-1", {}),
-    AUTOMATION_WRITE_REFUSAL,
-  );
-  await assert.rejects(
-    () => client.deleteSubscription("subscription-1"),
-    AUTOMATION_WRITE_REFUSAL,
-  );
-  await assert.rejects(
     () => client.deleteDeployment("deployment-1"),
-    AUTOMATION_WRITE_REFUSAL,
+    DEPLOYMENT_WRITE_REFUSAL,
   );
   await assert.rejects(
     () =>
@@ -1490,7 +1662,7 @@ test("vra8 platform rejects Automation-service writes", async () => {
         deploymentId: "deployment-1",
         actionId: "action-1",
       }),
-    AUTOMATION_WRITE_REFUSAL,
+    DEPLOYMENT_WRITE_REFUSAL,
   );
   await assert.rejects(
     () =>
@@ -1499,7 +1671,7 @@ test("vra8 platform rejects Automation-service writes", async () => {
         deploymentName: "Deployment",
         projectId: "project-1",
       }),
-    AUTOMATION_WRITE_REFUSAL,
+    CATALOG_WRITE_REFUSAL,
   );
 });
 

@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import type { VroClient } from "../vro-client.js";
+import type { Subscription } from "../types.js";
 import { truncationNote } from "./truncation.js";
 import { listLimitSchema, limitNote } from "./list-limit.js";
 import { DESTRUCTIVE_LIVE_WRITE } from "./annotations.js";
@@ -91,7 +92,7 @@ export function registerSubscriptionTools(
         }
         const lines = subs.map(
           (s) =>
-            `• ${s.name} (id: ${s.id}) — topic: ${s.eventTopicId ?? "N/A"}, runnable: ${s.runnableType ?? "N/A"}/${s.runnableId ?? "N/A"}, ${s.disabled ? "DISABLED" : "ENABLED"}`,
+            `• ${s.name ?? "(unnamed)"} (id: ${s.id}) — topic: ${s.eventTopicId ?? "N/A"}, runnable: ${s.runnableType ?? "N/A"}/${s.runnableId ?? "N/A"}, ${s.disabled ? "DISABLED" : "ENABLED"}`,
         );
         return {
           content: [
@@ -136,7 +137,7 @@ export function registerSubscriptionTools(
       try {
         const sub = await client.getSubscription(id);
 
-        let text = `Subscription: ${sub.name}\nID: ${sub.id}\n`;
+        let text = `Subscription: ${sub.name ?? "(unnamed)"}\nID: ${sub.id}\n`;
         if (sub.description) text += `Description: ${sub.description}\n`;
         text += `Status: ${sub.disabled ? "DISABLED" : "ENABLED"}\n`;
         if (sub.eventTopicId) text += `Event Topic: ${sub.eventTopicId}\n`;
@@ -262,7 +263,7 @@ export function registerSubscriptionTools(
           content: [
             {
               type: "text",
-              text: `Subscription created successfully.\nName: ${sub.name}\nID: ${sub.id}\nStatus: ${sub.disabled ? "DISABLED" : "ENABLED"}`,
+              text: `Subscription created successfully.\nName: ${sub.name ?? "(unnamed)"}\nID: ${sub.id}\nStatus: ${sub.disabled ? "DISABLED" : "ENABLED"}`,
             },
           ],
         };
@@ -285,7 +286,7 @@ export function registerSubscriptionTools(
     {
       title: "Update Subscription",
       description:
-        "Update an existing extensibility subscription. Use this to enable/disable, re-target, or change priority of a subscription.",
+        "Update an existing extensibility subscription. Use this to enable/disable, re-target, or change priority of a subscription. Provide at least one of name, description, disabled, runnableId, runnableType, blocking, priority, or timeout; unspecified fields are preserved.",
       inputSchema: z.object({
         id: z.string().describe("The subscription ID to update"),
         expectedName: z
@@ -344,6 +345,28 @@ export function registerSubscriptionTools(
       timeout,
       confirm,
     }): Promise<CallToolResult> => {
+      // An update is a full-element upsert in vra8 mode, so a confirmed no-op
+      // is a live rewrite rather than the inert PUT it used to be.
+      if (
+        name === undefined &&
+        description === undefined &&
+        disabled === undefined &&
+        runnableId === undefined &&
+        runnableType === undefined &&
+        blocking === undefined &&
+        priority === undefined &&
+        timeout === undefined
+      ) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Nothing to update for subscription ${id}. Provide at least one of name, description, disabled, runnableId, runnableType, blocking, priority, or timeout.`,
+            },
+          ],
+          isError: true,
+        };
+      }
       if (!confirm) {
         return {
           content: [
@@ -356,6 +379,9 @@ export function registerSubscriptionTools(
       }
 
       try {
+        // Reused as the merge base when the guard ran, so a guarded update
+        // reads once and upserts the same snapshot it verified.
+        let subscription: Subscription | undefined;
         if (
           hasAnyExpectedValue({
             expectedName,
@@ -363,7 +389,7 @@ export function registerSubscriptionTools(
             expectedRunnableId,
           })
         ) {
-          const subscription = await client.getSubscription(id);
+          subscription = await client.getSubscription(id);
           const guard = guardExpectedFields(`subscription ${id}`, [
             {
               label: "subscription name",
@@ -384,21 +410,25 @@ export function registerSubscriptionTools(
           if (guard) return guard;
         }
 
-        const sub = await client.updateSubscription(id, {
-          name,
-          description,
-          disabled,
-          runnableId,
-          runnableType,
-          blocking,
-          priority,
-          timeout,
-        });
+        const sub = await client.updateSubscription(
+          id,
+          {
+            name,
+            description,
+            disabled,
+            runnableId,
+            runnableType,
+            blocking,
+            priority,
+            timeout,
+          },
+          subscription,
+        );
         return {
           content: [
             {
               type: "text",
-              text: `Subscription updated successfully.\nName: ${sub.name}\nID: ${sub.id}\nStatus: ${sub.disabled ? "DISABLED" : "ENABLED"}`,
+              text: `Subscription updated successfully.\nName: ${sub.name ?? "(unnamed)"}\nID: ${sub.id}\nStatus: ${sub.disabled ? "DISABLED" : "ENABLED"}`,
             },
           ],
         };
