@@ -550,10 +550,45 @@ export interface TemplateList {
  * VCF Automation project as returned by the project-service API. Only the
  * fields the tools render are declared; extend after live verification.
  */
+/**
+ * A user or group granted a role on a project. The `administrators`,
+ * `members`, `viewers`, and `supervisors` arrays of the project-service
+ * response hold these; the vRA 8.18 lab returned them empty, so the entry
+ * shape follows the public Project Service API (`email`, `type` of `user` or
+ * `group`) and the renderer tolerates entries without either field.
+ */
+export interface ProjectPrincipal {
+  email?: string;
+  type?: string;
+}
+
+/**
+ * Project as served by `GET /project-service/api/projects[/{id}]`. The field
+ * set beyond `id`/`name`/`description` was verified against a vRA 8.18 lab
+ * (VCFO-065). Cloud zones are not part of this view: they live on the IaaS
+ * `/iaas/api/projects` resource.
+ */
 export interface Project {
   id: string;
   name: string;
   description?: string;
+  /** Owning organization. */
+  orgId?: string;
+  administrators?: ProjectPrincipal[];
+  members?: ProjectPrincipal[];
+  viewers?: ProjectPrincipal[];
+  supervisors?: ProjectPrincipal[];
+  /** Placement constraints keyed by kind (network, storage, extensibility). */
+  constraints?: Record<string, unknown>;
+  /**
+   * Project properties. `__namingTemplate` and `__projectPlacementPolicy`
+   * carry the machine naming template and placement policy; any other key is
+   * a custom property.
+   */
+  properties?: Record<string, unknown>;
+  /** Request timeout in seconds. */
+  operationTimeout?: number;
+  sharedResources?: boolean;
 }
 
 export interface ProjectList {
