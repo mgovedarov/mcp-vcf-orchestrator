@@ -626,6 +626,35 @@ test("get-workflow-execution renders unwrapped output parameter values", async (
   assert.match(result.content[0].text, /count \(number\): 3/);
 });
 
+test("get-workflow-execution unwraps array and empty-string output values", async () => {
+  const handlers = registeredWorkflowTools({
+    getWorkflowExecution: async (workflowId, executionId) => ({
+      id: executionId,
+      state: "completed",
+      "output-parameters": [
+        {
+          name: "names",
+          type: "Array/string",
+          value: { array: { elements: [{ string: { value: "one" } }] } },
+        },
+        { name: "empty", type: "string", value: { string: { value: "" } } },
+      ],
+    }),
+  });
+
+  const result = await handlers.get("get-workflow-execution")({
+    workflowId: "workflow-1",
+    executionId: "execution-1",
+  });
+
+  assert.equal(result.isError, undefined);
+  // An array output used to leak its raw envelope: the old unwrapper only
+  // matched a wrapper carrying a `value` property.
+  assert.match(result.content[0].text, /names \(Array\/string\): \["one"\]/);
+  assert.match(result.content[0].text, /empty \(string\): ""/);
+  assert.doesNotMatch(result.content[0].text, /"elements"/);
+});
+
 test("get-workflow-execution-logs formats execution log entries", async () => {
   let logRequest;
   const handlers = registeredWorkflowTools({

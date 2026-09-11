@@ -522,7 +522,13 @@ List configuration elements from VCF Automation Orchestrator. Optionally filter 
 
 ### `get-configuration`
 
-Get detailed information about a specific configuration element including its attributes. Secure-typed attribute values (e.g. `SecureString`) are redacted in the output and shown as `[redacted]`, consistent with the context-snapshot redaction policy.
+Get detailed information about a specific configuration element including its attributes.
+
+Attribute values are printed as values, not as the vRO type envelope they arrive in: a `string` reads `"probe-2"`, an `Array/string` reads `["one"]`, and an SDK-object attribute reads its `{type, href, id}` descriptor. An envelope shape the server has not seen before is printed raw rather than guessed at. An attribute vRO returned with no value at all — the built-in `BatchAction` element declares several — reads `(no value)`; an attribute holding `""`, `0` or `false` prints that value.
+
+Values are JSON-encoded so an empty string reads as `""` rather than as blank space, which means a string's surrounding quotes belong to the rendering and not to the value. When re-sending one to `update-configuration`, whose `value` is a plain string, send `probe-2`, not `"probe-2"`.
+
+Secure-typed attribute values (e.g. `SecureString`) are redacted in the output and shown as `[redacted]`, consistent with the context-snapshot redaction policy, as is any attribute whose value arrives in a secure or encrypted envelope regardless of its declared type.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
@@ -576,7 +582,7 @@ Call the tool with `confirm: false` first: the refusal, if any, is reported in t
 | --- | --- | --- | --- |
 | `name` | string | Yes | Attribute name. |
 | `type` | string | Yes | vRO attribute type. |
-| `value` | string | No | Attribute value as a string. Required for secure types, whose current value cannot be read back. |
+| `value` | string | No | Attribute value as a string. `get-configuration` renders values as JSON, so send `probe-2` rather than the rendered `"probe-2"`. Required for secure types, whose current value cannot be read back. |
 :::
 
 ### `delete-configuration`

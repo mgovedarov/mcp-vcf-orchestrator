@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- `get-configuration` prints attribute values instead of the raw vRO value envelope: `setting (string): "probe-2"` rather than `setting (string): {"string":{"value":"probe-2"}}`. Unwrapping is structural and shares the encoder's type-key mapping, so it follows the envelope rather than the declared type — vRO answers a `Date` attribute under the lowercase `date` key — and it covers arrays (`["one"]`), properties, and SDK-object descriptors as well as scalars; an envelope it does not recognize still renders raw rather than being guessed at. A value that is genuinely `""`, `0` or `false` now renders as that value: "no value" is decided on the envelope being absent, which is the case the built-in `BatchAction` element's valueless `Array/Action` attributes exercise. Secure attributes stay `[redacted]`, and an attribute whose declared type is permissive but whose value arrives in a `secure-string` envelope is redacted too. The same unwrap now serves `get-workflow-execution` and `run-workflow-and-wait`, replacing a narrower helper there that leaked the raw envelope for array outputs. The envelope shapes were read off a live vRO 8.18.1 configuration element; `Properties` is covered from the encoder instead, because a `Properties` attribute cannot currently be authored through the configuration tools (VCFO-080).
+
 ## 3.1.0 - 2026-09-11
 
 The first release since 3.0.0. `VCFA_TARGET_PLATFORM=vra8` moves from a login-only mode to a

@@ -16,7 +16,37 @@ import {
   assertConfigurationUpdateSafe,
   isSecureAttributeType,
 } from "../client/configuration-client.js";
+import { vroValueEnvelopeKeys } from "../client/parameters.js";
+import { formatVroValue } from "./parameter-values.js";
 
+/**
+ * An attribute carries a value only when vRO returned an envelope for it; the
+ * built-in `BatchAction` element, for instance, declares `Array/Action`
+ * attributes with no value at all. The check is deliberately on the envelope
+ * and not on the value inside it, so an attribute genuinely holding `""`, `0`
+ * or `false` still renders that value instead of reading as unset.
+ */
+function hasAttributeValue(value: unknown): boolean {
+  if (value === undefined || value === null) return false;
+  if (typeof value === "object") return Object.keys(value).length > 0;
+  return true;
+}
+
+/**
+ * Redact a secure attribute by its declared type, and also by the type key vRO
+ * wrapped the value in — an attribute declared as something permissive can
+ * still come back in a `secure-string` envelope, and the repo never prints a
+ * secret it can recognize.
+ */
+function isSecureAttributeValue(
+  type: string | undefined,
+  value: unknown,
+): boolean {
+  return (
+    isSecureAttributeType(type) ||
+    vroValueEnvelopeKeys(value).some(isSecureAttributeType)
+  );
+}
 
 export function registerConfigTools(
   server: McpServer,
@@ -106,10 +136,10 @@ export function registerConfigTools(
         if (attrs.length > 0) {
           text += `\nAttributes:\n`;
           for (const a of attrs) {
-            const val = isSecureAttributeType(a.type)
+            const val = isSecureAttributeValue(a.type, a.value)
               ? "[redacted]"
-              : a.value
-                ? JSON.stringify(a.value)
+              : hasAttributeValue(a.value)
+                ? formatVroValue(a.value, a.type)
                 : "(no value)";
             text += `  • ${a.name} (${a.type}): ${val}${a.description ? ` — ${a.description}` : ""}\n`;
           }
@@ -498,7 +528,7 @@ export function registerConfigTools(
                 .string()
                 .optional()
                 .describe(
-                  "Attribute value as a string. Required for secure types, whose current value cannot be read back.",
+                  "Attribute value as a string. get-configuration renders values as JSON, so send probe-2 rather than the rendered \"probe-2\". Required for secure types, whose current value cannot be read back.",
                 ),
             }),
           )

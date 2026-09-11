@@ -197,6 +197,82 @@ test("update-action is annotated as a destructive live write", async () => {
   );
 });
 
+test("get-configuration renders attribute values, not the vRO value envelope", async () => {
+  // Every envelope below was read back from a live vRO 8.18.1 configuration
+  // element (VCFO-080); BatchAction is the built-in that declares attributes
+  // carrying no value at all.
+  const handlers = registeredTools(registerConfigTools, {
+    getConfiguration: async (id) => ({
+      id,
+      name: "Probe",
+      attributes: [
+        { name: "aString", type: "string", value: { string: { value: "probe-2" } } },
+        { name: "anEmptyString", type: "string", value: { string: { value: "" } } },
+        { name: "aNumber", type: "number", value: { number: { value: 42 } } },
+        { name: "aBoolean", type: "boolean", value: { boolean: { value: false } } },
+        {
+          name: "aDate",
+          type: "Date",
+          value: { date: { value: "2026-09-11T10:00:00.000+00:00" } },
+        },
+        {
+          name: "anArray",
+          type: "Array/string",
+          value: { array: { elements: [{ string: { value: "one" } }] } },
+        },
+        {
+          name: "aSdkObject",
+          type: "VC:VirtualMachine",
+          value: {
+            "sdk-object": {
+              type: "VC:VirtualMachine",
+              href: "https://vro.example.test/vco/api/catalog/VC/VirtualMachine/vm-1/",
+              id: "vm-1",
+            },
+          },
+        },
+        { name: "noValue", type: "Array/Action" },
+      ],
+    }),
+  });
+
+  const detail = await handlers.get("get-configuration")({ id: "config-1" });
+  const text = detail.content[0].text;
+
+  assert.match(text, /aString \(string\): "probe-2"/);
+  assert.match(text, /aNumber \(number\): 42/);
+  assert.match(text, /aDate \(Date\): "2026-09-11T10:00:00\.000\+00:00"/);
+  assert.match(text, /anArray \(Array\/string\): \["one"\]/);
+  assert.match(text, /aSdkObject \(VC:VirtualMachine\): \{"type":"VC:VirtualMachine"/);
+  // A falsy value is a value: it must render, not read as unset.
+  assert.match(text, /anEmptyString \(string\): ""/);
+  assert.match(text, /aBoolean \(boolean\): false/);
+  // An attribute vRO returned without a value still reports as unset.
+  assert.match(text, /noValue \(Array\/Action\): \(no value\)/);
+  // The raw envelope must not leak into the rendered output.
+  assert.doesNotMatch(text, /\{"string":\{"value"/);
+});
+
+test("get-configuration redacts a secure value carried by a permissive type", async () => {
+  const handlers = registeredTools(registerConfigTools, {
+    getConfiguration: async (id) => ({
+      id,
+      name: "Probe",
+      attributes: [
+        {
+          name: "token",
+          type: "Any",
+          value: { "secure-string": { value: "super-secret" } },
+        },
+      ],
+    }),
+  });
+
+  const detail = await handlers.get("get-configuration")({ id: "config-1" });
+  assert.match(detail.content[0].text, /token \(Any\): \[redacted\]/);
+  assert.doesNotMatch(detail.content[0].text, /super-secret/);
+});
+
 test("configuration tools format attributes and guard imports and deletes", async () => {
   let created;
   let updated;
