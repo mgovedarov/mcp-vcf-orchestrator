@@ -8,13 +8,39 @@ import type {
   VroTargetPlatformInput,
 } from "../types.js";
 
-// Automation-service writes (catalog requests, deployment deletes and day-2
-// actions, blueprint create/delete, subscription create/update/delete) are the
-// one surface still withheld in vra8 mode: the read paths were verified against
-// a vRA 8.18 lab (VCFO-068) but the write paths were not, and each one either
-// provisions or destroys real infrastructure.
-const UNSUPPORTED_AUTOMATION_WRITE =
-  "Automation-service writes (catalog item requests, deployment deletion and day-2 actions, blueprint create/delete, and subscription create/update/delete) are not supported in VCFA_TARGET_PLATFORM=vra8 mode pending lab verification. Reading catalog items, deployments, templates, projects, subscriptions, and event topics is supported, as is the full vRO /vco/api surface.";
+// The Automation services vra8 mode can address. Writes are gated per service:
+// VCFO-070 verified blueprint-service and event-broker against a vRA 8.18 lab,
+// so those two now write; catalog-service and deployment-service stay withheld
+// because that lab had no released catalog content and no deployment to act on,
+// and exercising either one provisions or destroys real infrastructure.
+type AutomationService =
+  | "blueprint"
+  | "catalog"
+  | "deployment"
+  | "event-broker"
+  | "project";
+
+// Exhaustive on purpose: `null` means writes to that service are lab-verified,
+// a string is the refusal explaining what verifying it would take. Adding a
+// service to AutomationService forces a decision here rather than defaulting
+// into the permissive branch.
+const UNSUPPORTED_AUTOMATION_WRITE: Record<AutomationService, string | null> =
+  {
+    blueprint: null,
+    "event-broker": null,
+    project:
+      "Project-service writes are not supported in VCFA_TARGET_PLATFORM=vra8 mode: no write path has been verified against a vRA 8 environment. Reading projects is supported.",
+    catalog:
+      "Catalog item requests (create-deployment) are not supported in VCFA_TARGET_PLATFORM=vra8 mode pending lab verification: the lab that verified this mode had no released catalog content, so the request path was never exercised. Reading catalog items is supported, as are blueprint and subscription writes and the full vRO /vco/api surface.",
+    deployment:
+      "Deployment deletion and day-2 actions (delete-deployment, run-deployment-action) are not supported in VCFA_TARGET_PLATFORM=vra8 mode pending lab verification: the lab that verified this mode had no deployment to act on, and both paths destroy or alter real infrastructure. Reading deployments and their day-2 action lists is supported, as are blueprint and subscription writes and the full vRO /vco/api surface.",
+  };
+
+// Fallback for an Automation base URL this guard does not recognize. Reached
+// only if a new service client is added without a matching entry in
+// automationServiceFor, so it fails closed rather than letting the write through.
+const UNSUPPORTED_AUTOMATION_WRITE_UNKNOWN =
+  "This Automation-service write is not supported in VCFA_TARGET_PLATFORM=vra8 mode: the target service has not been verified against a vRA 8 environment.";
 
 // vRA 8 serves a single configuration element as JSON only: a GET that asks
 // for application/zip answers 406, while the same request for a workflow or an
@@ -883,21 +909,36 @@ export class VroHttpClient {
     return res;
   }
 
+  /** Which Automation service an override base URL belongs to, if any. */
+  private automationServiceFor(
+    baseUrl: string,
+  ): AutomationService | undefined {
+    if (baseUrl === this.blueprintBaseUrl) return "blueprint";
+    if (baseUrl === this.catalogBaseUrl) return "catalog";
+    if (baseUrl === this.deploymentBaseUrl) return "deployment";
+    if (baseUrl === this.eventBrokerBaseUrl) return "event-broker";
+    if (baseUrl === this.projectBaseUrl) return "project";
+    return undefined;
+  }
+
   /**
    * Gate an operation the active target platform cannot serve.
    *
-   * Only `vra8` restricts anything, and after the VCFO-068 lab verification the
-   * restriction is per service and per method rather than one flat rule:
+   * Only `vra8` restricts anything, and after the VCFO-068 and VCFO-070 lab
+   * verifications the restriction is per service and per method:
    *
    * - `/vco/api` (vRO): fully supported, reads and writes alike. Verified
    *   against vRO 8.18.1 — create/update/delete of workflows, actions, and
    *   configuration elements, plus package import and its dry-run details.
    *   The binary export and multipart import paths reach vRO through
    *   authenticatedFetch and are therefore never gated here.
-   * - Automation services (any other base URL): reads only. The list and get
+   * - Automation services: reads are supported everywhere. The list and get
    *   paths return the same Spring `Page` and object shapes the VCFA 9.x
-   *   clients parse (verified on vRA 8.18), but no write path was exercised,
-   *   so writes still throw.
+   *   clients parse (verified on vRA 8.18).
+   * - Automation writes: blueprint-service and event-broker are verified
+   *   (VCFO-070) and write; catalog-service, deployment-service, and
+   *   project-service are not and throw. project-service has no write path
+   *   today, so its entry only matters if one is added later.
    */
   private assertOperationSupported(
     method: string,
@@ -906,7 +947,12 @@ export class VroHttpClient {
     if (this.targetPlatform !== "vra8") return;
     if (!overrideBaseUrl || overrideBaseUrl === this.baseUrl) return;
     if (method.toUpperCase() === "GET") return;
-    throw new Error(UNSUPPORTED_AUTOMATION_WRITE);
+    const service = this.automationServiceFor(overrideBaseUrl);
+    if (service === undefined) {
+      throw new Error(UNSUPPORTED_AUTOMATION_WRITE_UNKNOWN);
+    }
+    const refusal = UNSUPPORTED_AUTOMATION_WRITE[service];
+    if (refusal !== null) throw new Error(refusal);
   }
 
   private async send(

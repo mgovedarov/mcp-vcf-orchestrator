@@ -91,7 +91,7 @@ export function registerSubscriptionTools(
         }
         const lines = subs.map(
           (s) =>
-            `• ${s.name} (id: ${s.id}) — topic: ${s.eventTopicId ?? "N/A"}, runnable: ${s.runnableType ?? "N/A"}/${s.runnableId ?? "N/A"}, ${s.disabled ? "DISABLED" : "ENABLED"}`,
+            `• ${s.name ?? "(unnamed)"} (id: ${s.id}) — topic: ${s.eventTopicId ?? "N/A"}, runnable: ${s.runnableType ?? "N/A"}/${s.runnableId ?? "N/A"}, ${s.disabled ? "DISABLED" : "ENABLED"}`,
         );
         return {
           content: [
@@ -136,7 +136,7 @@ export function registerSubscriptionTools(
       try {
         const sub = await client.getSubscription(id);
 
-        let text = `Subscription: ${sub.name}\nID: ${sub.id}\n`;
+        let text = `Subscription: ${sub.name ?? "(unnamed)"}\nID: ${sub.id}\n`;
         if (sub.description) text += `Description: ${sub.description}\n`;
         text += `Status: ${sub.disabled ? "DISABLED" : "ENABLED"}\n`;
         if (sub.eventTopicId) text += `Event Topic: ${sub.eventTopicId}\n`;
@@ -262,7 +262,7 @@ export function registerSubscriptionTools(
           content: [
             {
               type: "text",
-              text: `Subscription created successfully.\nName: ${sub.name}\nID: ${sub.id}\nStatus: ${sub.disabled ? "DISABLED" : "ENABLED"}`,
+              text: `Subscription created successfully.\nName: ${sub.name ?? "(unnamed)"}\nID: ${sub.id}\nStatus: ${sub.disabled ? "DISABLED" : "ENABLED"}`,
             },
           ],
         };
@@ -398,7 +398,7 @@ export function registerSubscriptionTools(
           content: [
             {
               type: "text",
-              text: `Subscription updated successfully.\nName: ${sub.name}\nID: ${sub.id}\nStatus: ${sub.disabled ? "DISABLED" : "ENABLED"}`,
+              text: `Subscription updated successfully.\nName: ${sub.name ?? "(unnamed)"}\nID: ${sub.id}\nStatus: ${sub.disabled ? "DISABLED" : "ENABLED"}`,
             },
           ],
         };

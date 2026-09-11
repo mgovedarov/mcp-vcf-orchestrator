@@ -10,7 +10,7 @@ These examples are current, import-safe patterns for using the MCP tools. They a
 - [Artifact Promotion](./artifact-promotion.md): preflight, diff, optional backup, and import recommendation.
 - [Workflow Execution Logs](./workflow-execution-logs.md): show, filter, and export execution syslogs from workflow runs.
 - [Template, Catalog, And Subscription](./template-catalog-subscription.md): review templates, inspect catalog/deployment behavior, and plan subscriptions.
-- vRA/vRO 8.12+ mode: set `VCFA_TARGET_PLATFORM=vra8`. The full vRO surface works there, including authoring and imports, as do the Automation-service read tools; Automation-service writes and `export-configuration-file` are unsupported in that mode.
+- vRA/vRO 8.12+ mode: set `VCFA_TARGET_PLATFORM=vra8`. The full vRO surface works there, including authoring and imports, as do the Automation-service read tools and the template and subscription write tools. Deployment creation, deletion, and day-2 actions and `export-configuration-file` are unsupported in that mode.
 
 ## Bounded Discovery
 

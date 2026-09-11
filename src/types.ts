@@ -363,7 +363,11 @@ export interface CategoryList {
 
 export interface Subscription {
   id: string;
-  name: string;
+  /**
+   * Optional: vRA 8 serves system subscriptions with no name at all (verified
+   * on vRA 8.18, VCFO-070), so renderers must not interpolate it unguarded.
+   */
+  name?: string;
   description?: string;
   type?: string; // e.g. "RUNNABLE"
   disabled?: boolean;
