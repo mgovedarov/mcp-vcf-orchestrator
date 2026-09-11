@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { extname } from "node:path";
 import type { Action, ActionList, DiffActionFileParams } from "../types.js";
+import { matchesFilter, normalizeFilter } from "./filter.js";
 import { getLinkAttrs, type AttributeLink } from "./attrs.js";
 import {
   diffActionArtifacts,
@@ -9,7 +10,7 @@ import {
   preflightActionFile,
   type ArtifactPreflightReport,
 } from "./artifact-preflight.js";
-import { createUploadForm, sanitizeErrorBody, type VroHttpClient } from "./core.js";
+import { createUploadForm, type VroHttpClient } from "./core.js";
 import {
   assertRealPathInside,
   getExistingFile,
@@ -120,9 +121,9 @@ export class ActionClient {
         fqn: a["fqn"],
       };
     });
-    if (filter) {
-      const needle = filter.toLowerCase();
-      link = link.filter((a) => (a.name ?? "").toLowerCase().includes(needle));
+    const needle = normalizeFilter(filter);
+    if (needle) {
+      link = link.filter((a) => matchesFilter(a.name, needle));
     }
     return {
       total: link.length,
@@ -242,7 +243,6 @@ export class ActionClient {
 
   async exportActionBuffer(actionId: string): Promise<Buffer> {
     const path = `/actions/${encodeURIComponent(actionId)}`;
-    this.http.assertOperationSupported("GET", path);
     const url = `${this.http.baseUrl}${path}`;
     console.error(`[vro-client] GET ${path}`);
 
@@ -252,10 +252,7 @@ export class ActionClient {
       { timeout: 60_000 },
     );
     if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(
-        `vRO API error: ${res.status} ${res.statusText} — export action\n${sanitizeErrorBody(text, res)}${this.http.apiErrorHint(res)}`,
-      );
+      throw await this.http.apiError(res, "export action");
     }
     return Buffer.from(await res.arrayBuffer());
   }
@@ -295,7 +292,6 @@ export class ActionClient {
     fileName: string,
   ): Promise<void> {
     const path = "/actions";
-    this.http.assertOperationSupported("POST", path);
     ensurePreflightPassed(await this.preflightActionFile(fileName));
     const srcPath = await this.resolveActionPath(fileName);
     await rejectSymlink(
@@ -320,10 +316,7 @@ export class ActionClient {
       { timeout: 60_000 },
     );
     if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(
-        `vRO API error: ${res.status} ${res.statusText} — import action\n${sanitizeErrorBody(text, res)}${this.http.apiErrorHint(res)}`,
-      );
+      throw await this.http.apiError(res, "import action");
     }
   }
 

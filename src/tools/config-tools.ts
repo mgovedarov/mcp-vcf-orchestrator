@@ -11,18 +11,11 @@ import {
   guardExpectedFields,
   hasAnyExpectedValue,
 } from "./confirmation-guards.js";
+import {
+  assertConfigurationUpdateSafe,
+  isSecureAttributeType,
+} from "../client/configuration-client.js";
 
-/**
- * Detects secure/encrypted configuration attribute types whose values must never
- * be printed (e.g. vRO `SecureString`). The `includes` checks are defensive against
- * any encrypted/secure variant the API returns. Mirrors the redaction posture of the
- * context-snapshot path (`src/client/context-snapshot.ts`).
- */
-function isSecureAttributeType(type: string | undefined): boolean {
-  if (!type) return false;
-  const t = type.toLowerCase();
-  return t === "securestring" || t.includes("secure") || t.includes("encrypted");
-}
 
 export function registerConfigTools(
   server: McpServer,
@@ -478,7 +471,7 @@ export function registerConfigTools(
     {
       title: "Update Configuration Element",
       description:
-        "Update an existing configuration element's name, description, or attributes. The underlying call replaces the element, so an update that omits attributes on an element that has some is refused rather than deleting them: re-send the attributes to keep, or pass an empty array to clear them deliberately. Read the current set with get-configuration first.",
+        "Update an existing configuration element's name, description, or attributes; omitted name and description are kept. The underlying call replaces the element, so an update that omits attributes on an element that has some is refused rather than deleting them: re-send the attributes to keep, or pass an empty array to clear them deliberately. Plain values can be read with get-configuration; secure values (SecureString) are never returned and must be supplied fresh, and a secure attribute sent without a value is refused. Call with confirm false first: the refusal, if any, is reported before confirmation is needed.",
       inputSchema: z.object({
         id: z.string().describe("The configuration element ID to update"),
         expectedName: z
@@ -502,12 +495,14 @@ export function registerConfigTools(
               value: z
                 .string()
                 .optional()
-                .describe("Attribute value as a string"),
+                .describe(
+                  "Attribute value as a string. Required for secure types, whose current value cannot be read back.",
+                ),
             }),
           )
           .optional()
           .describe(
-            "Attributes to store, replacing the existing set. Omit only on an element that has no attributes; pass an empty array to clear them deliberately.",
+            "Attributes to store, replacing the existing set. Omit only on an element that has no attributes; pass an empty array to clear them deliberately. Secure-typed attributes must carry a value.",
           ),
         confirm: z
           .boolean()
@@ -540,31 +535,48 @@ export function registerConfigTools(
           isError: true,
         };
       }
-      if (!confirm) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Confirm update of configuration element ${id} by setting confirm to true.`,
-            },
-          ],
-        };
-      }
-
       try {
+        // One live read serves the expected-name guard, the pre-confirmation
+        // safety check, and the update's carry-forward of omitted fields.
+        const current = await client.getConfiguration(id);
         if (hasAnyExpectedValue({ expectedName })) {
-          const config = await client.getConfiguration(id);
           const guard = guardExpectedFields(`configuration ${id}`, [
             {
               label: "configuration name",
               expected: expectedName,
-              actual: config.name,
+              actual: current.name,
             },
           ]);
           if (guard) return guard;
         }
 
-        await client.updateConfiguration(id, { name, description, attributes });
+        // Surface a refusal in the discovery phase so confirmation is never
+        // spent on a call that cannot succeed.
+        assertConfigurationUpdateSafe(id, current, { attributes });
+
+        if (!confirm) {
+          const changes = [
+            name !== undefined ? "name" : undefined,
+            description !== undefined ? "description" : undefined,
+            attributes !== undefined
+              ? `attributes (${attributes.length} to store)`
+              : undefined,
+          ].filter(Boolean);
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Confirm update of configuration element ${id} (${current.name}) by setting confirm to true. Fields to change: ${changes.join(", ")}; anything else is kept.`,
+              },
+            ],
+          };
+        }
+
+        await client.updateConfiguration(
+          id,
+          { name, description, attributes },
+          current,
+        );
         return {
           content: [
             {

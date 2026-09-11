@@ -50,7 +50,9 @@ import {
 import { ActionClient } from "./action-client.js";
 import { CatalogClient } from "./catalog-client.js";
 import { CategoryClient } from "./category-client.js";
-import { ConfigurationClient } from "./configuration-client.js";
+import { ConfigurationClient,
+  type ConfigurationUpdate,
+} from "./configuration-client.js";
 import {
   collectContextSnapshot,
   type CollectContextSnapshotParams,
@@ -327,6 +329,12 @@ export class VroClient {
       if (!target?.configurationId) {
         return "Backup skipped: configurationId is required when backup is enabled for configuration artifacts.";
       }
+      // vRA 8 serves a configuration element as JSON only (406 for the
+      // artifact request), so the backup export cannot run there. The
+      // preflight, diff, and import recommendation are still worth returning.
+      if (this.http.targetPlatform === "vra8") {
+        return "Backup skipped: exporting a single configuration element as a .vsoconf artifact is not supported in VCFA_TARGET_PLATFORM=vra8 mode (vRA 8 serves it as JSON only). Record the current element with get-configuration, or export the project package as the backup.";
+      }
       const savedPath = await this.exportConfigurationFile(
         target.configurationId,
         backupFileName,
@@ -499,13 +507,10 @@ export class VroClient {
 
   updateConfiguration(
     id: string,
-    params: {
-      name?: string;
-      description?: string;
-      attributes?: { name: string; type: string; value?: string }[];
-    },
+    params: ConfigurationUpdate,
+    current?: ConfigElement,
   ): Promise<void> {
-    return this.configurations.updateConfiguration(id, params);
+    return this.configurations.updateConfiguration(id, params, current);
   }
 
   listCategories(categoryType: string, filter?: string): Promise<CategoryList> {

@@ -60,6 +60,8 @@ The server also emits a resource-list change notification so MCP clients can red
 
 Run preflight for a local workflow, action, configuration, or package artifact; optionally export a live backup; summarize risks and changes; and recommend the exact import tool call. This tool never imports.
 
+A backup that cannot be taken is reported as a `Backup skipped:` line and the rest of the report is still returned. That covers a missing live target ID and, in `vra8` mode, a configuration artifact: vRA 8 serves a configuration element as JSON only, so the note points at `get-configuration` and the project package instead.
+
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
@@ -537,7 +539,9 @@ Create a new configuration element in VCF Automation Orchestrator. Use `list-cat
 
 Update a configuration element name, description, or attributes. Supplied attributes replace the existing attribute set. At least one of `name`, `description`, or `attributes` must be provided; a request with none is rejected before any live update.
 
-The underlying `PUT` replaces the element rather than patching it, so an update that omits `attributes` on an element that has some is refused before the write, naming the attributes (names and types only) that would have been deleted. Re-send the attributes to keep — read them with `get-configuration` — or pass an empty array to clear them deliberately. They are not carried forward automatically because a `SecureString` attribute reads back as ciphertext, and replaying that value risks storing the ciphertext as the new secret.
+The underlying `PUT` replaces the element rather than patching it. The live element is read once, before the `confirm` gate, and an omitted `name` or `description` is carried forward from it, so only the fields you supply change. Attributes are the exception: an update that omits `attributes` on an element that has some is refused, naming the attributes (names and types only) that would have been deleted. Re-send the attributes to keep, or pass an empty array to clear them deliberately. They are not carried forward automatically because a `SecureString` attribute reads back as ciphertext, and replaying that value risks storing the ciphertext as the new secret. Plain values can be read with `get-configuration`; secure values are printed as `[redacted]` and must be supplied fresh, and a secure-typed attribute sent without a `value` is refused rather than stored as an empty secret.
+
+Call the tool with `confirm: false` first: the refusal, if any, is reported in that discovery phase, and the response names the element and the fields that will change. The same read serves the `expectedName` guard, so a guarded update costs one `GET` and one `PUT`.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
@@ -546,8 +550,8 @@ The underlying `PUT` replaces the element rather than patching it, so an update 
 | `expectedName` | string | No | - | Expected current configuration element name to verify before update. |
 | `name` | string | No | current name | New name for the configuration element. |
 | `description` | string | No | current description | New description. |
-| `attributes` | array | No | - | Attributes to store, replacing the existing set. Required unless the element has no attributes; an empty array clears them. |
-| `confirm` | boolean | Yes | - | Must be `true` to confirm update. If `false`, the configuration element is not updated. |
+| `attributes` | array | No | - | Attributes to store, replacing the existing set. Required unless the element has no attributes; an empty array clears them. Secure-typed attributes must carry a value. |
+| `confirm` | boolean | Yes | - | Must be `true` to confirm update. If `false`, the configuration element is not updated, and any refusal is reported. |
 
 `attributes` array item:
 
@@ -555,7 +559,7 @@ The underlying `PUT` replaces the element rather than patching it, so an update 
 | --- | --- | --- | --- |
 | `name` | string | Yes | Attribute name. |
 | `type` | string | Yes | vRO attribute type. |
-| `value` | string | No | Attribute value as a string. |
+| `value` | string | No | Attribute value as a string. Required for secure types, whose current value cannot be read back. |
 :::
 
 ### `delete-configuration`
@@ -1091,7 +1095,7 @@ Delete a vRO package by its fully qualified name. Optionally delete all workflow
 
 List installed plugins in VCF Automation Orchestrator. Optionally filter by name substring.
 
-Reads both the VCF Automation 9.x `link`/`attributes` listing and the flat `{ plugins: [...], total }` envelope served by the vRO embedded in vRA 8 (`vra8` mode). That endpoint ignores the `conditions` query, so in `vra8` mode the filter is applied client-side as a case-insensitive substring match on the plugin module name. A plugin the server reports as disabled is marked `[disabled]`.
+Reads both the VCF Automation 9.x `link`/`attributes` listing and the flat `{ plugins: [...], total }` envelope served by the vRO embedded in vRA 8 (`vra8` mode). That endpoint ignores the `conditions` query, so in `vra8` mode the filter is applied client-side as a case-insensitive substring match on the plugin module name, with surrounding whitespace ignored like every other client-side list filter. A plugin the server reports as disabled is marked `[disabled]`.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |

@@ -13,6 +13,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { buildWorkflowArtifact } from "../dist/client/workflow-artifact.js";
 import {
+  formatStatus,
   normalizeTargetPlatformInput,
   sanitizeErrorBody,
   VroHttpClient,
@@ -1921,7 +1922,7 @@ test("updateConfiguration carries the live name forward when not renaming", asyn
   assert.equal(body.description, "new");
 });
 
-test("updateConfiguration does not re-read when given both name and attributes", async () => {
+test("updateConfiguration does not re-read when given name, description, and attributes", async () => {
   const calls = [];
   globalThis.fetch = async (url, init) => {
     calls.push({ url: String(url), method: init?.method ?? "GET", init });
@@ -1932,15 +1933,89 @@ test("updateConfiguration does not re-read when given both name and attributes",
   const client = new VroClient(config());
   await client.updateConfiguration("config-1", {
     name: "Renamed",
+    description: "Renamed too",
     attributes: [{ name: "host", type: "string", value: "h" }],
   });
 
   assert.deepEqual(
     calls.slice(1).map((c) => c.method),
     ["PUT"],
-    "nothing has to be read when both replaced fields are supplied",
+    "nothing has to be read when every replaced field is supplied",
   );
   assert.equal(JSON.parse(calls.at(-1).init.body).name, "Renamed");
+});
+
+// The tool handler reads the element for its expected-name guard and hands it
+// down, so a guarded update costs one GET, not two (VCFO-071).
+test("updateConfiguration does not re-read when given the live element", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), method: init?.method ?? "GET", init });
+    if (calls.length === 1) return authResponse();
+    return Response.json({ id: "config-1", name: "Settings" });
+  };
+
+  const client = new VroClient(config());
+  await client.updateConfiguration(
+    "config-1",
+    { attributes: [{ name: "host", type: "string", value: "h" }] },
+    { id: "config-1", name: "Settings", description: "Kept" },
+  );
+
+  assert.deepEqual(calls.slice(1).map((c) => c.method), ["PUT"]);
+  const body = JSON.parse(calls.at(-1).init.body);
+  assert.equal(body.name, "Settings");
+  assert.equal(body.description, "Kept");
+});
+
+// The replacing PUT drops any field the body omits, so the description is
+// carried forward like the name; before VCFO-071 an attributes-only update
+// silently cleared it.
+test("updateConfiguration carries the live description forward when not supplied", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), method: init?.method ?? "GET", init });
+    if (calls.length === 1) return authResponse();
+    return Response.json({
+      id: "config-1",
+      name: "Settings",
+      description: "Runtime settings",
+      attributes: [{ name: "host", type: "string", value: "old" }],
+    });
+  };
+
+  const client = new VroClient(config());
+  await client.updateConfiguration("config-1", {
+    attributes: [{ name: "host", type: "string", value: "new" }],
+  });
+
+  assert.deepEqual(calls.slice(1).map((c) => c.method), ["GET", "PUT"]);
+  const body = JSON.parse(calls.at(-1).init.body);
+  assert.equal(body.name, "Settings");
+  assert.equal(body.description, "Runtime settings");
+  assert.equal(body.attribute[0].value.string.value, "new");
+});
+
+test("updateConfiguration refuses a secure attribute supplied without a value", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), method: init?.method ?? "GET" });
+    if (calls.length === 1) return authResponse();
+    return Response.json({ id: "config-1", name: "Settings", description: "d" });
+  };
+
+  const client = new VroClient(config());
+  await assert.rejects(
+    () =>
+      client.updateConfiguration("config-1", {
+        attributes: [
+          { name: "host", type: "string", value: "h" },
+          { name: "token", type: "SecureString" },
+        ],
+      }),
+    /Refusing to store an empty secret: secure attribute token was supplied without a value/,
+  );
+  assert.ok(!calls.some((c) => c.method === "PUT"), "the PUT must not be sent");
 });
 
 // The PUT replaces the element, so omitting attributes would delete the ones
@@ -1970,6 +2045,10 @@ test("updateConfiguration refuses an update that would silently clear attributes
       assert.match(error.message, /host \(string\)/);
       assert.match(error.message, /token \(SecureString\)/);
       assert.match(error.message, /get-configuration/);
+      assert.match(
+        error.message,
+        /Secure values \(token\) are never returned by get-configuration and must be supplied fresh/,
+      );
       assert.ok(
         !error.message.includes("vcfa.example.test"),
         "an attribute value must never be echoed",
@@ -4831,4 +4910,192 @@ test("vra8 falls back to the full CSP login when the cached refresh token is rej
     VRA8_WORKFLOWS_URL,
   ]);
   assert.equal(cspCount, 2, "the rejected refresh token is replaced by a full login");
+});
+
+// ── VCFO-071 review follow-ups ─────────────────────────────────────────────
+
+test("formatStatus falls back to the standard reason phrase when statusText is empty", () => {
+  // HTTP/2 responses carry no reason phrase, so statusText is empty there.
+  assert.equal(formatStatus(new Response("", { status: 400 })), "400 Bad Request");
+  assert.equal(
+    formatStatus(new Response("", { status: 503, statusText: "Down" })),
+    "503 Down",
+  );
+  assert.equal(formatStatus(new Response("", { status: 599 })), "599");
+});
+
+test("API errors over HTTP/2 name the reason phrase instead of a bare status", async () => {
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/sessions")) return authResponse();
+    return new Response('<html><div class="status-code">400</div></html>', {
+      status: 400,
+      headers: { "content-type": "text/html" },
+    });
+  };
+
+  const client = new VroClient(config());
+  await assert.rejects(
+    () => client.getWorkflow("workflow-1"),
+    /vRO API error: 400 Bad Request — GET \/workflows\/workflow-1\n\[HTML body: 400 — no further detail\]/,
+  );
+});
+
+test("sanitizeErrorBody in shape mode measures a non-JSON body without echoing it", () => {
+  const res = new Response("", { status: 400, headers: { "content-type": "text/plain" } });
+  const result = sanitizeErrorBody('Rejected request body: {"password":"secret"}', res, "shape");
+  assert.equal(result, "[non-JSON body: 44 characters, content-type text/plain, not echoed]");
+  assert.ok(!result.includes("secret"));
+});
+
+// Both vra8 login POSTs carry a secret in the request body — the password, then
+// the refresh token — so a gateway that reflects a rejected payload must not
+// have it echoed back through the error (VCFO-071). JSON diagnostic fields and
+// gateway HTML summaries still come through.
+test("vra8 CSP login failure with a reflected plain-text body does not echo the password", async () => {
+  globalThis.fetch = async () =>
+    new Response('Rejected request body: {"username":"admin","password":"secret","domain":"System Domain"}', {
+      status: 400,
+      statusText: "Bad Request",
+      headers: { "content-type": "text/plain" },
+    });
+
+  const client = new VroClient(vra8Config());
+  await assert.rejects(
+    () => client.listWorkflows(),
+    (e) => {
+      assert.match(e.message, /CSP login\): 400 Bad Request/);
+      assert.match(e.message, /non-JSON body: \d+ characters, content-type text\/plain, not echoed/);
+      assert.ok(!e.message.includes("secret"), "the password must not be echoed");
+      assert.ok(!e.message.includes("Rejected request body"), "the body must not be echoed");
+      assert.ok(e.message.includes("vIDM domain"), "the credential hint still applies");
+      return true;
+    },
+  );
+});
+
+test("vra8 IaaS exchange failure with a reflected plain-text body does not echo the refresh token", async () => {
+  const logs = [];
+  const originalError = console.error;
+  console.error = (...args) => logs.push(args.join(" "));
+  try {
+    globalThis.fetch = async (url) => {
+      if (String(url) === CSP_LOGIN_URL) {
+        return Response.json({ refresh_token: "refresh-must-not-leak" });
+      }
+      return new Response('Bad payload: {"refreshToken":"refresh-must-not-leak"}', {
+        status: 413,
+        headers: { "content-type": "text/plain" },
+      });
+    };
+
+    const client = new VroClient(vra8Config());
+    await assert.rejects(
+      () => client.listWorkflows(),
+      (e) => {
+        assert.match(e.message, /IaaS token exchange\): 413 Payload Too Large/);
+        assert.ok(!e.message.includes("refresh-must-not-leak"));
+        return true;
+      },
+    );
+    assert.ok(
+      !logs.some((line) => line.includes("refresh-must-not-leak")),
+      "the refresh token must not reach the log either",
+    );
+  } finally {
+    console.error = originalError;
+  }
+});
+
+test("vra8 login failure still surfaces JSON diagnostic fields in shape mode", async () => {
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ message: "Invalid domain", password: "secret" }), {
+      status: 400,
+      statusText: "Bad Request",
+    });
+
+  const client = new VroClient(vra8Config());
+  await assert.rejects(
+    () => client.listWorkflows(),
+    (e) => {
+      assert.ok(e.message.includes("Invalid domain"));
+      assert.ok(!e.message.includes("secret"), "non-allowlisted fields stay out");
+      return true;
+    },
+  );
+});
+
+// VCFA_ORGANIZATION is trimmed once in the constructor for every consumer; the
+// vcfa Basic header previously carried the raw value (VCFO-071).
+test("vcfa login trims VCFA_ORGANIZATION before building the Basic header", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return Response.json({ link: [], total: 0 });
+  };
+
+  const client = new VroClient(config({ organization: " org\r\n" }));
+  await client.listWorkflows();
+
+  const header = calls[0].init.headers.Authorization;
+  const decoded = Buffer.from(header.replace(/^Basic /, ""), "base64").toString();
+  assert.equal(decoded, "admin@org:secret");
+  assert.ok(calls[0].url.endsWith("/cloudapi/1.0.0/sessions"));
+});
+
+test("vcfa provider login with a padded system organization routes and encodes consistently", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return Response.json({ link: [], total: 0 });
+  };
+
+  const client = new VroClient(config({ organization: "system " }));
+  await client.listWorkflows();
+
+  assert.ok(calls[0].url.endsWith("/cloudapi/1.0.0/sessions/provider"));
+  const decoded = Buffer.from(
+    calls[0].init.headers.Authorization.replace(/^Basic /, ""),
+    "base64",
+  ).toString();
+  assert.equal(decoded, "admin@system:secret");
+});
+
+// The vra8 403 hint is owned by one error builder now, so the multipart-import
+// paths carry it exactly like the JSON and binary-export paths (VCFO-071).
+test("vra8 403 without a challenge on a multipart import carries the authorization hint", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "vcfa-import-403-"));
+  try {
+    const fileName = "hint.workflow";
+    await writeFile(
+      join(dir, fileName),
+      buildWorkflowArtifact({
+        id: "wf-403",
+        name: "Hint",
+        version: "1.0.0",
+        inputs: [],
+        outputs: [],
+        tasks: [{ name: "task", script: "System.log('x');" }],
+      }),
+    );
+    const login = vra8LoginStub();
+    globalThis.fetch = async (url) => {
+      const fromLogin = login(url);
+      if (fromLogin) return fromLogin;
+      return new Response("", { status: 403 });
+    };
+
+    const client = new VroClient(vra8Config({ workflowDir: dir }));
+    await assert.rejects(
+      () => client.importWorkflowFile("category-1", fileName, true),
+      (e) => {
+        assert.match(e.message, /vRO API error: 403 Forbidden — import workflow/);
+        assert.match(e.message, /authorization result, not an authentication one/);
+        return true;
+      },
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });

@@ -1,4 +1,5 @@
 import type { Project, ProjectList } from "../types.js";
+import { matchesFilter, normalizeFilter } from "./filter.js";
 import type { VroHttpClient } from "./core.js";
 import { getAllAutomationPages } from "./pagination.js";
 
@@ -16,12 +17,12 @@ export class ProjectClient {
       "/projects",
       this.http.projectBaseUrl,
     );
-    const needle = search?.trim().toLowerCase();
+    const needle = normalizeFilter(search);
     if (!needle) return page;
     const content = page.content.filter(
       (project) =>
-        project.name?.toLowerCase().includes(needle) ||
-        project.description?.toLowerCase().includes(needle),
+        matchesFilter(project.name, needle) ||
+        matchesFilter(project.description, needle),
     );
     const filtered: ProjectList = {
       content,

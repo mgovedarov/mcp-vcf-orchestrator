@@ -1,6 +1,7 @@
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Agent, fetch as undiciFetch, FormData as UndiciFormData } from "undici";
+import { STATUS_CODES } from "node:http";
 import type {
   VroClientConfig,
   VroTargetPlatform,
@@ -21,11 +22,6 @@ const UNSUPPORTED_AUTOMATION_WRITE =
 // route is the working alternative and is named in the message.
 export const UNSUPPORTED_VRA8_CONFIGURATION_EXPORT =
   "Exporting a single configuration element as a .vsoconf artifact is not supported in VCFA_TARGET_PLATFORM=vra8 mode: vRA 8 serves configuration elements as JSON only and rejects the artifact request with 406. Use get-configuration to read it, or add it to the project package with add-configuration-to-project-package and export that package instead.";
-
-// A base URL the vra8 clients never build. Reachable only if a new
-// Automation-service base URL is added without deciding its vra8 support.
-const UNSUPPORTED_UNKNOWN_SERVICE =
-  "This service is not supported in VCFA_TARGET_PLATFORM=vra8 mode.";
 
 // Appended to vRA 8 login failures. The CSP login answers wrong credentials
 // and unknown domains with 400 (not 401), so the hint covers both.
@@ -99,12 +95,36 @@ function parseJsonObject(text: string): Record<string, unknown> | undefined {
 }
 
 /**
+ * Render `<status> <reason>` for an error message. Responses over HTTP/2 carry
+ * no reason phrase, so `Response.statusText` is frequently empty there; the
+ * standard phrase for the code fills in so a message never reads `400  —`.
+ */
+export function formatStatus(res: Response): string {
+  const reason = res.statusText || STATUS_CODES[res.status] || "";
+  return reason ? `${res.status} ${reason}` : String(res.status);
+}
+
+/**
+ * How a body that is neither JSON nor a recognizable HTML page is rendered by
+ * sanitizeErrorBody. `excerpt` (the default) quotes its first
+ * NON_JSON_BODY_LIMIT characters; `shape` reports only its size and declared
+ * content type, for responses to requests whose own body is secret and could
+ * be reflected back — the login POSTs.
+ */
+export type NonJsonBodyMode = "excerpt" | "shape";
+
+/**
  * Sanitize a raw HTTP response body before including it in a thrown error.
- * Extracts only known-safe diagnostic fields from JSON bodies; truncates
+ * Extracts only known-safe diagnostic fields from JSON bodies; summarizes
+ * gateway HTML pages; truncates (or, in `shape` mode, merely measures) other
  * non-JSON bodies. Never surfaces unbounded raw response content.
  * Optionally prepends a correlation ID header when res is provided.
  */
-export function sanitizeErrorBody(rawText: string, res?: Response): string {
+export function sanitizeErrorBody(
+  rawText: string,
+  res?: Response,
+  nonJson: NonJsonBodyMode = "excerpt",
+): string {
   const parts: string[] = [];
 
   if (res) {
@@ -149,6 +169,14 @@ export function sanitizeErrorBody(rawText: string, res?: Response): string {
   const htmlSummary = summarizeHtmlErrorPage(rawText);
   if (htmlSummary) {
     parts.push(htmlSummary);
+    return parts.join("\n");
+  }
+
+  if (nonJson === "shape") {
+    const contentType = res?.headers.get("content-type") ?? "unknown";
+    parts.push(
+      `[non-JSON body: ${rawText.length} characters, content-type ${contentType}, not echoed]`,
+    );
     return parts.join("\n");
   }
 
@@ -249,18 +277,20 @@ function redirectHost(location: string): string | undefined {
 /**
  * Describe why a login response was unusable, in a form that is safe to
  * surface. A redirect names the host it points at; another non-2xx reports its
- * status plus the sanitized body; a 2xx that did not carry `expectedField`
- * reports the status, the declared content type, and the shape of the body
- * (unreadable, empty, non-JSON, or JSON without the field) but never the body
- * itself, because a login 2xx body can carry token material.
+ * status plus the sanitized body — JSON diagnostic fields and gateway HTML
+ * summaries only, never a raw non-JSON excerpt, because the login request body
+ * carries the password or the refresh token and a gateway that reflects a
+ * rejected payload would otherwise echo it; a 2xx that did not carry
+ * `expectedField` reports the status, the declared content type, and the shape
+ * of the body (unreadable, empty, non-JSON, or JSON without the field) but
+ * never the body itself, because a login 2xx body can carry token material.
  */
 function describeLoginFailure(
   result: LoginResponse,
   expectedField: string,
 ): string {
   const { res, text, bodyError } = result;
-  // HTTP/2 carries no reason phrase, so statusText is frequently empty.
-  const status = res.statusText ? `${res.status} ${res.statusText}` : `${res.status}`;
+  const status = formatStatus(res);
 
   if (bodyError) {
     return `${status} but the response body could not be read: ${bodyError}`;
@@ -273,7 +303,7 @@ function describeLoginFailure(
   }
 
   if (!res.ok) {
-    return `${status}\n${sanitizeErrorBody(text, res)}`;
+    return `${status}\n${sanitizeErrorBody(text, res, "shape")}`;
   }
 
   const contentType = res.headers.get("content-type") ?? "none";
@@ -326,7 +356,7 @@ type Vra8Login = {
 function buildVcfaLogin(config: VroClientConfig): VcfaLogin {
   // Provider/system administrators authenticate at the dedicated provider
   // session endpoint; the tenant endpoint rejects them with 401.
-  const isProviderLogin = config.organization.trim().toLowerCase() === "system";
+  const isProviderLogin = config.organization.toLowerCase() === "system";
   return {
     kind: "vcfa",
     header:
@@ -352,12 +382,9 @@ function buildVra8Login(config: VroClientConfig): Vra8Login {
     body: {
       username: config.username,
       password: config.password,
-      // vra8 reuses VCFA_ORGANIZATION as the vIDM domain. Trimmed for the same
-      // reason buildVcfaLogin trims it before the provider check: a value typed
-      // with a trailing space, or carried over from a CRLF file, is otherwise
-      // rejected by the CSP login with an opaque 400 on a domain that looks
-      // correct in the error message.
-      domain: config.organization.trim(),
+      // vra8 reuses VCFA_ORGANIZATION as the vIDM domain (already trimmed by
+      // the VroHttpClient constructor).
+      domain: config.organization,
     },
   };
 }
@@ -436,11 +463,6 @@ export class VroHttpClient {
   readonly configurationDir: string;
   readonly contextDir: string;
 
-  // The Automation-service base URLs, for the vra8 read/write split in
-  // assertOperationSupported. Built in the constructor from the same values as
-  // the public fields so the set cannot drift from them.
-  private readonly automationBaseUrls: ReadonlySet<string>;
-
   private readonly versionsUrl: string;
   private pinnedApiVersion: string | undefined;
   private negotiatedApiVersion: string | null = null;
@@ -464,7 +486,17 @@ export class VroHttpClient {
   private readonly dispatcher: Agent | undefined;
   private dispatcherClosed = false;
 
-  constructor(config: VroClientConfig) {
+  constructor(rawConfig: VroClientConfig) {
+    // VCFA_ORGANIZATION is normalized once, here, for every consumer: the
+    // provider-login check, the vcfa Basic header, and the vra8 vIDM domain.
+    // A trailing space or CR — easy to acquire in a value that legitimately
+    // contains a space, such as `System Domain`, or carried over from a CRLF
+    // file — otherwise reaches the login as part of the credential and comes
+    // back as an opaque 400 or 401 on a value that looks correct.
+    const config: VroClientConfig = {
+      ...rawConfig,
+      organization: rawConfig.organization.trim(),
+    };
     this.targetPlatform = normalizeTargetPlatform(config.targetPlatform);
     this.dispatcher = config.ignoreTls
       ? new Agent({ connect: { rejectUnauthorized: false } })
@@ -475,13 +507,6 @@ export class VroHttpClient {
     this.deploymentBaseUrl = `https://${config.host}/deployment/api`;
     this.blueprintBaseUrl = `https://${config.host}/blueprint/api`;
     this.projectBaseUrl = `https://${config.host}/project-service/api`;
-    this.automationBaseUrls = new Set([
-      this.eventBrokerBaseUrl,
-      this.catalogBaseUrl,
-      this.deploymentBaseUrl,
-      this.blueprintBaseUrl,
-      this.projectBaseUrl,
-    ]);
     this.versionsUrl = `https://${config.host}/api/versions`;
     this.pinnedApiVersion = resolvePinnedApiVersion(config.targetPlatform);
     this.login =
@@ -759,7 +784,7 @@ export class VroHttpClient {
             : '\nHint: VCFA_ORGANIZATION must be the organization name (the tenant URL slug), not its display name. Provider/system administrators must set VCFA_ORGANIZATION=system, which routes the login to /cloudapi/1.0.0/sessions/provider.'
           : "";
       throw new Error(
-        `VCF authentication failed: ${res.status} ${res.statusText}\n${sanitizeErrorBody(text, res)}${hint}`,
+        `VCF authentication failed: ${formatStatus(res)}\n${sanitizeErrorBody(text, res, "shape")}${hint}`,
       );
     }
 
@@ -856,29 +881,20 @@ export class VroHttpClient {
    * - `/vco/api` (vRO): fully supported, reads and writes alike. Verified
    *   against vRO 8.18.1 — create/update/delete of workflows, actions, and
    *   configuration elements, plus package import and its dry-run details.
-   * - Automation services: reads only. The list and get paths return the same
-   *   Spring `Page` and object shapes the VCFA 9.x clients parse (verified on
-   *   vRA 8.18), but no write path was exercised, so writes still throw.
-   *
-   * `path` is unused now that no vRO method is withheld; it is kept because the
-   * signature is public and callers pass the path they are about to send, and a
-   * future per-path narrowing would need it.
+   *   The binary export and multipart import paths reach vRO through
+   *   authenticatedFetch and are therefore never gated here.
+   * - Automation services (any other base URL): reads only. The list and get
+   *   paths return the same Spring `Page` and object shapes the VCFA 9.x
+   *   clients parse (verified on vRA 8.18), but no write path was exercised,
+   *   so writes still throw.
    */
-  assertOperationSupported(
+  private assertOperationSupported(
     method: string,
-    path: string,
     overrideBaseUrl?: string,
   ): void {
     if (this.targetPlatform !== "vra8") return;
-
-    const baseUrl = overrideBaseUrl ?? this.baseUrl;
-    if (baseUrl === this.baseUrl) return;
-
-    if (!this.automationBaseUrls.has(baseUrl)) {
-      throw new Error(UNSUPPORTED_UNKNOWN_SERVICE);
-    }
+    if (!overrideBaseUrl || overrideBaseUrl === this.baseUrl) return;
     if (method.toUpperCase() === "GET") return;
-
     throw new Error(UNSUPPORTED_AUTOMATION_WRITE);
   }
 
@@ -888,7 +904,7 @@ export class VroHttpClient {
     body?: unknown,
     overrideBaseUrl?: string,
   ): Promise<{ res: Response; text: string }> {
-    this.assertOperationSupported(method, path, overrideBaseUrl);
+    this.assertOperationSupported(method, overrideBaseUrl);
     const url = `${overrideBaseUrl ?? this.baseUrl}${path}`;
     console.error(`[vro-client] ${method} ${path}`);
 
@@ -910,30 +926,34 @@ export class VroHttpClient {
     );
 
     if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(
-        `vRO API error: ${res.status} ${res.statusText} — ${method} ${path}\n${sanitizeErrorBody(text, res)}${this.apiErrorHint(res)}`,
-      );
+      throw await this.apiError(res, `${method} ${path}`);
     }
 
     return { res, text: await res.text() };
   }
 
   /**
-   * Extra guidance for a status that is easy to misread as a login problem. In
-   * vra8 mode a 403 without an authentication challenge means the login worked
-   * and the token is valid: the vIDM user simply has no permission here.
-   *
-   * Public because the binary-export and multipart-import paths call
-   * authenticatedFetch directly and build their own error messages; they append
-   * this so a 403 reads the same there as on the JSON path.
+   * Build the error for a rejected vRO or Automation-service response: status
+   * and reason, the operation label, the sanitized body, and any platform hint.
+   * Reads and consumes the response body. The one owner of this message shape,
+   * used by the JSON path here and by the binary-export and multipart-import
+   * paths in the artifact clients, which call authenticatedFetch directly.
    */
-  apiErrorHint(res: Response): string {
-    if (
-      res.status === 403 &&
-      this.targetPlatform === "vra8" &&
-      !res.headers.has("www-authenticate")
-    ) {
+  async apiError(res: Response, label: string): Promise<Error> {
+    const text = await res.text().catch(() => "");
+    return new Error(
+      `vRO API error: ${formatStatus(res)} — ${label}\n${sanitizeErrorBody(text, res)}${this.apiErrorHint(res)}`,
+    );
+  }
+
+  /**
+   * Extra guidance for a status that is easy to misread as a login problem: a
+   * 403 that shouldReauthenticate declined to retry. That is only ever the
+   * vra8 challenge-less 403, which means the login worked and the token is
+   * valid — the vIDM user simply has no permission here.
+   */
+  private apiErrorHint(res: Response): string {
+    if (res.status === 403 && !this.shouldReauthenticate(res)) {
       return "\nHint: the vRA 8 login succeeded, so this 403 is an authorization result, not an authentication one — the vIDM user has no permission for this vRO object or operation. Check the user's vRO permissions rather than VCFA_USERNAME, VCFA_PASSWORD, or VCFA_ORGANIZATION.";
     }
     return "";
@@ -949,7 +969,7 @@ export class VroHttpClient {
       return JSON.parse(text) as T;
     } catch {
       throw new Error(
-        `vRO API error: non-JSON response body (${res.status} ${res.statusText}) — ${method} ${path}\n${sanitizeErrorBody(text, res)}`,
+        `vRO API error: non-JSON response body (${formatStatus(res)}) — ${method} ${path}\n${sanitizeErrorBody(text, res)}`,
       );
     }
   }

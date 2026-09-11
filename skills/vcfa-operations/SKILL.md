@@ -73,4 +73,6 @@ topics — can be read. Their **writes** are unsupported in that mode: creating 
 deployment, deleting one, running a day-2 action, creating or deleting a
 template, and creating, updating, or deleting a subscription each return an
 unsupported-mode message. `export-configuration-file` is unsupported there too;
-route a configuration element through the project package instead.
+route a configuration element through the project package instead, and expect
+`prepare-artifact-promotion` to report a configuration backup as skipped while
+still returning its report.

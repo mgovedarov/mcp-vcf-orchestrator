@@ -1,4 +1,5 @@
 import type { VroPlugin, VroPluginList } from "../types.js";
+import { matchesFilter, normalizeFilter } from "./filter.js";
 import { parseAttrs } from "./attrs.js";
 import type { VroHttpClient } from "./core.js";
 import { getAllVroPages } from "./pagination.js";
@@ -75,7 +76,7 @@ export class PluginClient {
     // filter is applied client-side to flat descriptors as a case-insensitive
     // substring match on the module name. Attribute listings are trusted to
     // have been filtered by the server.
-    const needle = filter?.trim().toLowerCase() || undefined;
+    const needle = normalizeFilter(filter);
     const mapped = raw.link.map((item) =>
       isAttributeItem(item)
         ? { plugin: fromAttributes(item), flat: false }
@@ -84,7 +85,7 @@ export class PluginClient {
     const link: VroPlugin[] = mapped
       .filter(
         ({ plugin, flat }) =>
-          !needle || !flat || plugin.name.toLowerCase().includes(needle),
+          !needle || !flat || matchesFilter(plugin.name, needle),
       )
       .map(({ plugin }) => plugin);
     const filteredClientSide =

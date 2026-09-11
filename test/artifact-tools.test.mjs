@@ -724,3 +724,102 @@ test("configuration update and resource delete expected guards verify live targe
   assert.equal(mismatch.isError, true);
   assert.equal(deleted, undefined);
 });
+
+// ── update-configuration two-phase safety (VCFO-071) ────────────────────────
+
+test("update-configuration reads the element once and hands it to the update", async () => {
+  let reads = 0;
+  let received;
+  const handlers = registeredTools(registerConfigTools, {
+    getConfiguration: async (id) => {
+      reads += 1;
+      return { id, name: "Settings", description: "Kept" };
+    },
+    updateConfiguration: async (id, patch, current) => {
+      received = { id, patch, current };
+    },
+  });
+
+  const result = await handlers.get("update-configuration")({
+    id: "config-1",
+    expectedName: "Settings",
+    attributes: [{ name: "host", type: "string", value: "h" }],
+    confirm: true,
+  });
+  assert.equal(result.isError, undefined);
+  assert.equal(reads, 1, "the guard read is reused by the update");
+  assert.deepEqual(received.current, { id: "config-1", name: "Settings", description: "Kept" });
+  assert.deepEqual(received.patch, {
+    name: undefined,
+    description: undefined,
+    attributes: [{ name: "host", type: "string", value: "h" }],
+  });
+});
+
+test("update-configuration refuses to drop attributes before confirmation is spent", async () => {
+  let updated = false;
+  const handlers = registeredTools(registerConfigTools, {
+    getConfiguration: async (id) => ({
+      id,
+      name: "Settings",
+      attributes: [
+        { name: "host", type: "string", value: { string: { value: "h" } } },
+        { name: "password", type: "SecureString" },
+      ],
+    }),
+    updateConfiguration: async () => {
+      updated = true;
+    },
+  });
+
+  const result = await handlers.get("update-configuration")({
+    id: "config-1",
+    description: "New",
+    confirm: false,
+  });
+  assert.equal(result.isError, true);
+  assert.match(result.content[0].text, /would delete the 2 it currently has: host \(string\), password \(SecureString\)/);
+  assert.match(result.content[0].text, /Secure values \(password\) are never returned/);
+  assert.doesNotMatch(result.content[0].text, /"h"/);
+  assert.equal(updated, false);
+});
+
+test("update-configuration refuses a secure attribute without a value", async () => {
+  let updated = false;
+  const handlers = registeredTools(registerConfigTools, {
+    getConfiguration: async (id) => ({ id, name: "Settings" }),
+    updateConfiguration: async () => {
+      updated = true;
+    },
+  });
+
+  const result = await handlers.get("update-configuration")({
+    id: "config-1",
+    attributes: [{ name: "password", type: "SecureString" }],
+    confirm: true,
+  });
+  assert.equal(result.isError, true);
+  assert.match(result.content[0].text, /Refusing to store an empty secret: secure attribute password was supplied without a value/);
+  assert.equal(updated, false);
+});
+
+test("update-configuration confirmation prompt names the element and the fields to change", async () => {
+  let updated = false;
+  const handlers = registeredTools(registerConfigTools, {
+    getConfiguration: async (id) => ({ id, name: "Settings", description: "Old" }),
+    updateConfiguration: async () => {
+      updated = true;
+    },
+  });
+
+  const result = await handlers.get("update-configuration")({
+    id: "config-1",
+    description: "New",
+    attributes: [],
+    confirm: false,
+  });
+  assert.equal(result.isError, undefined);
+  assert.match(result.content[0].text, /Confirm update of configuration element config-1 \(Settings\)/);
+  assert.match(result.content[0].text, /Fields to change: description, attributes \(0 to store\); anything else is kept/);
+  assert.equal(updated, false);
+});

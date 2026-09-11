@@ -19,8 +19,9 @@ import type {
   WorkflowExecutionLogs,
   WorkflowList,
 } from "../types.js";
+import { matchesFilter, normalizeFilter } from "./filter.js";
 import { getLinkAttrs, parseAttrs } from "./attrs.js";
-import { createUploadForm, sanitizeErrorBody, type VroHttpClient } from "./core.js";
+import { createUploadForm, type VroHttpClient } from "./core.js";
 import {
   diffWorkflowArtifacts,
   ensurePreflightPassed,
@@ -529,7 +530,7 @@ export class WorkflowClient {
     );
     const categories = (rawCategories.link ?? []).map(parseWorkflowCategory);
     const workflowsById = new Map<string, Workflow>();
-    const normalizedFilter = filter?.toLowerCase();
+    const normalizedFilter = normalizeFilter(filter);
 
     for (const category of categories) {
       const detail = await this.getWorkflowCategoryDetail(category);
@@ -539,7 +540,7 @@ export class WorkflowClient {
         .filter((workflow): workflow is Workflow => Boolean(workflow))) {
         if (
           normalizedFilter &&
-          !workflow.name.toLowerCase().includes(normalizedFilter)
+          !matchesFilter(workflow.name, normalizedFilter)
         ) {
           continue;
         }
@@ -877,7 +878,6 @@ export class WorkflowClient {
 
   async exportWorkflowBuffer(id: string): Promise<Buffer> {
     const path = `/content/workflows/${encodeURIComponent(id)}`;
-    this.http.assertOperationSupported("GET", path);
     const url = `${this.http.baseUrl}${path}`;
     console.error(`[vro-client] GET ${path}`);
 
@@ -887,10 +887,7 @@ export class WorkflowClient {
       { timeout: 60_000 },
     );
     if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(
-        `vRO API error: ${res.status} ${res.statusText} — export workflow\n${sanitizeErrorBody(text, res)}${this.http.apiErrorHint(res)}`,
-      );
+      throw await this.http.apiError(res, "export workflow");
     }
     return Buffer.from(await res.arrayBuffer());
   }
@@ -952,7 +949,6 @@ export class WorkflowClient {
     overwrite = true,
   ): Promise<void> {
     const path = `/workflows?categoryId=${encodeURIComponent(categoryId)}&overwrite=${overwrite}`;
-    this.http.assertOperationSupported("POST", path);
     ensurePreflightPassed(await this.preflightWorkflowFile(fileName));
     const srcPath = await this.resolveWorkflowPath(fileName);
     await rejectSymlink(
@@ -976,10 +972,7 @@ export class WorkflowClient {
       { timeout: 60_000 },
     );
     if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(
-        `vRO API error: ${res.status} ${res.statusText} — import workflow\n${sanitizeErrorBody(text, res)}${this.http.apiErrorHint(res)}`,
-      );
+      throw await this.http.apiError(res, "import workflow");
     }
   }
 }
