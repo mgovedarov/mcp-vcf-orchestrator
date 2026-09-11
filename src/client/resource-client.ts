@@ -8,40 +8,45 @@ import {
   rejectSymlink,
   resolveFileInDirectory,
 } from "./files.js";
-import { getAllVroPages } from "./pagination.js";
+import { getFilteredVroList } from "./pagination.js";
 
 export class ResourceClient {
   constructor(private http: VroHttpClient) {}
 
   async listResources(filter?: string, options?: ListOptions): Promise<ResourceElementList> {
     const params = new URLSearchParams();
-    if (filter) {
-      params.set("conditions", `name~${filter}`);
+    // Trimmed so the server-side query and the client-side needle agree on
+    // what counts as a filter: a blank one is neither sent nor matched, and a
+    // padded one selects the same names on both. See getFilteredVroList.
+    const trimmedFilter = filter?.trim();
+    if (trimmedFilter) {
+      params.set("conditions", `name~${trimmedFilter}`);
     }
-    const raw = await getAllVroPages<AttributeLink>(
+    const raw = await getFilteredVroList<AttributeLink, ResourceElement>(
       this.http,
       "/resources",
       params,
-      { maxItems: options?.limit },
+      (item) => {
+        const a = getLinkAttrs(item);
+        const id = a["id"] ?? a["@id"] ?? item.href?.split("/").pop() ?? "";
+        return {
+          id,
+          name: a["name"] ?? a["@name"] ?? id,
+          description: a["description"],
+          version: a["version"],
+          categoryId: a["categoryId"],
+          categoryName: a["categoryName"],
+          mimeType: a["mimeType"] ?? a["mime-type"] ?? a["mimetype"],
+          href: item.href,
+        };
+      },
+      trimmedFilter,
+      options?.limit,
     );
-    const link: ResourceElement[] = (raw.link ?? []).map((item) => {
-      const a = getLinkAttrs(item);
-      const id = a["id"] ?? a["@id"] ?? item.href?.split("/").pop() ?? "";
-      return {
-        id,
-        name: a["name"] ?? a["@name"] ?? id,
-        description: a["description"],
-        version: a["version"],
-        categoryId: a["categoryId"],
-        categoryName: a["categoryName"],
-        mimeType: a["mimeType"] ?? a["mime-type"] ?? a["mimetype"],
-        href: item.href,
-      };
-    });
     return {
       ...(raw.total !== undefined ? { total: raw.total } : {}),
       start: raw.start,
-      link,
+      link: raw.link,
       ...(raw.truncated ? { truncated: true } : {}),
       ...(raw.limited ? { limited: true } : {}),
     };

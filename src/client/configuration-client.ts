@@ -19,7 +19,7 @@ import {
   rejectSymlink,
   resolveFileInDirectory,
 } from "./files.js";
-import { applyListLimit, getAllVroPages } from "./pagination.js";
+import { applyListLimit, getFilteredVroList } from "./pagination.js";
 import { toVroParameters } from "./parameters.js";
 
 export class ConfigurationClient {
@@ -34,25 +34,36 @@ export class ConfigurationClient {
       return this.listConfigurationsByCategory(categoryId, filter, options);
     }
     const params = new URLSearchParams();
-    if (filter) {
-      params.set("conditions", `name~${filter}`);
+    // Trimmed so the server-side query and the client-side needle agree on
+    // what counts as a filter: a blank one is neither sent nor matched, and a
+    // padded one selects the same names on both. See getFilteredVroList.
+    const trimmedFilter = filter?.trim();
+    if (trimmedFilter) {
+      params.set("conditions", `name~${trimmedFilter}`);
     }
-    const raw = await getAllVroPages<{
-      attributes?: { name: string; value: string }[];
-    }>(this.http, "/configurations", params, { maxItems: options?.limit });
-    const link: ConfigElement[] = (raw.link ?? []).map((item) => {
-      const a = parseAttrs(item.attributes);
-      return {
-        id: a["id"] ?? a["@id"],
-        name: a["name"] ?? a["@name"],
-        description: a["description"],
-        version: a["version"],
-        categoryId: a["categoryId"] ?? a["category-id"] ?? a["categoryid"],
-      };
-    });
+    const raw = await getFilteredVroList<
+      { attributes?: { name: string; value: string }[] },
+      ConfigElement
+    >(
+      this.http,
+      "/configurations",
+      params,
+      (item) => {
+        const a = parseAttrs(item.attributes);
+        return {
+          id: a["id"] ?? a["@id"],
+          name: a["name"] ?? a["@name"],
+          description: a["description"],
+          version: a["version"],
+          categoryId: a["categoryId"] ?? a["category-id"] ?? a["categoryid"],
+        };
+      },
+      trimmedFilter,
+      options?.limit,
+    );
     return {
       ...(raw.total !== undefined ? { total: raw.total } : {}),
-      link,
+      link: raw.link,
       ...(raw.truncated ? { truncated: true } : {}),
       ...(raw.limited ? { limited: true } : {}),
     };
