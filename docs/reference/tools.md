@@ -677,7 +677,7 @@ Update an existing resource element's binary content from a file under the confi
 | --- | --- | --- | --- | --- |
 | `id` | string | Yes | - | Resource element ID to update. |
 | `expectedName` | string | No | - | Expected live resource element name to verify before update. |
-| `expectedCategoryName` | string | No | - | Expected live resource category name to verify before update. |
+| `expectedCategoryName` | string | No | - | Expected live resource category name. Verified only where the environment reports a category for its resource elements; where it does not (vRO 8.x serves no category in the resource listing) the call is refused with that explanation rather than a mismatch, so omit it there and confirm placement with `list-resource-elements`. |
 | `fileName` | string | Yes | - | Plain file name under the configured resource artifact directory containing the replacement content. |
 | `changesetSha` | string | No | - | Optional `X-VRO-Changeset-Sha` value for version-controlled content. |
 | `confirm` | boolean | Yes | - | Must be `true` to confirm update. If `false`, update is not performed. |
@@ -692,7 +692,7 @@ Delete a resource element from VCF Automation Orchestrator. This can optionally 
 | --- | --- | --- | --- | --- |
 | `id` | string | Yes | - | Resource element ID to delete. |
 | `expectedName` | string | No | - | Expected live resource element name to verify before deletion. |
-| `expectedCategoryName` | string | No | - | Expected live resource category name to verify before deletion. |
+| `expectedCategoryName` | string | No | - | Expected live resource category name. Verified only where the environment reports a category for its resource elements; where it does not (vRO 8.x serves no category in the resource listing) the call is refused with that explanation rather than a mismatch, so omit it there and confirm placement with `list-resource-elements`. |
 | `force` | boolean | No | `false` | Delete even if the resource is referenced by workflows. |
 | `confirm` | boolean | Yes | - | Must be `true` to confirm deletion. If `false`, deletion is not performed. |
 :::

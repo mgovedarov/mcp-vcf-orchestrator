@@ -106,4 +106,51 @@ for (const tool of ["update-resource-element", "delete-resource-element"]) {
 
     assert.ok(sink.updated || sink.deleted, "expectedName alone must proceed");
   });
+
+  test(`${tool} reports a name mismatch even when the category is unverifiable`, async () => {
+    const sink = {};
+    const handlers = registeredTools(
+      clientWith({ id: "r1", name: "certificate.gif" }, sink),
+    );
+
+    // A wrong target is the more urgent signal: an unverifiable category must
+    // not mask it, or the caller drops expectedCategoryName as the message
+    // advises and only then discovers the name does not match.
+    const result = await handlers.get(tool)({
+      id: "r1",
+      fileName: "certificate.gif",
+      expectedName: "logo.png",
+      expectedCategoryName: "zz-probe",
+      confirm: true,
+    });
+
+    assert.equal(result.isError, true);
+    assert.match(
+      result.content[0].text,
+      /resource name: expected "logo.png", found "certificate.gif"/,
+    );
+    assert.doesNotMatch(result.content[0].text, /Cannot verify/);
+    assert.equal(sink.updated, undefined);
+    assert.equal(sink.deleted, undefined);
+  });
+
+  test(`${tool} treats an empty category as absent, not as a mismatch`, async () => {
+    const sink = {};
+    const handlers = registeredTools(
+      clientWith({ id: "r1", name: "certificate.gif", categoryName: "" }, sink),
+    );
+
+    const result = await handlers.get(tool)({
+      id: "r1",
+      fileName: "certificate.gif",
+      expectedCategoryName: "Icons",
+      confirm: true,
+    });
+
+    assert.equal(result.isError, true);
+    assert.match(result.content[0].text, /Cannot verify expectedCategoryName/);
+    assert.doesNotMatch(result.content[0].text, /found ""/);
+    assert.equal(sink.updated, undefined);
+    assert.equal(sink.deleted, undefined);
+  });
 }

@@ -26,38 +26,51 @@ import {
  *
  * Absence is therefore reported as "cannot verify here" rather than as a
  * mismatch, and it still refuses: a caller who explicitly asked for two-phase
- * verification must not be told the target was confirmed when it was not. The
- * check keys on the missing datum rather than on `targetPlatform`, so it stays
- * correct wherever the listing does carry a category.
+ * verification must not be told the target was confirmed when it was not.
+ *
+ * The name is checked FIRST so an unverifiable category cannot mask a genuine
+ * name mismatch -- a wrong target is the more urgent signal, and the caller
+ * would otherwise be told to retry without the category only to hit the name
+ * mismatch a round-trip later.
+ *
+ * The checks key on the missing datum rather than on `targetPlatform`, so they
+ * stay correct wherever the listing does carry a category.
  */
 function guardResourceTarget(
   id: string,
-  resource: { name?: string; categoryName?: string },
+  resource: { name?: string; categoryName?: string | null },
   expectedName: string | undefined,
   expectedCategoryName: string | undefined,
 ): CallToolResult | undefined {
-  if (expectedCategoryName !== undefined && resource.categoryName === undefined) {
+  const target = `resource element ${id}`;
+
+  const nameGuard = guardExpectedFields(target, [
+    { label: "resource name", expected: expectedName, actual: resource.name },
+  ]);
+  if (nameGuard) return nameGuard;
+
+  if (expectedCategoryName === undefined) return undefined;
+
+  // An empty string and a null are the same signal as an absent key: the record
+  // carries no category, so there is nothing to compare against.
+  const reported = resource.categoryName;
+  if (reported === undefined || reported === null || reported === "") {
     return {
       content: [
         {
           type: "text",
-          text: `Cannot verify expectedCategoryName for resource element ${id}: this environment's resource listing does not report a category for its elements, so the value cannot be confirmed either way. No live mutation was performed. Omit expectedCategoryName and confirm placement with list-resource-elements, or re-run with expectedName only.`,
+          text: `Cannot verify expectedCategoryName for resource element ${id}: the live record for this element reports no category, so the value cannot be confirmed either way. No live mutation was performed. Omit expectedCategoryName and confirm placement with list-resource-elements, or re-run with expectedName only.`,
         },
       ],
       isError: true,
     };
   }
 
-  return guardExpectedFields(`resource element ${id}`, [
-    {
-      label: "resource name",
-      expected: expectedName,
-      actual: resource.name,
-    },
+  return guardExpectedFields(target, [
     {
       label: "category name",
       expected: expectedCategoryName,
-      actual: resource.categoryName,
+      actual: reported,
     },
   ]);
 }

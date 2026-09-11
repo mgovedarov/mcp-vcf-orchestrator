@@ -253,6 +253,22 @@ export class ActionClient {
     return destPath;
   }
 
+  /**
+   * Resolve an action reference to the element id the artifact endpoints
+   * require. Throws rather than letting an unresolved value reach the request:
+   * interpolating a missing id would fetch `/actions/undefined` and report a
+   * confusing 404 about an element that was never asked for.
+   */
+  private async resolveActionElementId(reference: string): Promise<string> {
+    const { id } = await this.getAction(reference);
+    if (!id) {
+      throw new Error(
+        `Action ${reference} resolved to a definition carrying no element id, so it cannot be exported or diffed as an artifact. Use the id shown by list-actions.`,
+      );
+    }
+    return id;
+  }
+
   async exportActionBuffer(actionId: string): Promise<Buffer> {
     // vRO serves GET /actions/<module>/<name> as JSON but answers the SAME path
     // with `Accept: application/zip` with an opaque 400 and an HTML body
@@ -260,10 +276,13 @@ export class ActionClient {
     // artifact request, so a fully qualified name is resolved to its id first --
     // and the FQN is exactly what list-actions renders as the primary label, so
     // it is the natural thing for a caller to pass on to export or diff.
-    // A slash is the only marker of that form: element ids are UUIDs or long hex
-    // strings and never contain one.
-    const id = actionId.includes("/")
-      ? (await this.getAction(actionId)).id
+    //
+    // parseActionReference is the same predicate getAction uses to tell a
+    // reference from an element id, so export accepts every id form get-action
+    // does -- including the dot-separated variant. Element ids are UUIDs or long
+    // hex strings and carry neither separator, so they are never re-resolved.
+    const id = this.parseActionReference(actionId)
+      ? await this.resolveActionElementId(actionId)
       : actionId;
     const path = `/actions/${encodeURIComponent(id)}`;
     const url = `${this.http.baseUrl}${path}`;
