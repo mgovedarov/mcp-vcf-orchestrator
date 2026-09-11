@@ -12,6 +12,69 @@ import {
   hasAnyExpectedValue,
 } from "./confirmation-guards.js";
 
+/**
+ * Verify a resource element against `expectedName` / `expectedCategoryName`
+ * before a live mutation.
+ *
+ * The category needs its own handling because the live listing may not carry
+ * one. `getResourceElement` resolves the element from `GET /resources`, and on
+ * vRO 8.18.1 that listing returns only `description`, `id`, `name` and
+ * `version` per element -- no `categoryName` at all (verified on the wire,
+ * VCFO-077). Feeding that absence straight into `guardExpectedFields` reports
+ * every value as a mismatch against "(missing)", so supplying the argument
+ * refused a legitimate update or delete no matter what the caller passed.
+ *
+ * Absence is therefore reported as "cannot verify here" rather than as a
+ * mismatch, and it still refuses: a caller who explicitly asked for two-phase
+ * verification must not be told the target was confirmed when it was not.
+ *
+ * The name is checked FIRST so an unverifiable category cannot mask a genuine
+ * name mismatch -- a wrong target is the more urgent signal, and the caller
+ * would otherwise be told to retry without the category only to hit the name
+ * mismatch a round-trip later.
+ *
+ * The checks key on the missing datum rather than on `targetPlatform`, so they
+ * stay correct wherever the listing does carry a category.
+ */
+function guardResourceTarget(
+  id: string,
+  resource: { name?: string; categoryName?: string | null },
+  expectedName: string | undefined,
+  expectedCategoryName: string | undefined,
+): CallToolResult | undefined {
+  const target = `resource element ${id}`;
+
+  const nameGuard = guardExpectedFields(target, [
+    { label: "resource name", expected: expectedName, actual: resource.name },
+  ]);
+  if (nameGuard) return nameGuard;
+
+  if (expectedCategoryName === undefined) return undefined;
+
+  // An empty string and a null are the same signal as an absent key: the record
+  // carries no category, so there is nothing to compare against.
+  const reported = resource.categoryName;
+  if (reported === undefined || reported === null || reported === "") {
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Cannot verify expectedCategoryName for resource element ${id}: the live record for this element reports no category, so the value cannot be confirmed either way. No live mutation was performed. Omit expectedCategoryName and confirm placement with list-resource-elements, or re-run with expectedName only.`,
+        },
+      ],
+      isError: true,
+    };
+  }
+
+  return guardExpectedFields(target, [
+    {
+      label: "category name",
+      expected: expectedCategoryName,
+      actual: reported,
+    },
+  ]);
+}
+
 export function registerResourceTools(
   server: McpServer,
   client: VroClient,
@@ -276,18 +339,12 @@ export function registerResourceTools(
       try {
         if (hasAnyExpectedValue({ expectedName, expectedCategoryName })) {
           const resource = await client.getResourceElement(id);
-          const guard = guardExpectedFields(`resource element ${id}`, [
-            {
-              label: "resource name",
-              expected: expectedName,
-              actual: resource.name,
-            },
-            {
-              label: "category name",
-              expected: expectedCategoryName,
-              actual: resource.categoryName,
-            },
-          ]);
+          const guard = guardResourceTarget(
+            id,
+            resource,
+            expectedName,
+            expectedCategoryName,
+          );
           if (guard) return guard;
         }
 
@@ -368,18 +425,12 @@ export function registerResourceTools(
       try {
         if (hasAnyExpectedValue({ expectedName, expectedCategoryName })) {
           const resource = await client.getResourceElement(id);
-          const guard = guardExpectedFields(`resource element ${id}`, [
-            {
-              label: "resource name",
-              expected: expectedName,
-              actual: resource.name,
-            },
-            {
-              label: "category name",
-              expected: expectedCategoryName,
-              actual: resource.categoryName,
-            },
-          ]);
+          const guard = guardResourceTarget(
+            id,
+            resource,
+            expectedName,
+            expectedCategoryName,
+          );
           if (guard) return guard;
         }
 

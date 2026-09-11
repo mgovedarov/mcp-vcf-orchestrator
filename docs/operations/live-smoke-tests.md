@@ -228,6 +228,90 @@ update-configuration(id: "<configuration-id>", description: "changed", confirm: 
 update-configuration(id: "<configuration-id>", attributes: [{ name: "token", type: "SecureString" }], confirm: false) # refused: empty secret
 ```
 
+The vRO artifact chains below were all exercised against a vRA 8.18 lab under VCFO-075. Full per-tool
+results are in the [vRA 8 Verification Matrix](./vra8-verification-matrix.md).
+
+Discovery note for this mode: `list-categories(type: "ActionCategory")` returns nothing, so action modules
+come from the `module` column of `list-actions`. `ResourceElementCategory` does return categories.
+
+Action chain. Export and diff take the action's **element ID**; `get-action` also accepts the fully
+qualified name:
+
+```text
+list-actions(filter: "<name>")
+get-action(id: "<module>/<actionName>", includeScript: true)
+create-action(moduleName: "<module>", name: "<actionName>", script: "return 'ok';", returnType: "string", confirm: true)
+update-action(id: "<action-id>", expectedName: "<actionName>", expectedModule: "<module>", script: "return 'v2';", confirm: true)
+export-action-file(id: "<action-id>", fileName: "probe.action", overwrite: false)
+preflight-action-file(fileName: "probe.action")
+diff-action-file(
+  base: { source: "live", actionId: "<action-id>" },
+  compare: { source: "file", fileName: "probe.action" }
+)
+import-action-file(categoryName: "<module>", fileName: "probe.action", expectedCategoryName: "<module>", confirm: true)
+delete-action(id: "<action-id>", expectedName: "<actionName>", expectedModule: "<module>", confirm: true)
+```
+
+`import-action-file` requires the target module to **already exist** on vRA 8: an unknown module answers
+`404 Action category name not found`. Use `create-action` to establish a new module first. Deleting a
+module's last action also removes the module, so a disposable module leaves no residue.
+
+Resource chain. `import-resource-element` always creates a new element (it has no `overwrite`), so a
+round-trip adds one that must be cleaned up:
+
+```text
+export-resource-element(id: "<resource-id>", fileName: "probe.gif", overwrite: false)
+import-resource-element(categoryId: "<resource-category-id>", fileName: "probe.gif", expectedCategoryName: "<category>", confirm: true)
+update-resource-element(id: "<new-resource-id>", fileName: "probe.gif", expectedName: "probe.gif", confirm: true)
+delete-resource-element(id: "<new-resource-id>", expectedName: "probe.gif", confirm: true)
+```
+
+Do not pass `expectedCategoryName` to `update-resource-element` or `delete-resource-element` on vRA 8: the
+platform's resource listing carries no category, so the tools refuse with a message saying the value cannot
+be verified. Confirm placement with `list-resource-elements` instead.
+
+Direct package chain, on a disposable package:
+
+```text
+create-package(name: "com.example.probe", description: "disposable", confirm: true)
+export-package(name: "com.example.probe", fileName: "probe.package", overwrite: false)
+preflight-package(fileName: "probe.package")
+get-package-import-details(fileName: "probe.package")
+import-package(fileName: "probe.package", expectedPackageName: "com.example.probe", overwrite: true, confirm: true)
+delete-package(name: "com.example.probe", expectedName: "com.example.probe", deleteContents: false, confirm: true)
+```
+
+`preflight-package` reports `workflowArtifacts: 0` for a real vRO package and says so in a warning: vRO
+packages store elements as `elements/<id>/data`, not as nested `.workflow` / `.action` / `.vsoconf` entries,
+so only ZIP and import safety are validated. `get-package-import-details` reports the true element count —
+but it runs preflight internally, so it can fail on a package that does not pass.
+
+The remaining project-package adders, beyond the workflow one shown earlier:
+
+```text
+add-action-to-project-package(categoryName: "<module>", actionName: "<actionName>", confirm: true)
+add-configuration-to-project-package(configurationId: "<configuration-id>", confirm: true)
+add-resource-to-project-package(resourceId: "<resource-id>", confirm: true)
+import-project-package(expectedPackageName: "<package>", overwrite: true, confirm: true)
+```
+
+Discovery and planning tools worth including in a full pass:
+
+```text
+list-workflows-by-category(categoryName: "<category>", maxCategories: 10)
+collect-context-snapshot(fileBaseName: "probe-ctx", includeOptionalDomains: true, maxItemsPerDomain: 20)
+diff-workflow-file(
+  base: { source: "live", workflowId: "<workflow-id>" },
+  compare: { source: "live", workflowId: "<workflow-id>" }
+)
+prepare-artifact-promotion(kind: "action", fileName: "probe.action", target: { categoryName: "<module>", actionId: "<action-id>" }, backup: { enabled: true })
+prepare-artifact-promotion(kind: "package", fileName: "probe.package", target: { packageName: "<package>" })
+```
+
+A scaffolded workflow imports and runs in this mode. Preflight warns that an input parameter "has a
+`<description>` child" on any workflow exported unmodified from vRO 8.x — that is a VCF 9.x editor
+constraint, not a defect in the exported file.
+
 ## Negative And Safety Checks
 
 Confirm the safety guardrails before trusting the environment for broader work:

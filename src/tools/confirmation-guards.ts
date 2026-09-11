@@ -119,8 +119,11 @@ export async function guardExpectedCategory(
  *
  * When `expectedModuleName` is supplied this both (a) rejects a mismatch against
  * the caller-supplied `moduleName` and (b) reports whether the module already
- * exists live. A not-yet-existing module is not an error — vRO creates the module
- * on import — but the caller should surface that a new module will be created.
+ * exists live. A not-yet-existing module is not treated as an error here, but
+ * whether the import then succeeds is platform-dependent: vRO 8.18.1 refuses it
+ * with `404 Action category name not found: <module>` (verified in vra8 mode,
+ * VCFO-079), so on that platform the target module must already exist —
+ * `create-action` does create one implicitly, and is the way to establish it.
  *
  * When `expectedModuleName` is omitted this returns early with
  * `moduleIsNew: false` and performs no live `listActions` call (conservative: no

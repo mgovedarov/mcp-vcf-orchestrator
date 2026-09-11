@@ -1001,13 +1001,21 @@ function warnEditorCompatibility(
   items: XmlObject[],
   report: ArtifactPreflightReport,
 ): void {
-  // Parameters should be bare <param/>; a <description> child combined with the
-  // workflow-level <description> makes the editor fail to open the workflow.
+  // A <param> <description> child combined with the workflow-level <description>
+  // makes the VCF 9.x editor fail to open the workflow, so authored artifacts
+  // should keep descriptions in <presentation>/input_form_.
+  //
+  // This is a 9.x editor constraint, NOT a statement about what vRO emits:
+  // vRO 8.18.1 exports its own workflows WITH <description> children, so a
+  // pristine `export-workflow-file` round-trip on vRA 8 warns on every input
+  // (verified in the artifact bytes, VCFO-078). The wording names the editor
+  // rather than the platform so the warning is not read as "this file is
+  // malformed" for content the server itself produced.
   for (const section of ["input", "output"] as const) {
     for (const param of collectWorkflowParamNodes(root, section)) {
       if (param.description !== undefined) {
         report.warnings.push(
-          `${section} parameter ${stringValue(param.name) || "(unnamed)"} has a <description> child; vRO emits bare <param/> elements (descriptions belong in <presentation>/input_form_) and the editor can fail to open the workflow`,
+          `${section} parameter ${stringValue(param.name) || "(unnamed)"} has a <description> child; the VCF 9.x editor can fail to OPEN a workflow that combines these with the workflow-level <description>, so prefer <presentation>/input_form_ for authored artifacts (vRO 8.x exports its own workflows this way, so this is expected on an unmodified vRA 8 export)`,
         );
       }
     }

@@ -487,9 +487,9 @@ Import a `.action` file from the configured action artifact directory into an ac
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
-| `categoryName` | string | Yes | - | Action module to import into, for example `com.example.myactions`. A new module name is created on import. |
+| `categoryName` | string | Yes | - | Action module to import into, for example `com.example.myactions`. Whether a not-yet-existing module is created on import is platform-dependent: vRO 8.18.1 refuses it with `404 Action category name not found`, so create the module there with `create-action` first. |
 | `fileName` | string | Yes | - | Plain `.action` file name under the configured action artifact directory to import. |
-| `expectedCategoryName` | string | No | - | Expected module name. Must match `categoryName` and is verified against the live module set from `list-actions`; if the module does not yet exist the import proceeds and the result reports that a new module was created. The new-module note is reported only when this argument is supplied (the live check runs only then); omitting it imports without the live check, so a genuinely new module is created without the note. |
+| `expectedCategoryName` | string | No | - | Expected module name. Must match `categoryName` and is verified against the live module set from `list-actions`; a module that does not yet exist is not rejected by this guard, but the import itself may still refuse it (see `categoryName`). The new-module note is reported only when this argument is supplied, since the live check runs only then. |
 | `confirm` | boolean | Yes | - | Must be `true` to confirm import. If `false`, import is not performed. |
 :::
 
@@ -677,7 +677,7 @@ Update an existing resource element's binary content from a file under the confi
 | --- | --- | --- | --- | --- |
 | `id` | string | Yes | - | Resource element ID to update. |
 | `expectedName` | string | No | - | Expected live resource element name to verify before update. |
-| `expectedCategoryName` | string | No | - | Expected live resource category name to verify before update. |
+| `expectedCategoryName` | string | No | - | Expected live resource category name. Verified only where the environment reports a category for its resource elements; where it does not (vRO 8.x serves no category in the resource listing) the call is refused with that explanation rather than a mismatch, so omit it there and confirm placement with `list-resource-elements`. |
 | `fileName` | string | Yes | - | Plain file name under the configured resource artifact directory containing the replacement content. |
 | `changesetSha` | string | No | - | Optional `X-VRO-Changeset-Sha` value for version-controlled content. |
 | `confirm` | boolean | Yes | - | Must be `true` to confirm update. If `false`, update is not performed. |
@@ -692,7 +692,7 @@ Delete a resource element from VCF Automation Orchestrator. This can optionally 
 | --- | --- | --- | --- | --- |
 | `id` | string | Yes | - | Resource element ID to delete. |
 | `expectedName` | string | No | - | Expected live resource element name to verify before deletion. |
-| `expectedCategoryName` | string | No | - | Expected live resource category name to verify before deletion. |
+| `expectedCategoryName` | string | No | - | Expected live resource category name. Verified only where the environment reports a category for its resource elements; where it does not (vRO 8.x serves no category in the resource listing) the call is refused with that explanation rather than a mismatch, so omit it there and confirm placement with `list-resource-elements`. |
 | `force` | boolean | No | `false` | Delete even if the resource is referenced by workflows. |
 | `confirm` | boolean | Yes | - | Must be `true` to confirm deletion. If `false`, deletion is not performed. |
 :::
