@@ -56,8 +56,9 @@ get-workflow(id: "<workflow-id>")
 run-workflow-and-wait(id: "<workflow-id>", inputs: [{ name: "message", value: "hello" }], timeoutSeconds: 60, pollIntervalSeconds: 2, confirm: true)
 ```
 
-> **Note (VCFO-060):** the scaffolded `.workflow` container is not yet accepted by live vRO import
-> (differences in the `workflow-info` format, content encoding, and the lack of an explicit end item).
-> Until that is resolved, treat the `import-workflow-file` and `run-workflow-and-wait` steps above as the
-> intended end-to-end flow rather than a working loop: use `preflight-workflow-file` / `diff-workflow-file`
-> for local validation and publish reusable content through the project package path.
+> **Verified (VCFO-060, VCFO-075):** the scaffolded `.workflow` container imports, opens, and runs on live
+> vRO. The container fix shipped in 2.2.1 was verified on vRO 9.1, and the same flow — scaffold, preflight,
+> `import-workflow-file`, `run-workflow-and-wait` — was re-verified end to end on vRO 8.18.1 in
+> `VCFA_TARGET_PLATFORM=vra8` mode, including a native action item and a workflow returning its output.
+> Use `import-workflow-file` for validation or a one-off test, and still publish reusable content through
+> the project package path.

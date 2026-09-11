@@ -52,6 +52,10 @@ export default defineConfig({
         items: [
           { text: "Safety", link: "/operations/safety" },
           { text: "Live Smoke Tests", link: "/operations/live-smoke-tests" },
+          {
+            text: "vRA 8 Verification Matrix",
+            link: "/operations/vra8-verification-matrix",
+          },
           { text: "Troubleshooting", link: "/operations/troubleshooting" },
           { text: "Contributing", link: "/operations/contributing" },
         ],

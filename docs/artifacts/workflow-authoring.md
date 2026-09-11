@@ -63,12 +63,12 @@ Use `scaffold-workflow-file` with:
 
 - workflow metadata: name, description, version, API version
 - inputs, outputs, and attributes
-- one or more scriptable tasks
+- one or more tasks: scriptable tasks, native action items, or a mix
 - explicit in/out bindings per task
 
 Then run `preflight-workflow-file` before import.
 
-The current scaffold tool emits scriptable task items. For a single-action wrapper that must use a native action element, start from an exported valid workflow/package shape or manually author the action item before publishing through the project package flow.
+The scaffold tool emits both task kinds: `kind: "script"` for a scriptable task and `kind: "action"` for a native vRO action item (`module` + `actionName`, with `inputs` in the action's signature order and an optional `resultBinding`). Prefer a native action item when a step only invokes one existing action. Both kinds were verified end to end on live vRO — scaffold, preflight, import, run — on 9.1 under VCFO-060 and on 8.18.1 in `vra8` mode under VCFO-075.
 
 ## Robust Script Helpers
 

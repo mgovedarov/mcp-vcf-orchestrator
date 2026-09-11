@@ -502,7 +502,7 @@ export function registerActionTools(
     {
       title: "Import Action File",
       description:
-        "Import a .action file from the configured action artifact directory into an action module. The categoryName is the target module (e.g. com.example.myactions). Discover existing modules from the module column of list-actions (vRO does not expose action modules through list-categories — ActionCategory returns nothing); a new module name creates it on import. Set confirm to true to proceed.",
+        "Import a .action file from the configured action artifact directory into an action module. The categoryName is the target module (e.g. com.example.myactions). Discover existing modules from the module column of list-actions (vRO does not expose action modules through list-categories — ActionCategory returns nothing). Whether a not-yet-existing module is created on import is platform-dependent: vRO 8.18.1 refuses it with 404 Action category name not found, so on that platform create the module first with create-action, which establishes it implicitly. Set confirm to true to proceed.",
       inputSchema: z.object({
         categoryName: z
           .string()
@@ -514,7 +514,7 @@ export function registerActionTools(
           .string()
           .optional()
           .describe(
-            "Optional expected action module name. Must match categoryName and is verified against the live module set from list-actions; if the module does not yet exist the import proceeds and reports that a new module was created. The new-module note is only reported when this argument is provided (the live check runs only then); omitting it imports without the live check, so a genuinely new module is created without the note.",
+            "Optional expected action module name. Must match categoryName and is verified against the live module set from list-actions; a module that does not yet exist is not rejected here, but the import itself may still refuse it (vRO 8.18.1 answers 404 Action category name not found). The new-module note is only reported when this argument is provided, since the live check runs only then.",
           ),
         confirm: z
           .boolean()

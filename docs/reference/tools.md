@@ -487,9 +487,9 @@ Import a `.action` file from the configured action artifact directory into an ac
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
-| `categoryName` | string | Yes | - | Action module to import into, for example `com.example.myactions`. A new module name is created on import. |
+| `categoryName` | string | Yes | - | Action module to import into, for example `com.example.myactions`. Whether a not-yet-existing module is created on import is platform-dependent: vRO 8.18.1 refuses it with `404 Action category name not found`, so create the module there with `create-action` first. |
 | `fileName` | string | Yes | - | Plain `.action` file name under the configured action artifact directory to import. |
-| `expectedCategoryName` | string | No | - | Expected module name. Must match `categoryName` and is verified against the live module set from `list-actions`; if the module does not yet exist the import proceeds and the result reports that a new module was created. The new-module note is reported only when this argument is supplied (the live check runs only then); omitting it imports without the live check, so a genuinely new module is created without the note. |
+| `expectedCategoryName` | string | No | - | Expected module name. Must match `categoryName` and is verified against the live module set from `list-actions`; a module that does not yet exist is not rejected by this guard, but the import itself may still refuse it (see `categoryName`). The new-module note is reported only when this argument is supplied, since the live check runs only then. |
 | `confirm` | boolean | Yes | - | Must be `true` to confirm import. If `false`, import is not performed. |
 :::
 

@@ -254,7 +254,18 @@ export class ActionClient {
   }
 
   async exportActionBuffer(actionId: string): Promise<Buffer> {
-    const path = `/actions/${encodeURIComponent(actionId)}`;
+    // vRO serves GET /actions/<module>/<name> as JSON but answers the SAME path
+    // with `Accept: application/zip` with an opaque 400 and an HTML body
+    // (verified on vRO 8.18.1, VCFO-076). Only an element id works for the
+    // artifact request, so a fully qualified name is resolved to its id first --
+    // and the FQN is exactly what list-actions renders as the primary label, so
+    // it is the natural thing for a caller to pass on to export or diff.
+    // A slash is the only marker of that form: element ids are UUIDs or long hex
+    // strings and never contain one.
+    const id = actionId.includes("/")
+      ? (await this.getAction(actionId)).id
+      : actionId;
+    const path = `/actions/${encodeURIComponent(id)}`;
     const url = `${this.http.baseUrl}${path}`;
     console.error(`[vro-client] GET ${path}`);
 
