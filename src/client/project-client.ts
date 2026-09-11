@@ -1,4 +1,4 @@
-import type { Project, ProjectList } from "../types.js";
+import type { ListOptions, Project, ProjectList } from "../types.js";
 import { matchesFilter, normalizeFilter } from "./filter.js";
 import { apiErrorStatus, type VroHttpClient } from "./core.js";
 import { getAllAutomationPages } from "./pagination.js";
@@ -29,9 +29,9 @@ export class ProjectClient {
    * rejects the filter with a 400, the search falls back to the previous
    * behavior: walk the unfiltered list and match client-side.
    */
-  async listProjects(search?: string): Promise<ProjectList> {
+  async listProjects(search?: string, options?: ListOptions): Promise<ProjectList> {
     const needle = normalizeFilter(search);
-    if (!needle) return this.listAllProjects();
+    if (!needle) return this.listAllProjects(options);
 
     const params = new URLSearchParams();
     params.set("$filter", projectSearchFilter(needle));
@@ -41,6 +41,7 @@ export class ProjectClient {
         "/projects",
         this.http.projectBaseUrl,
         params,
+        { maxItems: options?.limit },
       );
     } catch (error) {
       if (apiErrorStatus(error) !== 400) throw error;
@@ -49,12 +50,20 @@ export class ProjectClient {
       );
     }
 
-    const page = await this.listAllProjects();
-    const content = page.content.filter(
-      (project) =>
+    const matches = (project: Project) =>
         matchesFilter(project.name, needle) ||
-        matchesFilter(project.description, needle),
-    );
+        matchesFilter(project.description, needle);
+    if (options?.limit !== undefined) {
+      return getAllAutomationPages<Project>(
+        this.http,
+        "/projects",
+        this.http.projectBaseUrl,
+        undefined,
+        { maxItems: options.limit, itemFilter: matches },
+      );
+    }
+    const page = await this.listAllProjects();
+    const content = page.content.filter(matches);
     return {
       content,
       numberOfElements: content.length,
@@ -63,11 +72,13 @@ export class ProjectClient {
     };
   }
 
-  private listAllProjects(): Promise<ProjectList> {
+  private listAllProjects(options?: ListOptions): Promise<ProjectList> {
     return getAllAutomationPages<Project>(
       this.http,
       "/projects",
       this.http.projectBaseUrl,
+      undefined,
+      { maxItems: options?.limit },
     );
   }
 

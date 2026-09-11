@@ -1,6 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { extname } from "node:path";
-import type { ConfigElement, ConfigElementList } from "../types.js";
+import type { ConfigElement, ConfigElementList, ListOptions } from "../types.js";
 import { matchesFilter, normalizeFilter } from "./filter.js";
 import { parseAttrs } from "./attrs.js";
 import {
@@ -19,7 +19,7 @@ import {
   rejectSymlink,
   resolveFileInDirectory,
 } from "./files.js";
-import { getAllVroPages } from "./pagination.js";
+import { applyListLimit, getAllVroPages } from "./pagination.js";
 import { toVroParameters } from "./parameters.js";
 
 export class ConfigurationClient {
@@ -28,9 +28,10 @@ export class ConfigurationClient {
   async listConfigurations(
     filter?: string,
     categoryId?: string,
+    options?: ListOptions,
   ): Promise<ConfigElementList> {
     if (categoryId) {
-      return this.listConfigurationsByCategory(categoryId, filter);
+      return this.listConfigurationsByCategory(categoryId, filter, options);
     }
     const params = new URLSearchParams();
     if (filter) {
@@ -38,7 +39,7 @@ export class ConfigurationClient {
     }
     const raw = await getAllVroPages<{
       attributes?: { name: string; value: string }[];
-    }>(this.http, "/configurations", params);
+    }>(this.http, "/configurations", params, { maxItems: options?.limit });
     const link: ConfigElement[] = (raw.link ?? []).map((item) => {
       const a = parseAttrs(item.attributes);
       return {
@@ -50,15 +51,17 @@ export class ConfigurationClient {
       };
     });
     return {
-      total: raw.total ?? link.length,
+      ...(raw.total !== undefined ? { total: raw.total } : {}),
       link,
       ...(raw.truncated ? { truncated: true } : {}),
+      ...(raw.limited ? { limited: true } : {}),
     };
   }
 
   private async listConfigurationsByCategory(
     categoryId: string,
     filter?: string,
+    options?: ListOptions,
   ): Promise<ConfigElementList> {
     const raw = await this.http.get<{
       relations?: {
@@ -88,7 +91,12 @@ export class ConfigurationClient {
     if (needle) {
       link = link.filter((item) => matchesFilter(item.name, needle));
     }
-    return { total: link.length, link };
+    const result = applyListLimit(link, options?.limit);
+    return {
+      total: result.total,
+      link: result.items,
+      ...(result.limited ? { limited: true } : {}),
+    };
   }
 
   getConfiguration(id: string): Promise<ConfigElement> {

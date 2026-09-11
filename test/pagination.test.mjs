@@ -158,3 +158,66 @@ test("getAllVroPages ignores non-link arrays unless itemKeys names them", async 
 
   assert.deepEqual(result.link, []);
 });
+
+test("getAllVroPages treats a negative total as unknown and keeps paginating", async () => {
+  // vRA 8's embedded vRO reports total=-1 on /workflows when paged; a
+  // negative total must not be mistaken for "0 or fewer items remain".
+  const stub = {
+    get: async (path) => {
+      const startIndex = Number(
+        new URL(`https://example.test${path}`).searchParams.get("startIndex"),
+      );
+      return {
+        link: startIndex < 3 ? [{ id: `item-${startIndex}` }] : [],
+        start: startIndex,
+        total: -1,
+      };
+    },
+  };
+
+  const result = await getAllVroPages(stub, "/things", undefined, {
+    pageSize: 1,
+  });
+
+  assert.deepEqual(
+    result.link.map((item) => item.id),
+    ["item-0", "item-1", "item-2"],
+  );
+  assert.equal(
+    result.total,
+    3,
+    "falls back to the collected count instead of leaking the -1 sentinel",
+  );
+});
+
+test("getAllAutomationPages treats a negative totalElements as unknown and keeps paginating", async () => {
+  const stub = {
+    get: async (path) => {
+      const page = Number(
+        new URL(`https://example.test${path}`).searchParams.get("page"),
+      );
+      return {
+        content: page < 3 ? [{ id: `item-${page}` }] : [],
+        totalElements: -1,
+      };
+    },
+  };
+
+  const result = await getAllAutomationPages(
+    stub,
+    "/things",
+    "https://example.test",
+    undefined,
+    { pageSize: 1 },
+  );
+
+  assert.deepEqual(
+    result.content.map((item) => item.id),
+    ["item-0", "item-1", "item-2"],
+  );
+  assert.equal(
+    result.totalElements,
+    3,
+    "falls back to the collected count instead of leaking the -1 sentinel",
+  );
+});

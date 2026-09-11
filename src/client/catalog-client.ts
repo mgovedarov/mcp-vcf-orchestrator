@@ -1,11 +1,11 @@
-import type { CatalogItem, CatalogItemList, Deployment } from "../types.js";
+import type { CatalogItem, CatalogItemList, Deployment, ListOptions } from "../types.js";
 import type { VroHttpClient } from "./core.js";
 import { getAllAutomationPages } from "./pagination.js";
 
 export class CatalogClient {
   constructor(private http: VroHttpClient) {}
 
-  listCatalogItems(search?: string): Promise<CatalogItemList> {
+  listCatalogItems(search?: string, options?: ListOptions): Promise<CatalogItemList> {
     const params = new URLSearchParams();
     if (search) {
       params.set("$search", search);
@@ -15,6 +15,7 @@ export class CatalogClient {
       "/items",
       this.http.catalogBaseUrl,
       params,
+      { maxItems: options?.limit },
     );
   }
 

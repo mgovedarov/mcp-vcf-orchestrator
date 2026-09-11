@@ -3,6 +3,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import type { VroClient } from "../vro-client.js";
 import { truncationNote } from "./truncation.js";
+import { listLimitSchema, limitNote } from "./list-limit.js";
 import { DESTRUCTIVE_LIVE_WRITE } from "./annotations.js";
 import {
   appendGuardGuidance,
@@ -26,16 +27,17 @@ export function registerResourceTools(
           .string()
           .optional()
           .describe("Filter resource elements by name (substring match)"),
+        limit: listLimitSchema,
       }),
       annotations: { readOnlyHint: true },
     },
-    async ({ filter }): Promise<CallToolResult> => {
+    async ({ filter, limit }): Promise<CallToolResult> => {
       try {
-        const result = await client.listResources(filter);
+        const result = await client.listResources(filter, { limit });
         const resources = result.link ?? [];
         if (resources.length === 0) {
           return {
-            content: [{ type: "text", text: "No resource elements found." }],
+            content: [{ type: "text", text: `No resource elements found.${limit !== undefined ? truncationNote(result, 0, result.total) : ""}` }],
           };
         }
         const lines = resources.map((r) => {
@@ -50,7 +52,7 @@ export function registerResourceTools(
           content: [
             {
               type: "text",
-              text: `Found ${resources.length} resource element(s):\n\n${lines.join("\n")}${truncationNote(result, resources.length, result.total)}`,
+              text: `Found ${resources.length} resource element(s):\n\n${lines.join("\n")}${truncationNote(result, resources.length, result.total)}${limitNote(result, resources.length, result.total)}`,
             },
           ],
         };

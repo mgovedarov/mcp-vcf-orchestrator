@@ -6,6 +6,7 @@ import type { VroClient } from "../vro-client.js";
 import { DESTRUCTIVE_LIVE_WRITE } from "./annotations.js";
 import { omittedContentSummary } from "./content-summary.js";
 import { truncationNote } from "./truncation.js";
+import { listLimitSchema, limitNote } from "./list-limit.js";
 import {
   appendGuardGuidance,
   guardExpectedActionModule,
@@ -41,16 +42,17 @@ export function registerActionTools(
           .string()
           .optional()
           .describe("Filter actions by name (substring match)"),
+        limit: listLimitSchema,
       }),
       annotations: { readOnlyHint: true },
     },
-    async ({ filter }): Promise<CallToolResult> => {
+    async ({ filter, limit }): Promise<CallToolResult> => {
       try {
-        const result = await client.listActions(filter);
+        const result = await client.listActions(filter, { limit });
         const actions = result.link ?? [];
         if (actions.length === 0) {
           return {
-            content: [{ type: "text", text: "No actions found." }],
+            content: [{ type: "text", text: `No actions found.${limit !== undefined ? truncationNote(result, 0, result.total) : ""}` }],
           };
         }
         const lines = actions.map(
@@ -61,7 +63,7 @@ export function registerActionTools(
           content: [
             {
               type: "text",
-              text: `Found ${actions.length} action(s):\n\n${lines.join("\n")}${truncationNote(result, actions.length, result.total)}`,
+              text: `Found ${actions.length} action(s):\n\n${lines.join("\n")}${truncationNote(result, actions.length, result.total)}${limitNote(result, actions.length, result.total)}`,
             },
           ],
         };

@@ -51,6 +51,152 @@ const IAAS_LOGIN_URL = "https://vcfa.example.test/iaas/api/login";
 const VRA8_WORKFLOWS_URL =
   "https://vcfa.example.test/vco/api/workflows?maxResult=100&startIndex=0&queryCount=true";
 
+const inventoryLists = [
+  ["listWorkflows", ["sample"], "/workflows", { conditions: "name~sample" }],
+  ["listActions", ["sample"], "/actions", {}, false, true],
+  ["listConfigurations", ["sample", undefined], "/configurations", { conditions: "name~sample" }],
+  ["listCategories", ["WorkflowCategory", "sample"], "/categories", { categoryType: "WorkflowCategory", conditions: "name~sample" }],
+  ["listResources", ["sample"], "/resources", { conditions: "name~sample" }],
+  ["listPackages", ["sample"], "/packages", { conditions: "name~sample" }],
+  ["listPlugins", ["sample"], "/plugins", { conditions: "name~sample" }, false, true],
+  ["listCatalogItems", ["sample"], "/items", { $search: "sample" }, true],
+  ["listProjects", ["sample"], "/projects", { $filter: projectSearchFilter("sample") }, true],
+  ["listDeployments", ["sample", "project"], "/deployments", { $search: "sample", projectId: "project" }, true],
+  ["listTemplates", ["sample", "project"], "/blueprints", { $search: "sample", projectId: "project" }, true],
+  ["listEventTopics", [], "/topics", {}, true],
+  ["listSubscriptions", ["project'one"], "/subscriptions", { $filter: "projectId eq 'project''one'" }, true],
+];
+
+for (const [method, args, endpoint, selectors, automation, localFilter] of inventoryLists) {
+  test(`${method} forwards limits through the facade and preserves totals/selectors`, async () => {
+    for (const known of [true, false]) {
+      const calls = [];
+      globalThis.fetch = async (url) => {
+        const request = new URL(String(url));
+        if (request.pathname.includes("/sessions")) return authResponse();
+        assert.ok(request.pathname.endsWith(endpoint));
+        calls.push(request);
+        const size = Number(request.searchParams.get(automation ? "size" : "maxResult"));
+        const start = automation
+          ? Number(request.searchParams.get("page")) * size
+          : Number(request.searchParams.get("startIndex"));
+        const items = Array.from({ length: Math.min(size, Math.max(0, 8 - start)) }, (_, index) => ({
+          id: String(start + index), name: `sample-${start + index}`,
+          attributes: [
+            { name: "id", value: String(start + index) },
+            { name: "name", value: `sample-${start + index}` },
+          ],
+        }));
+        return Response.json(automation
+          ? { content: items, totalElements: known ? 8 : -1 }
+          : { link: items, total: known ? 8 : -1 });
+      };
+      const client = new VroClient(config());
+      try {
+        const result = await client[method](...args, { limit: 2 });
+        assert.equal((result.link ?? result.content).length, 2);
+        assert.equal(result.limited, true);
+        assert.equal(result.truncated, undefined);
+        assert.equal(result.total ?? result.totalElements, known || localFilter ? 8 : undefined);
+        assert.equal(calls.length, known || localFilter ? 1 : 2);
+        for (const request of calls) {
+          assert.equal(request.searchParams.get(automation ? "size" : "maxResult"), localFilter ? "100" : "2");
+          for (const [key, value] of Object.entries(selectors)) assert.equal(request.searchParams.get(key), value);
+          if (method === "listActions") assert.equal(request.searchParams.has("conditions"), false);
+        }
+        calls.length = 0;
+        const full = await client[method](...args);
+        assert.equal((full.link ?? full.content).length, 8);
+        assert.equal(full.limited, undefined);
+        assert.equal(calls[0].searchParams.get(automation ? "size" : "maxResult"), "100");
+      } finally {
+        await client.close();
+      }
+    }
+  });
+}
+
+test("action limit filters an oversized server response before slicing", async () => {
+  let requests = 0;
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/sessions")) return authResponse();
+    requests += 1;
+    assert.equal(new URL(String(url)).searchParams.get("maxResult"), "100");
+    const names = [...Array(98).fill("other"), "match-a", "match-b", "match-c"];
+    return Response.json({ total: names.length, link: names.map((name, index) => ({
+      attributes: [{ name: "id", value: String(index) }, { name: "name", value: name }],
+    })) });
+  };
+  const client = new VroClient(config());
+  try {
+    const result = await client.listActions("match", { limit: 1 });
+    assert.deepEqual(result.link.map((item) => item.name), ["match-a"]);
+    assert.equal(result.total, 3);
+    assert.equal(result.limited, true);
+    assert.equal(requests, 1);
+  } finally {
+    await client.close();
+  }
+});
+
+test("configuration category limit follows relation selection and filtering", async () => {
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/sessions")) return authResponse();
+    assert.ok(String(url).endsWith("/categories/category"));
+    return Response.json({ relations: { link: [
+      ["up", "ConfigurationElement", "match-up"],
+      ["down", "Workflow", "match-workflow"],
+      ["down", "ConfigurationElement", "other"],
+      ["down", "ConfigurationElement", "match-a"],
+      ["down", "ConfigurationElement", "match-b"],
+    ].map(([rel, type, name], index) => ({ rel, attributes: [
+      { name: "id", value: String(index) }, { name: "type", value: type }, { name: "name", value: name },
+    ] })) } });
+  };
+  const client = new VroClient(config());
+  try {
+    const result = await client.listConfigurations("match", "category", { limit: 1 });
+    assert.deepEqual(result.link.map((item) => item.name), ["match-a"]);
+    assert.equal(result.total, 2);
+    assert.equal(result.limited, true);
+    assert.equal(result.link[0].categoryId, "category");
+  } finally {
+    await client.close();
+  }
+});
+
+test("limited project search counts late name and description matches after HTTP 400", async () => {
+  for (const count of [1002, 1500]) {
+    const pages = [];
+    const items = Array.from({ length: count }, (_, index) => ({
+      id: String(index),
+      name: index === 1201 || index === 1401 ? "Dev name" : "other",
+      ...(index === 1001 ? { description: "Dev description" } : {}),
+    }));
+    globalThis.fetch = async (url) => {
+      const request = new URL(String(url));
+      if (request.pathname.includes("/sessions")) return authResponse();
+      if (request.searchParams.has("$filter")) return Response.json({}, { status: 400 });
+      const page = Number(request.searchParams.get("page"));
+      pages.push(page);
+      assert.equal(request.searchParams.get("size"), "100");
+      return Response.json({ content: items.slice(page * 100, (page + 1) * 100), totalElements: count });
+    };
+    const client = new VroClient(config());
+    try {
+      const result = await client.listProjects("  DEV  ", { limit: 1 });
+      assert.deepEqual(result.content.map((item) => item.id), ["1001"]);
+      assert.equal(result.totalElements, count === 1002 ? 1 : undefined);
+      assert.equal(result.numberOfElements, 1);
+      assert.equal(result.limited, count === 1002 ? undefined : true);
+      assert.equal(result.truncated, undefined);
+      assert.deepEqual(pages, Array.from({ length: count === 1002 ? 11 : 13 }, (_, index) => index));
+    } finally {
+      await client.close();
+    }
+  }
+});
+
 // vra8 reuses VCFA_ORGANIZATION as the vIDM domain of the CSP login.
 const vra8Config = (overrides = {}) =>
   config({ targetPlatform: "vra8", organization: "System Domain", ...overrides });
@@ -628,6 +774,91 @@ test("listWorkflows falls back to categories when workflow pages repeat", async 
     workflows.link.map((workflow) => workflow.id),
     ["workflow-1", "workflow-2"],
   );
+});
+
+test("listWorkflows applies limit on the categories fallback", async () => {
+  const WORKFLOW_COUNT = 160;
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+
+    const requestUrl = new URL(String(url));
+    if (requestUrl.pathname.endsWith("/workflows")) {
+      return Response.json({
+        start: 0,
+        total: 250,
+        link: Array.from({ length: 100 }, (_, index) => ({
+          attributes: [
+            { name: "id", value: `repeated-${index}` },
+            { name: "name", value: `Repeated ${index}` },
+          ],
+        })),
+      });
+    }
+
+    if (requestUrl.pathname.endsWith("/categories")) {
+      return Response.json({
+        total: 1,
+        link: [
+          {
+            attributes: [
+              { name: "id", value: "root" },
+              { name: "name", value: "Root" },
+              { name: "type", value: "WorkflowCategory" },
+            ],
+          },
+        ],
+      });
+    }
+
+    if (requestUrl.pathname.endsWith("/categories/root")) {
+      return Response.json({
+        id: "root",
+        name: "Root",
+        type: "WorkflowCategory",
+        relations: {
+          link: Array.from({ length: WORKFLOW_COUNT + 1 }, (_, index) => {
+            const id = `workflow-${String(Math.max(0, WORKFLOW_COUNT - index - 1)).padStart(3, "0")}`;
+            return {
+              rel: "down",
+              attributes: [
+                { name: "type", value: "Workflow" },
+                { name: "id", value: id },
+                { name: "name", value: id },
+              ],
+            };
+          }),
+        },
+      });
+    }
+
+    throw new Error(`Unexpected URL: ${url}`);
+  };
+
+  for (const limit of [1, 5, 150]) {
+    calls.length = 0;
+    const client = new VroClient(config());
+    try {
+      const workflows = await client.listWorkflows("workflow-", { limit });
+
+      assert.equal(workflows.link.length, limit);
+      assert.equal(workflows.limited, true);
+      assert.equal(
+        workflows.total,
+        WORKFLOW_COUNT,
+        "total reflects the full matched count, not the capped one",
+      );
+      assert.deepEqual(
+        workflows.link.map((workflow) => workflow.id),
+        Array.from({ length: limit }, (_, index) => `workflow-${String(index).padStart(3, "0")}`),
+      );
+      assert.equal(calls.filter((call) => new URL(call.url).pathname.endsWith("/workflows")).length, limit > 100 ? 2 : 1);
+      assert.ok(calls.some((call) => new URL(call.url).pathname.endsWith("/categories/root")));
+    } finally {
+      await client.close();
+    }
+  }
 });
 
 test("listWorkflows falls back to categories when counted workflow pages repeat", async () => {

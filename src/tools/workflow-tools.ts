@@ -26,6 +26,7 @@ import {
 } from "./confirmation-guards.js";
 import type { VroClient } from "../vro-client.js";
 import { truncationNote } from "./truncation.js";
+import { listLimitSchema, limitNote } from "./list-limit.js";
 
 const DEFAULT_WORKFLOW_WAIT_TIMEOUT_SECONDS = 300;
 const DEFAULT_WORKFLOW_POLL_INTERVAL_SECONDS = 2;
@@ -483,17 +484,21 @@ export function registerWorkflowTools(
           .string()
           .optional()
           .describe("Filter workflows by name (substring match)"),
+        limit: listLimitSchema,
       }),
       annotations: { readOnlyHint: true },
     },
-    async ({ filter }): Promise<CallToolResult> => {
+    async ({ filter, limit }): Promise<CallToolResult> => {
       try {
-        const result = await client.listWorkflows(filter);
+        const result = await client.listWorkflows(filter, { limit });
         const workflows = result.link ?? [];
         if (workflows.length === 0) {
           return {
-            content: [{ type: "text", text: "No workflows found." }],
-            structuredContent: { workflows: [] },
+            content: [{ type: "text", text: `No workflows found.${limit !== undefined ? truncationNote(result, 0, result.total) : ""}` }],
+            structuredContent: {
+              workflows: [],
+              ...(limit !== undefined && result.truncated ? { truncated: true } : {}),
+            },
           };
         }
         const lines = workflows.map(
@@ -504,12 +509,13 @@ export function registerWorkflowTools(
           content: [
             {
               type: "text",
-              text: `Found ${workflows.length} workflow(s):\n\n${lines.join("\n")}${truncationNote(result, workflows.length, result.total)}`,
+              text: `Found ${workflows.length} workflow(s):\n\n${lines.join("\n")}${truncationNote(result, workflows.length, result.total)}${limitNote(result, workflows.length, result.total)}`,
             },
           ],
           structuredContent: {
             workflows: workflows.map(structuredWorkflow),
             ...(result.truncated ? { truncated: true } : {}),
+            ...(result.limited ? { limited: true } : {}),
           },
         };
       } catch (error) {

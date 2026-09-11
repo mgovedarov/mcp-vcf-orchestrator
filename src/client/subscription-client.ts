@@ -1,5 +1,6 @@
 import type {
   EventTopicList,
+  ListOptions,
   Subscription,
   SubscriptionList,
 } from "../types.js";
@@ -9,7 +10,7 @@ import { getAllAutomationPages } from "./pagination.js";
 export class SubscriptionClient {
   constructor(private http: VroHttpClient) {}
 
-  listSubscriptions(projectId?: string): Promise<SubscriptionList> {
+  listSubscriptions(projectId?: string, options?: ListOptions): Promise<SubscriptionList> {
     const params = new URLSearchParams();
     if (projectId) {
       // Escape single quotes for OData string literal ('' is the OData escape for ').
@@ -20,6 +21,7 @@ export class SubscriptionClient {
       "/subscriptions",
       this.http.eventBrokerBaseUrl,
       params,
+      { maxItems: options?.limit },
     );
   }
 
@@ -92,11 +94,13 @@ export class SubscriptionClient {
     );
   }
 
-  listEventTopics(): Promise<EventTopicList> {
+  listEventTopics(options?: ListOptions): Promise<EventTopicList> {
     return getAllAutomationPages(
       this.http,
       "/topics",
       this.http.eventBrokerBaseUrl,
+      undefined,
+      { maxItems: options?.limit },
     );
   }
 }

@@ -5,6 +5,7 @@ import type {
   DiffWorkflowFileParams,
   ExportWorkflowExecutionLogsParams,
   ExportWorkflowExecutionLogsResult,
+  ListOptions,
   ListWorkflowsByCategoryParams,
   ScaffoldWorkflowFileParams,
   SimpleParameter,
@@ -35,7 +36,7 @@ import {
   rejectSymlink,
   resolveFileInDirectory,
 } from "./files.js";
-import { getAllVroPages } from "./pagination.js";
+import { applyListLimit, getAllVroPages } from "./pagination.js";
 import { toVroParameters } from "./parameters.js";
 import { buildWorkflowArtifact } from "./workflow-artifact.js";
 
@@ -519,7 +520,10 @@ export class WorkflowClient {
     return { groups, truncated: false };
   }
 
-  private async listWorkflowsFromCategories(filter?: string): Promise<WorkflowList> {
+  private async listWorkflowsFromCategories(
+    filter?: string,
+    options?: ListOptions,
+  ): Promise<WorkflowList> {
     const rawCategories = await getAllVroPages<{
       href?: string;
       attributes?: { name: string; value: string }[];
@@ -548,17 +552,19 @@ export class WorkflowClient {
       }
     }
 
-    const link = [...workflowsById.values()].sort((a, b) =>
+    const sorted = [...workflowsById.values()].sort((a, b) =>
       a.name.localeCompare(b.name),
     );
+    const { items: link, limited } = applyListLimit(sorted, options?.limit);
     return {
-      total: link.length,
+      ...(options?.limit !== undefined && rawCategories.truncated ? {} : { total: sorted.length }),
       link,
       ...(rawCategories.truncated ? { truncated: true } : {}),
+      ...(limited ? { limited: true } : {}),
     };
   }
 
-  async listWorkflows(filter?: string): Promise<WorkflowList> {
+  async listWorkflows(filter?: string, options?: ListOptions): Promise<WorkflowList> {
     const params = new URLSearchParams();
     if (filter) {
       params.set("conditions", `name~${filter}`);
@@ -567,14 +573,15 @@ export class WorkflowClient {
       link: { attributes?: { name: string; value: string }[] }[];
       total?: number;
       truncated?: boolean;
+      limited?: boolean;
     };
     try {
       raw = await getAllVroPages<{
         attributes?: { name: string; value: string }[];
-      }>(this.http, "/workflows", params);
+      }>(this.http, "/workflows", params, { maxItems: options?.limit });
     } catch (error) {
       if (!isWorkflowListPaginationFailure(error)) throw error;
-      return this.listWorkflowsFromCategories(filter);
+      return this.listWorkflowsFromCategories(filter, options);
     }
     const link: Workflow[] = (raw.link ?? []).map((item) => {
       const a = parseAttrs(item.attributes);
@@ -587,10 +594,19 @@ export class WorkflowClient {
         categoryName: a["categoryName"] ?? a["category-name"],
       };
     });
+    const normalizedFilter = normalizeFilter(filter);
+    if (
+      options?.limit !== undefined &&
+      normalizedFilter &&
+      link.some((workflow) => !matchesFilter(workflow.name, normalizedFilter))
+    ) {
+      return this.listWorkflowsFromCategories(filter, options);
+    }
     return {
-      total: raw.total ?? link.length,
+      ...(raw.total !== undefined ? { total: raw.total } : {}),
       link,
       ...(raw.truncated ? { truncated: true } : {}),
+      ...(raw.limited ? { limited: true } : {}),
     };
   }
 

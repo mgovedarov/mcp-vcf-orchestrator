@@ -15,6 +15,7 @@ import type {
   DiffWorkflowFileParams,
   ExportWorkflowExecutionLogsParams,
   ExportWorkflowExecutionLogsResult,
+  ListOptions,
   PackageExportOptions,
   PackageImportDetails,
   PackageImportOptions,
@@ -111,8 +112,8 @@ export class VroClient {
     return this.http.close();
   }
 
-  listWorkflows(filter?: string): Promise<WorkflowList> {
-    return this.workflows.listWorkflows(filter);
+  listWorkflows(filter?: string, options?: ListOptions): Promise<WorkflowList> {
+    return this.workflows.listWorkflows(filter, options);
   }
 
   listWorkflowsByCategory(
@@ -379,8 +380,8 @@ export class VroClient {
     return `Ready import call:\nimport-package({ fileName: ${quote(params.fileName)}, overwrite: ${overwrite}, confirm: true })`;
   }
 
-  listActions(filter?: string): Promise<ActionList> {
-    return this.actions.listActions(filter);
+  listActions(filter?: string, options?: ListOptions): Promise<ActionList> {
+    return this.actions.listActions(filter, options);
   }
 
   getAction(id: string): Promise<Action> {
@@ -447,8 +448,9 @@ export class VroClient {
   listConfigurations(
     filter?: string,
     categoryId?: string,
+    options?: ListOptions,
   ): Promise<ConfigElementList> {
-    return this.configurations.listConfigurations(filter, categoryId);
+    return this.configurations.listConfigurations(filter, categoryId, options);
   }
 
   getConfiguration(id: string): Promise<ConfigElement> {
@@ -513,12 +515,12 @@ export class VroClient {
     return this.configurations.updateConfiguration(id, params, current);
   }
 
-  listCategories(categoryType: string, filter?: string): Promise<CategoryList> {
-    return this.categories.listCategories(categoryType, filter);
+  listCategories(categoryType: string, filter?: string, options?: ListOptions): Promise<CategoryList> {
+    return this.categories.listCategories(categoryType, filter, options);
   }
 
-  listSubscriptions(projectId?: string): Promise<SubscriptionList> {
-    return this.subscriptions.listSubscriptions(projectId);
+  listSubscriptions(projectId?: string, options?: ListOptions): Promise<SubscriptionList> {
+    return this.subscriptions.listSubscriptions(projectId, options);
   }
 
   getSubscription(id: string): Promise<Subscription> {
@@ -562,12 +564,12 @@ export class VroClient {
     return this.subscriptions.deleteSubscription(id);
   }
 
-  listEventTopics(): Promise<EventTopicList> {
-    return this.subscriptions.listEventTopics();
+  listEventTopics(options?: ListOptions): Promise<EventTopicList> {
+    return this.subscriptions.listEventTopics(options);
   }
 
-  listCatalogItems(search?: string): Promise<CatalogItemList> {
-    return this.catalog.listCatalogItems(search);
+  listCatalogItems(search?: string, options?: ListOptions): Promise<CatalogItemList> {
+    return this.catalog.listCatalogItems(search, options);
   }
 
   getCatalogItem(id: string): Promise<CatalogItem> {
@@ -588,8 +590,9 @@ export class VroClient {
   listDeployments(
     search?: string,
     projectId?: string,
+    options?: ListOptions,
   ): Promise<DeploymentList> {
-    return this.deployments.listDeployments(search, projectId);
+    return this.deployments.listDeployments(search, projectId, options);
   }
 
   getDeployment(id: string): Promise<Deployment> {
@@ -610,8 +613,8 @@ export class VroClient {
     return this.deployments.runDeploymentAction(params);
   }
 
-  listTemplates(search?: string, projectId?: string): Promise<TemplateList> {
-    return this.templates.listTemplates(search, projectId);
+  listTemplates(search?: string, projectId?: string, options?: ListOptions): Promise<TemplateList> {
+    return this.templates.listTemplates(search, projectId, options);
   }
 
   getTemplate(id: string): Promise<Template> {
@@ -632,16 +635,16 @@ export class VroClient {
     return this.templates.deleteTemplate(id);
   }
 
-  listProjects(search?: string): Promise<ProjectList> {
-    return this.projects.listProjects(search);
+  listProjects(search?: string, options?: ListOptions): Promise<ProjectList> {
+    return this.projects.listProjects(search, options);
   }
 
   getProject(id: string): Promise<Project> {
     return this.projects.getProject(id);
   }
 
-  listPackages(filter?: string): Promise<VroPackageList> {
-    return this.packages.listPackages(filter);
+  listPackages(filter?: string, options?: ListOptions): Promise<VroPackageList> {
+    return this.packages.listPackages(filter, options);
   }
 
   getPackage(name: string): Promise<VroPackage> {
@@ -744,8 +747,8 @@ export class VroClient {
     return this.packages.deletePackage(name, deleteContents);
   }
 
-  listResources(filter?: string): Promise<ResourceElementList> {
-    return this.resources.listResources(filter);
+  listResources(filter?: string, options?: ListOptions): Promise<ResourceElementList> {
+    return this.resources.listResources(filter, options);
   }
 
   getResourceElement(id: string): Promise<ResourceElement> {
@@ -780,8 +783,8 @@ export class VroClient {
     return this.resources.deleteResource(id, force);
   }
 
-  listPlugins(filter?: string): Promise<VroPluginList> {
-    return this.plugins.listPlugins(filter);
+  listPlugins(filter?: string, options?: ListOptions): Promise<VroPluginList> {
+    return this.plugins.listPlugins(filter, options);
   }
 }
 

@@ -16,6 +16,43 @@ function httpStub(page) {
   };
 }
 
+test("limited plugin filtering reaches later flat matches and trusts attribute items", async () => {
+  const items = [
+    { moduleName: "other" },
+    { moduleName: "other-again" },
+    { attributes: [{ name: "name", value: "server-match" }] },
+    { id: "match-flat", enabled: false },
+    { moduleName: "match-later" },
+    { moduleName: "match-last" },
+  ];
+  const starts = [];
+  const http = { get: async (path) => {
+    const params = new URL(`https://example.test${path}`).searchParams;
+    const start = Number(params.get("startIndex"));
+    starts.push(start);
+    assert.equal(params.get("maxResult"), "100");
+    return { plugins: items.slice(start, start + 1), total: items.length };
+  } };
+  const result = await new PluginClient(http).listPlugins(" MATCH ", { limit: 1 });
+  assert.deepEqual(result.link.map((item) => item.name), ["server-match"]);
+  assert.equal(result.total, undefined);
+  assert.equal(result.limited, true);
+  assert.deepEqual(starts, [0, 1, 2, 3]);
+});
+
+test("limited flat plugins report exact matches when a response completes inventory", async () => {
+  const http = httpStub({ total: 4, plugins: [
+    { moduleName: "other" }, { id: "match-a", enabled: false },
+    { moduleName: "match-b" }, { moduleName: "other-last" },
+  ] });
+  const result = await new PluginClient(http).listPlugins("match", { limit: 1 });
+  assert.equal(result.total, 2);
+  assert.equal(result.link[0].name, "match-a");
+  assert.equal(result.link[0].enabled, false);
+  assert.equal(result.limited, true);
+  assert.equal(http.calls.length, 1);
+});
+
 test("listPlugins maps the vRO link/attributes envelope (VCF Automation 9.x)", async () => {
   const http = httpStub({
     total: 2,

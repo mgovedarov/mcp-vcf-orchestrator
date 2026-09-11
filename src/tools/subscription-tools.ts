@@ -3,6 +3,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import type { VroClient } from "../vro-client.js";
 import { truncationNote } from "./truncation.js";
+import { listLimitSchema, limitNote } from "./list-limit.js";
 import { DESTRUCTIVE_LIVE_WRITE } from "./annotations.js";
 import { omittedContentSummary } from "./content-summary.js";
 import {
@@ -22,16 +23,16 @@ export function registerSubscriptionTools(
       title: "List Event Topics",
       description:
         "List available event topics from the VCF Automation Event Broker. Use this to discover topic IDs before creating subscriptions.",
-      inputSchema: z.object({}),
+      inputSchema: z.object({ limit: listLimitSchema }),
       annotations: { readOnlyHint: true },
     },
-    async (): Promise<CallToolResult> => {
+    async ({ limit }): Promise<CallToolResult> => {
       try {
-        const result = await client.listEventTopics();
+        const result = await client.listEventTopics({ limit });
         const topics = result.content ?? [];
         if (topics.length === 0) {
           return {
-            content: [{ type: "text", text: "No event topics found." }],
+            content: [{ type: "text", text: `No event topics found.${limit !== undefined ? truncationNote(result, 0, result.totalElements) : ""}` }],
           };
         }
         const lines = topics.map(
@@ -42,7 +43,7 @@ export function registerSubscriptionTools(
           content: [
             {
               type: "text",
-              text: `Found ${topics.length} event topic(s):\n\n${lines.join("\n")}${truncationNote(result, topics.length, result.totalElements)}`,
+              text: `Found ${topics.length} event topic(s):\n\n${lines.join("\n")}${truncationNote(result, topics.length, result.totalElements)}${limitNote(result, topics.length, result.totalElements)}`,
             },
           ],
         };
@@ -75,16 +76,17 @@ export function registerSubscriptionTools(
           .describe(
             "Filter subscriptions by project ID (discover with list-projects)",
           ),
+        limit: listLimitSchema,
       }),
       annotations: { readOnlyHint: true },
     },
-    async ({ projectId }): Promise<CallToolResult> => {
+    async ({ projectId, limit }): Promise<CallToolResult> => {
       try {
-        const result = await client.listSubscriptions(projectId);
+        const result = await client.listSubscriptions(projectId, { limit });
         const subs = result.content ?? [];
         if (subs.length === 0) {
           return {
-            content: [{ type: "text", text: "No subscriptions found." }],
+            content: [{ type: "text", text: `No subscriptions found.${limit !== undefined ? truncationNote(result, 0, result.totalElements) : ""}` }],
           };
         }
         const lines = subs.map(
@@ -95,7 +97,7 @@ export function registerSubscriptionTools(
           content: [
             {
               type: "text",
-              text: `Found ${subs.length} subscription(s):\n\n${lines.join("\n")}${truncationNote(result, subs.length, result.totalElements)}`,
+              text: `Found ${subs.length} subscription(s):\n\n${lines.join("\n")}${truncationNote(result, subs.length, result.totalElements)}${limitNote(result, subs.length, result.totalElements)}`,
             },
           ],
         };

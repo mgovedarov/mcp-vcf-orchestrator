@@ -52,16 +52,15 @@ const DESTRUCTIVE_NAME_PATTERN = /^(import-|delete-|update-|run-)/;
 
 // Registers every tool module; keep the call list in sync with the
 // register* calls in src/index.ts so no module escapes these checks.
-function registerAllToolConfigs() {
+function registerAllToolConfigs(client = {}) {
   const configs = new Map();
   const server = {
-    registerTool(name, config) {
+    registerTool(name, config, handler) {
       assert.equal(configs.has(name), false, `duplicate tool name: ${name}`);
-      configs.set(name, config);
+      configs.set(name, { ...config, handler });
     },
     sendResourceListChanged() {},
   };
-  const client = {};
   registerWorkflowTools(server, client);
   registerActionTools(server, client);
   registerConfigTools(server, client);
@@ -77,6 +76,81 @@ function registerAllToolConfigs() {
   registerResourceTools(server, client);
   registerPluginTools(server, client);
   return configs;
+}
+
+const flatLists = [
+  ["list-workflows", "listWorkflows", { filter: "sample" }, ["sample"], "workflow(s)", "• sample (id: item)"],
+  ["list-actions", "listActions", { filter: "sample" }, ["sample"], "action(s)", "• module/sample (id: item)"],
+  ["list-configurations", "listConfigurations", { filter: "sample", categoryId: "cat" }, ["sample", "cat"], "configuration element(s)", "• sample (id: item)"],
+  ["list-categories", "listCategories", { type: "WorkflowCategory", filter: "sample" }, ["WorkflowCategory", "sample"], "WorkflowCategory category(ies)", "• sample (id: item)"],
+  ["list-resource-elements", "listResources", { filter: "sample" }, ["sample"], "resource element(s)", "• sample (id: item)"],
+  ["list-packages", "listPackages", { filter: "sample" }, ["sample"], "package(s)", "• sample"],
+  ["list-plugins", "listPlugins", { filter: "sample" }, ["sample"], "plugin(s)", "• sample"],
+  ["list-catalog-items", "listCatalogItems", { search: "sample" }, ["sample"], "catalog item(s)", "• sample (id: item)", true],
+  ["list-projects", "listProjects", { search: "sample" }, ["sample"], "project(s)", "• sample (id: item)", true],
+  ["list-deployments", "listDeployments", { search: "sample", projectId: "project" }, ["sample", "project"], "deployment(s)", "• sample (id: item)", true],
+  ["list-templates", "listTemplates", { search: "sample", projectId: "project" }, ["sample", "project"], "template(s)", "• sample (id: item)", true],
+  ["list-event-topics", "listEventTopics", {}, [], "event topic(s)", "• sample (id: item)"],
+  ["list-subscriptions", "listSubscriptions", { projectId: "project" }, ["project"], "subscription(s)", "• sample (id: item) — topic: N/A, runnable: N/A/N/A, ENABLED"],
+];
+
+for (const [name, method, selectors, positional, label, row, totalHeading] of flatLists) {
+  test(`${name}: limit schema is optional, bounded, and describes filters`, () => {
+    const config = registerAllToolConfigs().get(name);
+    assert.equal(config.annotations.readOnlyHint, true);
+    assert.deepEqual(config.inputSchema.parse(selectors), selectors);
+    for (const limit of [1, 1000]) {
+      assert.equal(config.inputSchema.parse({ ...selectors, limit }).limit, limit);
+    }
+    for (const limit of [0, 1001, 1.5, "2", null]) {
+      assert.equal(config.inputSchema.safeParse({ ...selectors, limit }).success, false);
+    }
+    assert.match(config.inputSchema.shape.limit.description, /after.*filter\/search/);
+  });
+
+  test(`${name}: forwards limit and renders known, unknown, capped and complete results`, async () => {
+    let received;
+    const items = [{ id: "item", name: "sample", ...(method === "listActions" ? { module: "module" } : {}) }];
+    let page = { link: items, content: items, total: 10, totalElements: 10 };
+    const tool = registerAllToolConfigs({ [method]: async (...args) => {
+      received = args;
+      return page;
+    } }).get(name);
+
+    const original = await tool.handler(selectors);
+    assert.equal(original.content[0].text, `Found ${totalHeading ? 10 : 1} ${label}:\n\n${row}`);
+    assert.equal(original.isError, undefined);
+    if (method === "listWorkflows") {
+      assert.deepEqual(original.structuredContent, { workflows: items });
+    } else {
+      assert.equal(original.structuredContent, undefined);
+    }
+
+    page = { ...page, limited: true };
+    const known = await tool.handler({ ...selectors, limit: 1 });
+    assert.deepEqual(received, [...positional, { limit: 1 }]);
+    assert.match(known.content[0].text, /^Found 1 /);
+    assert.match(known.content[0].text, /showing the first 1 of 10/);
+    assert.doesNotMatch(known.content[0].text, /Results truncated/);
+    if (method === "listWorkflows") assert.equal(known.structuredContent.limited, true);
+
+    delete page.total;
+    delete page.totalElements;
+    const unknown = await tool.handler({ ...selectors, limit: 1 });
+    assert.match(unknown.content[0].text, /showing the first 1 item/);
+    assert.doesNotMatch(unknown.content[0].text, / of /);
+
+    page.truncated = true;
+    const both = await tool.handler({ ...selectors, limit: 1 });
+    assert.match(both.content[0].text, /Results truncated/);
+    assert.match(both.content[0].text, /Results limited/);
+
+    page = { link: [], content: [], truncated: true };
+    const empty = await tool.handler({ ...selectors, limit: 1 });
+    assert.match(empty.content[0].text, /^No /);
+    assert.match(empty.content[0].text, /Results truncated/);
+    assert.doesNotMatch(empty.content[0].text, /Results limited/);
+  });
 }
 
 test("every registered tool declares a boolean readOnlyHint annotation", () => {

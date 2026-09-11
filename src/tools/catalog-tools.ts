@@ -3,6 +3,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import type { VroClient } from "../vro-client.js";
 import { truncationNote } from "./truncation.js";
+import { listLimitSchema, limitNote } from "./list-limit.js";
 
 export function registerCatalogTools(
   server: McpServer,
@@ -19,16 +20,17 @@ export function registerCatalogTools(
           .string()
           .optional()
           .describe("Search catalog items by name or keyword"),
+        limit: listLimitSchema,
       }),
       annotations: { readOnlyHint: true },
     },
-    async ({ search }): Promise<CallToolResult> => {
+    async ({ search, limit }): Promise<CallToolResult> => {
       try {
-        const result = await client.listCatalogItems(search);
+        const result = await client.listCatalogItems(search, { limit });
         const items = result.content ?? [];
         if (items.length === 0) {
           return {
-            content: [{ type: "text", text: "No catalog items found." }],
+            content: [{ type: "text", text: `No catalog items found.${limit !== undefined ? truncationNote(result, 0, result.totalElements) : ""}` }],
           };
         }
         const lines = items.map((item) => {
@@ -37,12 +39,12 @@ export function registerCatalogTools(
           if (item.description) line += ` — ${item.description}`;
           return line;
         });
-        const total = result.totalElements ?? items.length;
+        const total = limit === undefined ? result.totalElements ?? items.length : items.length;
         return {
           content: [
             {
               type: "text",
-              text: `Found ${total} catalog item(s):\n\n${lines.join("\n")}${truncationNote(result, items.length, result.totalElements)}`,
+              text: `Found ${total} catalog item(s):\n\n${lines.join("\n")}${truncationNote(result, items.length, result.totalElements)}${limitNote(result, items.length, result.totalElements)}`,
             },
           ],
         };
