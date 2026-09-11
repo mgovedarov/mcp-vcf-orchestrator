@@ -1553,6 +1553,10 @@ test("vra8 updateSubscription upserts a full body and never issues a PUT", async
   const requests = [];
   globalThis.fetch = vra8AutomationWriteStub(requests, {
     id: "subscription-1",
+    // Not every subscription vRA 8 serves is RUNNABLE — the verification lab
+    // had 5 SUBSCRIBABLE service subscribers — and the upsert replaces the
+    // element, so an update that never mentioned the type must not retype it.
+    type: "SUBSCRIBABLE",
     name: "Existing",
     eventTopicId: "topic-1",
     runnableType: "extensibility.vro",
@@ -1560,7 +1564,12 @@ test("vra8 updateSubscription upserts a full body and never issues a PUT", async
     description: "Existing description",
     blocking: false,
     disabled: false,
+    // Stands in for any field vRA 8 stores that `Subscription` does not model.
+    // The upsert replaces what it does not carry, so these must survive too.
+    unmodeledField: "keep me",
     orgId: "org-1",
+    system: true,
+    contextual: true,
   });
   const client = new VroClient(vra8Config());
 
@@ -1575,13 +1584,69 @@ test("vra8 updateSubscription upserts a full body and never issues a PUT", async
   const post = requests.find((r) => r.method === "POST");
   assert.equal(post.body.id, "subscription-1");
   assert.equal(post.body.disabled, true, "the caller's change is applied");
-  // Unspecified fields carry forward; a partial body is rejected with 400.
+  // Unspecified fields carry forward, modeled or not: the merge starts from the
+  // live element rather than rebuilding an allow-listed one.
+  assert.equal(post.body.type, "SUBSCRIBABLE");
   assert.equal(post.body.name, "Existing");
   assert.equal(post.body.eventTopicId, "topic-1");
   assert.equal(post.body.runnableId, "runnable-1");
   assert.equal(post.body.description, "Existing description");
+  assert.equal(post.body.unmodeledField, "keep me");
   // Server-owned fields are never echoed back into the upsert.
   assert.ok(!("orgId" in post.body));
+  assert.ok(!("system" in post.body));
+  assert.ok(!("contextual" in post.body));
+});
+
+test("vra8 updateSubscription refuses an element with no event topic", async () => {
+  const requests = [];
+  globalThis.fetch = vra8AutomationWriteStub(requests, {
+    id: "subscription-1",
+    name: "Existing",
+  });
+  const client = new VroClient(vra8Config());
+
+  // vRA 8 requires eventTopicId on the upsert, and the element carries none to
+  // merge, so refuse before the write rather than let the server 400 decide.
+  await assert.rejects(
+    () => client.updateSubscription("subscription-1", { disabled: true }),
+    /carries no eventTopicId/,
+  );
+  assert.equal(
+    requests.filter((r) => r.method !== "GET").length,
+    0,
+    "nothing was mutated",
+  );
+});
+
+test("vra8 createSubscription returns the posted element when the read-back fails", async () => {
+  const requests = [];
+  const login = vra8LoginStub();
+  globalThis.fetch = async (url, init = {}) => {
+    const fromLogin = login(url);
+    if (fromLogin) return fromLogin;
+    const method = init.method ?? "GET";
+    requests.push({ method, url: String(url) });
+    // The POST landed; the read-after-write has not caught up yet.
+    if (method === "GET") return new Response("", { status: 404 });
+    return new Response(null, { status: 201 });
+  };
+  const client = new VroClient(vra8Config());
+
+  // A throw here would report a failed create for a subscription that exists,
+  // and the natural retry would create a second one under a fresh UUID.
+  const created = await client.createSubscription({
+    name: "Subscription",
+    eventTopicId: "topic-1",
+    runnableType: "extensibility.abx",
+    runnableId: "runnable-1",
+  });
+  assert.equal(created.name, "Subscription");
+  assert.match(
+    created.id,
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+  );
+  assert.equal(requests.filter((r) => r.method === "POST").length, 1);
 });
 
 test("vra8 platform rejects catalog-service and deployment-service writes", async () => {

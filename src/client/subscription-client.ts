@@ -9,6 +9,20 @@ import { randomUUID } from "node:crypto";
 import type { VroHttpClient } from "./core.js";
 import { getAllAutomationPages } from "./pagination.js";
 
+/**
+ * Fields the server owns on a subscription element, stripped before the vra8
+ * update upserts the live element back. Everything else carries forward,
+ * including fields `Subscription` does not model — see updateSubscription.
+ */
+const SERVER_OWNED_SUBSCRIPTION_FIELDS = [
+  "orgId",
+  "ownerId",
+  "subscriberId",
+  "system",
+  "contextual",
+  "selfLink",
+] as const;
+
 export class SubscriptionClient {
   constructor(private http: VroHttpClient) {}
 
@@ -35,15 +49,19 @@ export class SubscriptionClient {
   }
 
   /**
-   * Fields a caller may set on a subscription, in the shape the API expects.
-   * `id` is included because vRA 8 requires the client to choose it; VCFA 9.x
-   * assigns one, so the vcfa path never sends it.
+   * The create body, in the shape the API expects. `type: "RUNNABLE"` is an
+   * anchor of this builder, not a general default: create-subscription only
+   * ever creates a runnable subscription. The update path must not reuse it —
+   * a live element carries its own `type` (vRA 8 also serves `SUBSCRIBABLE`
+   * service subscribers), and rebuilding one from this shape would reclassify
+   * it. The caller-chosen `id` vRA 8 requires is set by the caller, because
+   * VCFA 9.x assigns one and its path never sends it.
    */
   private subscriptionBody(params: {
-    name?: string;
-    eventTopicId?: string;
-    runnableType?: string;
-    runnableId?: string;
+    name: string;
+    eventTopicId: string;
+    runnableType: string;
+    runnableId: string;
     projectId?: string;
     description?: string;
     blocking?: boolean;
@@ -52,13 +70,13 @@ export class SubscriptionClient {
     disabled?: boolean;
     constraints?: Record<string, unknown>;
   }): Record<string, unknown> {
-    const body: Record<string, unknown> = { type: "RUNNABLE" };
-    if (params.name !== undefined) body.name = params.name;
-    if (params.eventTopicId !== undefined)
-      body.eventTopicId = params.eventTopicId;
-    if (params.runnableType !== undefined)
-      body.runnableType = params.runnableType;
-    if (params.runnableId !== undefined) body.runnableId = params.runnableId;
+    const body: Record<string, unknown> = {
+      type: "RUNNABLE",
+      name: params.name,
+      eventTopicId: params.eventTopicId,
+      runnableType: params.runnableType,
+      runnableId: params.runnableId,
+    };
     if (params.projectId !== undefined) body.projectId = params.projectId;
     if (params.description !== undefined) body.description = params.description;
     if (params.blocking !== undefined) body.blocking = params.blocking;
@@ -79,6 +97,11 @@ export class SubscriptionClient {
    * header. So the vra8 path generates a UUID and re-reads the element, which
    * is what callers expect back — without the re-read the tool would render
    * the empty {} that request() returns for a bodyless response.
+   *
+   * The POST resolving means the element exists, so a failing read-back must
+   * not surface as a failed create: the caller would be told nothing was
+   * created and would retry under a fresh UUID, leaving a second live
+   * subscription nobody knows about. The posted body is returned instead.
    */
   async createSubscription(params: {
     name: string;
@@ -108,7 +131,12 @@ export class SubscriptionClient {
       body,
       this.http.eventBrokerBaseUrl,
     );
-    return this.getSubscription(id);
+    try {
+      return await this.getSubscription(id);
+    } catch {
+      // Created, but not readable back yet. What was posted is what was stored.
+      return body as unknown as Subscription;
+    }
   }
 
   /**
@@ -116,19 +144,24 @@ export class SubscriptionClient {
    *
    * vRA 8 does not serve PUT or PATCH on this path — both answer 405 — so the
    * update is the same POST, upserted under the existing id (verified on vRA
-   * 8.18, VCFO-070). That POST validates the whole body, so the current
-   * element is read first and the caller's changes merged onto it; only the
-   * caller-settable fields are carried forward, never server-owned ones such
-   * as orgId, ownerId, subscriberId, system, or contextual.
+   * 8.18, VCFO-070). That POST replaces the whole element, so the body starts
+   * from the live one and strips only the fields the server owns; the caller's
+   * changes are then laid over it.
    *
-   * Unlike the configuration-element PUT that VCFO-068 had to guard, a partial
-   * body here cannot silently discard fields: vRA 8 rejects one outright with
-   * 400 "Property: eventTopicId must not be blank" before mutating anything.
+   * Starting from the live element rather than rebuilding an allow-listed one
+   * is the point. The upsert replaces what it does not carry, and `Subscription`
+   * models only the fields these tools read — vRA 8 serves others (`system` and
+   * `contextual` among them). Rebuilding would clear every unmodeled field on
+   * an update that never mentioned it, and nothing would report it: the
+   * `400 Property: eventTopicId must not be blank` that rejects a partial body
+   * only fires when `eventTopicId` is absent, and the merge always carries it,
+   * so that validation is no protection against a merge gap. Carrying an
+   * unknown field forward is the safe direction of that uncertainty — as it is
+   * for `constraints`, which the lab had no subscription set to exercise.
    *
-   * One carry-forward is unverified against the wire: the lab had no
-   * subscription with `constraints` set, so that field is preserved on the
-   * data-preserving assumption rather than on an observation. Omitting it
-   * would clear an existing constraint set, which is the worse failure.
+   * `current` lets a caller that already read the element (the expected-target
+   * guard in update-subscription does) hand it in, so a guarded update reads
+   * once and merges the same snapshot it verified.
    */
   async updateSubscription(
     id: string,
@@ -143,6 +176,7 @@ export class SubscriptionClient {
       timeout?: number;
       constraints?: Record<string, unknown>;
     },
+    current?: Subscription,
   ): Promise<Subscription> {
     if (this.http.targetPlatform !== "vra8") {
       return this.http.put<Subscription>(
@@ -151,20 +185,17 @@ export class SubscriptionClient {
         this.http.eventBrokerBaseUrl,
       );
     }
-    const current = await this.getSubscription(id);
-    const body = this.subscriptionBody({
-      name: params.name ?? current.name,
-      eventTopicId: current.eventTopicId,
-      runnableType: params.runnableType ?? current.runnableType,
-      runnableId: params.runnableId ?? current.runnableId,
-      projectId: current.projectId,
-      description: params.description ?? current.description,
-      blocking: params.blocking ?? current.blocking,
-      priority: params.priority ?? current.priority,
-      timeout: params.timeout ?? current.timeout,
-      disabled: params.disabled ?? current.disabled,
-      constraints: params.constraints ?? current.constraints,
-    });
+    const live = current ?? (await this.getSubscription(id));
+    if (!live.eventTopicId) {
+      throw new Error(
+        `Subscription ${id} carries no eventTopicId, which vRA 8 requires on the POST upsert that serves as its update (it answers PUT and PATCH with 405). Nothing was mutated. Only subscriptions bound to an event topic can be updated in VCFA_TARGET_PLATFORM=vra8 mode.`,
+      );
+    }
+    const body: Record<string, unknown> = { ...live };
+    for (const field of SERVER_OWNED_SUBSCRIPTION_FIELDS) delete body[field];
+    for (const [field, value] of Object.entries(params)) {
+      if (value !== undefined) body[field] = value;
+    }
     body.id = id;
     await this.http.post<unknown>(
       "/subscriptions",

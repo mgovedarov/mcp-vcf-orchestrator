@@ -22,8 +22,9 @@ type AutomationService =
 
 // Exhaustive on purpose: `null` means writes to that service are lab-verified,
 // a string is the refusal explaining what verifying it would take. Adding a
-// service to AutomationService forces a decision here rather than defaulting
-// into the permissive branch.
+// service to AutomationService forces a decision here — and an entry in the
+// base-URL map the constructor builds, which is exhaustive for the same reason
+// — rather than defaulting into the permissive branch.
 const UNSUPPORTED_AUTOMATION_WRITE: Record<AutomationService, string | null> =
   {
     blueprint: null,
@@ -36,9 +37,10 @@ const UNSUPPORTED_AUTOMATION_WRITE: Record<AutomationService, string | null> =
       "Deployment deletion and day-2 actions (delete-deployment, run-deployment-action) are not supported in VCFA_TARGET_PLATFORM=vra8 mode pending lab verification: the lab that verified this mode had no deployment to act on, and both paths destroy or alter real infrastructure. Reading deployments and their day-2 action lists is supported, as are blueprint and subscription writes and the full vRO /vco/api surface.",
   };
 
-// Fallback for an Automation base URL this guard does not recognize. Reached
-// only if a new service client is added without a matching entry in
-// automationServiceFor, so it fails closed rather than letting the write through.
+// Fallback for an Automation base URL this guard does not recognize. Both the
+// refusal map and the base-URL map are keyed by AutomationService, so a new
+// service cannot reach this without also skipping the type checker; it fails
+// closed rather than letting the write through.
 const UNSUPPORTED_AUTOMATION_WRITE_UNKNOWN =
   "This Automation-service write is not supported in VCFA_TARGET_PLATFORM=vra8 mode: the target service has not been verified against a vRA 8 environment.";
 
@@ -490,6 +492,8 @@ export class VroHttpClient {
   readonly deploymentBaseUrl: string;
   readonly blueprintBaseUrl: string;
   readonly projectBaseUrl: string;
+  /** Base URL per Automation service, the reverse lookup the write guard uses. */
+  private readonly automationBaseUrls: Record<AutomationService, string>;
   readonly packageDir: string;
   readonly projectPackageName?: string;
   readonly projectPackageDescription?: string;
@@ -544,6 +548,13 @@ export class VroHttpClient {
     this.deploymentBaseUrl = `https://${config.host}/deployment/api`;
     this.blueprintBaseUrl = `https://${config.host}/blueprint/api`;
     this.projectBaseUrl = `https://${config.host}/project-service/api`;
+    this.automationBaseUrls = {
+      blueprint: this.blueprintBaseUrl,
+      catalog: this.catalogBaseUrl,
+      deployment: this.deploymentBaseUrl,
+      "event-broker": this.eventBrokerBaseUrl,
+      project: this.projectBaseUrl,
+    };
     this.versionsUrl = `https://${config.host}/api/versions`;
     this.pinnedApiVersion = resolvePinnedApiVersion(config.targetPlatform);
     this.login =
@@ -913,12 +924,10 @@ export class VroHttpClient {
   private automationServiceFor(
     baseUrl: string,
   ): AutomationService | undefined {
-    if (baseUrl === this.blueprintBaseUrl) return "blueprint";
-    if (baseUrl === this.catalogBaseUrl) return "catalog";
-    if (baseUrl === this.deploymentBaseUrl) return "deployment";
-    if (baseUrl === this.eventBrokerBaseUrl) return "event-broker";
-    if (baseUrl === this.projectBaseUrl) return "project";
-    return undefined;
+    const services = Object.keys(this.automationBaseUrls) as AutomationService[];
+    return services.find(
+      (service) => this.automationBaseUrls[service] === baseUrl,
+    );
   }
 
   /**

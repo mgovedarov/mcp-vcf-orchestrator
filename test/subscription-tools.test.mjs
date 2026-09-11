@@ -149,6 +149,27 @@ test("subscription tools pass create and update payloads through", async () => {
   });
 });
 
+test("update-subscription rejects a confirmed no-op", async () => {
+  let updatedCall;
+  const handlers = registeredSubscriptionTools({
+    getSubscription: async (id) => ({ id, name: "Approval" }),
+    updateSubscription: async (id, params) => {
+      updatedCall = { id, params };
+      return { id };
+    },
+  });
+
+  // In vra8 mode an update is a full-element upsert, so a call that changes
+  // nothing would still rewrite the live element.
+  const noop = await handlers.get("update-subscription")({
+    id: "sub-1",
+    confirm: true,
+  });
+  assert.equal(noop.isError, true);
+  assert.match(noop.content[0].text, /Nothing to update for subscription sub-1/);
+  assert.equal(updatedCall, undefined);
+});
+
 test("delete-subscription requires confirmation", async () => {
   let deletedId;
   const handlers = registeredSubscriptionTools({
@@ -171,15 +192,19 @@ test("delete-subscription requires confirmation", async () => {
 test("subscription update and delete expected guards verify current target", async () => {
   let updatedCall;
   let deletedId;
+  let reads = 0;
   const handlers = registeredSubscriptionTools({
-    getSubscription: async (id) => ({
-      id,
-      name: "Approval",
-      eventTopicId: "topic-1",
-      runnableId: "workflow-1",
-    }),
-    updateSubscription: async (id, params) => {
-      updatedCall = { id, params };
+    getSubscription: async (id) => {
+      reads += 1;
+      return {
+        id,
+        name: "Approval",
+        eventTopicId: "topic-1",
+        runnableId: "workflow-1",
+      };
+    },
+    updateSubscription: async (id, params, current) => {
+      updatedCall = { id, params, current };
       return { id, name: params.name ?? "Approval", disabled: params.disabled };
     },
     deleteSubscription: async (id) => {
@@ -196,6 +221,7 @@ test("subscription update and delete expected guards verify current target", asy
   assert.equal(mismatch.isError, true);
   assert.equal(updatedCall, undefined);
 
+  reads = 0;
   await handlers.get("update-subscription")({
     id: "sub-1",
     expectedName: "Approval",
@@ -215,7 +241,17 @@ test("subscription update and delete expected guards verify current target", asy
       priority: undefined,
       timeout: undefined,
     },
+    // The snapshot the guard verified is handed to the client as the merge
+    // base, so a guarded update reads the element once, not twice, and cannot
+    // upsert a different snapshot than the one it checked.
+    current: {
+      id: "sub-1",
+      name: "Approval",
+      eventTopicId: "topic-1",
+      runnableId: "workflow-1",
+    },
   });
+  assert.equal(reads, 1, "the guard read is reused as the merge base");
 
   const deleteMismatch = await handlers.get("delete-subscription")({
     id: "sub-1",

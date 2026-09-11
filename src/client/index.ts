@@ -556,8 +556,9 @@ export class VroClient {
       timeout?: number;
       constraints?: Record<string, unknown>;
     },
+    current?: Subscription,
   ): Promise<Subscription> {
-    return this.subscriptions.updateSubscription(id, params);
+    return this.subscriptions.updateSubscription(id, params, current);
   }
 
   deleteSubscription(id: string): Promise<void> {
