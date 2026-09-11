@@ -1,25 +1,9 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import type { Project, ProjectList, ProjectPrincipal } from "../types.js";
+import type { Project, ProjectPrincipal } from "../types.js";
 import type { VroClient } from "../vro-client.js";
-
-/**
- * Truncation warning for list-projects. The shared truncationNote advises
- * narrowing the query with a filter, which does not apply here: the search is
- * applied client-side after pagination, so it can neither reduce the pages
- * fetched nor recover projects beyond the request cap. Reports the scanned
- * inventory (not the match count) so a partial scan is never mistaken for a
- * complete one.
- */
-function projectTruncationNote(result: ProjectList): string {
-  if (!result.truncated) return "";
-  const scanned = result.scannedElements ?? result.content.length;
-  const total = result.inventoryTotalElements ?? result.totalElements;
-  const ofTotal =
-    total !== undefined && total > scanned ? ` of ~${total}` : "";
-  return `\n\n⚠️ Results truncated: the pagination request limit was reached after scanning ${scanned}${ofTotal} project(s). Projects beyond that point were not checked, and the search filter is applied client-side so it cannot retrieve them; treat missing matches as unverified and use get-project with a known ID instead.`;
-}
+import { truncationNote } from "./truncation.js";
 
 const NAMING_TEMPLATE_KEY = "__namingTemplate";
 const PLACEMENT_POLICY_KEY = "__projectPlacementPolicy";
@@ -113,7 +97,7 @@ export function registerProjectTools(
     {
       title: "List Projects",
       description:
-        "List VCF Automation projects. Use this to discover the projectId required by create-deployment, create-template, create-subscription, and the project-scoped list tools instead of guessing IDs. The optional search is a case-insensitive substring match on project name and description, applied after the full project list is collected.",
+        "List VCF Automation projects. Use this to discover the projectId required by create-deployment, create-template, create-subscription, and the project-scoped list tools instead of guessing IDs. The optional search is a case-insensitive substring match on project name and description, sent to the project-service as an OData $filter so a narrower search reaches projects beyond the pagination cap; a service that rejects the filter falls back to a client-side match.",
       inputSchema: z.object({
         search: z
           .string()
@@ -128,7 +112,7 @@ export function registerProjectTools(
       try {
         const result = await client.listProjects(search);
         const items = result.content ?? [];
-        const note = projectTruncationNote(result);
+        const note = truncationNote(result, items.length, result.totalElements);
         if (items.length === 0) {
           // Mirror the client's trimming so the message only claims a filter
           // was applied when one actually was.

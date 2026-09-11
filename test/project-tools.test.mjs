@@ -69,32 +69,28 @@ test("list-projects surfaces a pagination truncation warning", async () => {
   const result = await handlers.get("list-projects")({});
   assert.match(result.content[0].text, /Found 50 project\(s\)/);
   assert.match(result.content[0].text, /Results truncated/);
-  assert.match(result.content[0].text, /scanning 1 of ~50 project\(s\)/);
-  // The shared "narrow the query with a filter" advice does not apply: the
-  // search is client-side and cannot recover unscanned projects.
-  assert.doesNotMatch(result.content[0].text, /Narrow the query/);
-  assert.match(result.content[0].text, /cannot retrieve them/);
+  assert.match(result.content[0].text, /collecting 1 of ~50 item\(s\)/);
+  // The shared advice applies now that the search reaches the server: a
+  // narrower search retrieves projects beyond the request cap.
+  assert.match(result.content[0].text, /Narrow the query with a filter/);
 });
 
-test("list-projects truncation warning reports the scanned inventory, not the match count", async () => {
+test("list-projects truncation warning describes the server-side match", async () => {
   const handlers = registeredTools(registerProjectTools, {
     listProjects: async () => ({
-      totalElements: 3,
-      numberOfElements: 3,
-      scannedElements: 200,
-      inventoryTotalElements: 5000,
+      totalElements: 250,
+      numberOfElements: 200,
       truncated: true,
-      content: [
-        { id: "p-1", name: "dev-a" },
-        { id: "p-2", name: "dev-b" },
-        { id: "p-3", name: "dev-c" },
-      ],
+      content: Array.from({ length: 200 }, (_, index) => ({
+        id: `p-${index}`,
+        name: `dev-${index}`,
+      })),
     }),
   });
 
   const result = await handlers.get("list-projects")({ search: "dev" });
-  assert.match(result.content[0].text, /Found 3 project\(s\)/);
-  assert.match(result.content[0].text, /scanning 200 of ~5000 project\(s\)/);
+  assert.match(result.content[0].text, /Found 250 project\(s\)/);
+  assert.match(result.content[0].text, /collecting 200 of ~250 item\(s\)/);
 });
 
 test("list-projects keeps the truncation warning when a search matches nothing", async () => {
@@ -102,8 +98,6 @@ test("list-projects keeps the truncation warning when a search matches nothing",
     listProjects: async () => ({
       totalElements: 0,
       numberOfElements: 0,
-      scannedElements: 200,
-      inventoryTotalElements: 5000,
       truncated: true,
       content: [],
     }),
@@ -113,7 +107,7 @@ test("list-projects keeps the truncation warning when a search matches nothing",
   assert.equal(result.isError, undefined);
   assert.match(result.content[0].text, /^No projects found matching "legacy"\./);
   assert.match(result.content[0].text, /Results truncated/);
-  assert.match(result.content[0].text, /scanning 200 of ~5000 project\(s\)/);
+  assert.match(result.content[0].text, /collecting 0 item\(s\)/);
 });
 
 test("get-project renders id, name, and optional description", async () => {

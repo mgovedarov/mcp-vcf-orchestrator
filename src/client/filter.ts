@@ -1,9 +1,12 @@
 /**
  * Client-side name filtering shared by the list clients whose endpoint either
  * ignores the server-side `conditions` query (the vRO embedded in vRA 8 does
- * for `/plugins`) or has no server-side filter at all (projects, actions,
- * configurations, workflows by category). One normalization for all of them,
- * so `" Library"` matches the same set everywhere.
+ * for `/plugins`), has no server-side filter at all (actions, configurations,
+ * workflows by category), or rejects the one it is sent (projects fall back
+ * here when the service answers the OData `$filter` with 400). One
+ * normalization for all of them, so `" Library"` matches the same set
+ * everywhere — and, for projects, the lower-cased needle is what the
+ * server-side `tolower()` filter is built from.
  */
 
 /**
