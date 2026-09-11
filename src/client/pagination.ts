@@ -28,6 +28,8 @@ export interface VroPageResult<T> {
   total?: number;
   /** Present (true) when collection stopped at the page-request cap. */
   truncated?: boolean;
+  /** Present (true) when the caller's maxItems dropped items that exist on the server. */
+  limited?: boolean;
 }
 
 export interface AutomationPageResult<T> {
@@ -36,6 +38,8 @@ export interface AutomationPageResult<T> {
   totalElements?: number;
   /** Present (true) when collection stopped at the page-request cap. */
   truncated?: boolean;
+  /** Present (true) when the caller's maxItems dropped items that exist on the server. */
+  limited?: boolean;
 }
 
 function isQueryCountUnsupported(error: unknown): boolean {
@@ -108,6 +112,20 @@ function pageItems<T>(page: VroPage<T>, itemKeys: readonly string[]): T[] {
   return [];
 }
 
+/**
+ * Applies an item limit to a client-side-filtered list, slicing to the limit
+ * and reporting whether items were dropped.
+ */
+export function applyListLimit<T>(
+  items: T[],
+  limit?: number,
+): { items: T[]; limited: boolean; total: number } {
+  const total = items.length;
+  if (limit === undefined) return { items, limited: false, total };
+  if (items.length <= limit) return { items, limited: false, total };
+  return { items: items.slice(0, limit), limited: true, total };
+}
+
 export async function getAllVroPages<T>(
   http: VroHttpClient,
   path: string,
@@ -116,11 +134,16 @@ export async function getAllVroPages<T>(
     pageSize?: number;
     queryCount?: boolean;
     maxPageRequests?: number;
+    maxItems?: number;
     /** Response keys that may hold the page items, tried in order. Defaults to `["link"]`. */
     itemKeys?: readonly string[];
   } = {},
 ): Promise<VroPageResult<T>> {
-  const pageSize = options.pageSize ?? DEFAULT_PAGE_SIZE;
+  const maxItems = options.maxItems;
+  const pageSize =
+    maxItems === undefined
+      ? options.pageSize ?? DEFAULT_PAGE_SIZE
+      : Math.min(options.pageSize ?? DEFAULT_PAGE_SIZE, maxItems + 1);
   const maxPageRequests = options.maxPageRequests ?? MAX_PAGE_REQUESTS;
   const itemKeys = options.itemKeys ?? DEFAULT_ITEM_KEYS;
   let queryCount = options.queryCount ?? true;
@@ -151,7 +174,8 @@ export async function getAllVroPages<T>(
     }
     const items = pageItems(page, itemKeys);
     if (firstStart === undefined) firstStart = page.start;
-    if (queryCount && page.total !== undefined) reportedTotal = page.total;
+    if (queryCount && page.total !== undefined && page.total >= 0)
+      reportedTotal = page.total;
 
     if (items.length > 0) {
       const signature = hashPageItems(items);
@@ -169,15 +193,43 @@ export async function getAllVroPages<T>(
     if (reportedTotal !== undefined && link.length >= reportedTotal) break;
     if (items.length < pageSize && reportedTotal === undefined) break;
 
+    // NEW: early stop when limit is reached
+    if (maxItems !== undefined) {
+      const knownTotal =
+        reportedTotal !== undefined && reportedTotal >= 0
+          ? reportedTotal
+          : undefined;
+      if (
+        knownTotal !== undefined
+          ? link.length >= maxItems
+          : link.length > maxItems
+      ) {
+        break;
+      }
+    }
+
     start += items.length;
   }
 
   const truncated = requestCount >= maxPageRequests;
+  // NEW: compute limited flag
+  let limited = false;
+  if (maxItems !== undefined) {
+    const knownTotal =
+      reportedTotal !== undefined && reportedTotal >= 0
+        ? reportedTotal
+        : undefined;
+    limited =
+      knownTotal !== undefined ? knownTotal > maxItems : link.length > maxItems;
+    if (link.length > maxItems) link.length = maxItems;
+  }
+
   return {
     link,
     ...(firstStart !== undefined ? { start: firstStart } : {}),
     total: reportedTotal ?? link.length,
     ...(truncated ? { truncated } : {}),
+    ...(limited ? { limited } : {}),
   };
 }
 
@@ -186,9 +238,13 @@ export async function getAllAutomationPages<T>(
   path: string,
   baseUrl: string,
   params: URLSearchParams = new URLSearchParams(),
-  options: { pageSize?: number; maxPageRequests?: number } = {},
+  options: { pageSize?: number; maxPageRequests?: number; maxItems?: number } = {},
 ): Promise<AutomationPageResult<T>> {
-  const pageSize = options.pageSize ?? DEFAULT_PAGE_SIZE;
+  const maxItems = options.maxItems;
+  const pageSize =
+    maxItems === undefined
+      ? options.pageSize ?? DEFAULT_PAGE_SIZE
+      : Math.min(options.pageSize ?? DEFAULT_PAGE_SIZE, maxItems + 1);
   const maxPageRequests = options.maxPageRequests ?? MAX_PAGE_REQUESTS;
   const content: T[] = [];
   let reportedTotal: number | undefined;
@@ -232,13 +288,43 @@ export async function getAllAutomationPages<T>(
     ) {
       break;
     }
+
+    // NEW: early stop when limit is reached
+    if (maxItems !== undefined) {
+      const knownTotal =
+        reportedTotal !== undefined && reportedTotal >= 0
+          ? reportedTotal
+          : undefined;
+      if (
+        knownTotal !== undefined
+          ? content.length >= maxItems
+          : content.length > maxItems
+      ) {
+        break;
+      }
+    }
   }
 
   const truncated = pageNumber >= maxPageRequests;
+  // NEW: compute limited flag
+  let limited = false;
+  if (maxItems !== undefined) {
+    const knownTotal =
+      reportedTotal !== undefined && reportedTotal >= 0
+        ? reportedTotal
+        : undefined;
+    limited =
+      knownTotal !== undefined
+        ? knownTotal > maxItems
+        : content.length > maxItems;
+    if (content.length > maxItems) content.length = maxItems;
+  }
+
   return {
     content,
     numberOfElements: content.length,
     totalElements: reportedTotal ?? content.length,
     ...(truncated ? { truncated } : {}),
+    ...(limited ? { limited } : {}),
   };
 }

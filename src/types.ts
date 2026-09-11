@@ -51,6 +51,7 @@ export interface WorkflowList {
   link: Workflow[];
   /** Present (true) when server-side pagination stopped at the page-request cap. */
   truncated?: boolean;
+  limited?: boolean;
 }
 
 export interface ListWorkflowsByCategoryParams {
@@ -259,6 +260,7 @@ export interface ActionList {
   link: Action[];
   /** Present (true) when server-side pagination stopped at the page-request cap. */
   truncated?: boolean;
+  limited?: boolean;
 }
 
 export type ActionDiffSource =
@@ -331,6 +333,7 @@ export interface ConfigElementList {
   link: ConfigElement[];
   /** Present (true) when server-side pagination stopped at the page-request cap. */
   truncated?: boolean;
+  limited?: boolean;
 }
 
 // --- Categories ---
@@ -353,6 +356,7 @@ export interface CategoryList {
   link: Category[];
   /** Present (true) when server-side pagination stopped at the page-request cap. */
   truncated?: boolean;
+  limited?: boolean;
 }
 
 // --- Extensibility Subscriptions (Event Broker) ---
@@ -381,6 +385,7 @@ export interface SubscriptionList {
   numberOfElements?: number;
   /** Present (true) when server-side pagination stopped at the page-request cap. */
   truncated?: boolean;
+  limited?: boolean;
 }
 
 // --- Event Topics (Event Broker) ---
@@ -399,6 +404,7 @@ export interface EventTopicList {
   numberOfElements?: number;
   /** Present (true) when server-side pagination stopped at the page-request cap. */
   truncated?: boolean;
+  limited?: boolean;
 }
 
 // --- Catalog Items (Service Broker) ---
@@ -431,6 +437,7 @@ export interface CatalogItemList {
   numberOfElements?: number;
   /** Present (true) when server-side pagination stopped at the page-request cap. */
   truncated?: boolean;
+  limited?: boolean;
 }
 
 // --- Deployments ---
@@ -457,6 +464,7 @@ export interface DeploymentList {
   numberOfElements?: number;
   /** Present (true) when server-side pagination stopped at the page-request cap. */
   truncated?: boolean;
+  limited?: boolean;
 }
 
 export interface DeploymentActionInput {
@@ -542,6 +550,7 @@ export interface TemplateList {
   numberOfElements?: number;
   /** Present (true) when server-side pagination stopped at the page-request cap. */
   truncated?: boolean;
+  limited?: boolean;
 }
 
 // --- Projects (project-service) ---
@@ -597,6 +606,7 @@ export interface ProjectList {
   numberOfElements?: number;
   /** Present (true) when server-side pagination stopped at the page-request cap. */
   truncated?: boolean;
+  limited?: boolean;
 }
 
 // --- vRO Packages ---
@@ -618,6 +628,7 @@ export interface VroPackageList {
   link: VroPackage[];
   /** Present (true) when server-side pagination stopped at the page-request cap. */
   truncated?: boolean;
+  limited?: boolean;
 }
 
 export interface ProjectPackageResult {
@@ -673,6 +684,7 @@ export interface ResourceElementList {
   link: ResourceElement[];
   /** Present (true) when server-side pagination stopped at the page-request cap. */
   truncated?: boolean;
+  limited?: boolean;
 }
 
 // --- vRO Plugins ---
@@ -695,6 +707,11 @@ export interface VroPluginList {
   link: VroPlugin[];
   /** Present (true) when server-side pagination stopped at the page-request cap. */
   truncated?: boolean;
+  limited?: boolean;
+}
+
+export interface ListOptions {
+  limit?: number;
 }
 
 // --- Client config ---
