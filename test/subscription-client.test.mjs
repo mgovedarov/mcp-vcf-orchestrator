@@ -83,6 +83,42 @@ test("createSubscription on vcfa posts without an id and returns the response", 
   assert.equal(calls[0].body.type, "RUNNABLE");
 });
 
+test("createSubscription on vcfa sends the body it shipped with, field for field", async () => {
+  const { http, calls } = captureWrites("vcfa");
+  const client = new SubscriptionClient(http);
+
+  // Every settable field at once: the vcfa path was verified under VCFO-068 and
+  // must not drift while the vra8 branch changes around it.
+  await client.createSubscription({
+    name: "Subscription",
+    eventTopicId: "topic-1",
+    runnableType: "extensibility.vro",
+    runnableId: "runnable-1",
+    projectId: "project-1",
+    description: "A subscription",
+    blocking: true,
+    priority: 5,
+    timeout: 30,
+    disabled: false,
+    constraints: { foo: "bar" },
+  });
+
+  assert.deepEqual(calls[0].body, {
+    type: "RUNNABLE",
+    name: "Subscription",
+    eventTopicId: "topic-1",
+    runnableType: "extensibility.vro",
+    runnableId: "runnable-1",
+    projectId: "project-1",
+    description: "A subscription",
+    blocking: true,
+    priority: 5,
+    timeout: 30,
+    disabled: false,
+    constraints: { foo: "bar" },
+  });
+});
+
 test("updateSubscription on vcfa puts only the supplied fields", async () => {
   const { http, calls } = captureWrites("vcfa");
   const client = new SubscriptionClient(http);

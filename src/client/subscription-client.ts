@@ -124,6 +124,11 @@ export class SubscriptionClient {
    * Unlike the configuration-element PUT that VCFO-068 had to guard, a partial
    * body here cannot silently discard fields: vRA 8 rejects one outright with
    * 400 "Property: eventTopicId must not be blank" before mutating anything.
+   *
+   * One carry-forward is unverified against the wire: the lab had no
+   * subscription with `constraints` set, so that field is preserved on the
+   * data-preserving assumption rather than on an observation. Omitting it
+   * would clear an existing constraint set, which is the worse failure.
    */
   async updateSubscription(
     id: string,
