@@ -13,11 +13,13 @@ import { join } from "node:path";
 import test from "node:test";
 import { buildWorkflowArtifact } from "../dist/client/workflow-artifact.js";
 import {
+  apiErrorStatus,
   formatStatus,
   normalizeTargetPlatformInput,
   sanitizeErrorBody,
   VroHttpClient,
 } from "../dist/client/core.js";
+import { projectSearchFilter } from "../dist/client/project-client.js";
 import { formatQuery } from "../dist/client/pagination.js";
 import {
   toVroParameters,
@@ -2182,58 +2184,186 @@ test("project client uses project-service endpoints and encodes ids", async () =
   assert.equal(calls[1].init.method, "GET");
 });
 
-test("project client filters search client-side on name and description", async () => {
+test("projectSearchFilter builds a lower-cased, quote-escaped OData substring filter", () => {
+  assert.equal(
+    projectSearchFilter("o'brien dev"),
+    "substringof('o''brien dev', tolower(name)) or substringof('o''brien dev', tolower(description))",
+  );
+});
+
+test("project client sends the search server-side as an OData $filter", async () => {
   const calls = [];
   globalThis.fetch = async (url) => {
     calls.push(String(url));
     if (calls.length === 1) return authResponse();
+    // The server owns the match: whatever it returns is the result, with
+    // its own totals — no client-side trimming of the page.
     return Response.json({
-      totalElements: 3,
+      totalElements: 7,
+      numberOfElements: 2,
+      last: true,
       content: [
         { id: "p-1", name: "Dev Sandbox" },
         { id: "p-2", name: "Prod", description: "Production DEV mirror" },
-        { id: "p-3", name: "QA" },
       ],
     });
   };
 
   const client = new VroClient(config());
 
-  const dev = await client.listProjects("dev");
+  // Trimmed and lower-cased before it is embedded, single quotes doubled.
+  const dev = await client.listProjects("  O'Brien DEV ");
   assert.deepEqual(
     dev.content.map((project) => project.id),
     ["p-1", "p-2"],
   );
-  assert.equal(dev.totalElements, 2);
+  assert.equal(dev.totalElements, 7);
   assert.equal(dev.numberOfElements, 2);
   assert.equal(dev.truncated, undefined);
-  // The pre-filter inventory counts survive so truncation warnings can
-  // report how much was scanned rather than how much matched.
-  assert.equal(dev.scannedElements, 3);
-  assert.equal(dev.inventoryTotalElements, 3);
 
-  const trimmed = await client.listProjects("  qa ");
-  assert.deepEqual(
-    trimmed.content.map((project) => project.id),
-    ["p-3"],
+  const filtered = new URL(calls[1]);
+  assert.equal(
+    filtered.pathname,
+    "/project-service/api/projects",
   );
+  assert.equal(
+    filtered.searchParams.get("$filter"),
+    "substringof('o''brien dev', tolower(name)) or substringof('o''brien dev', tolower(description))",
+  );
+  assert.equal(filtered.searchParams.get("page"), "0");
+  assert.equal(filtered.searchParams.get("size"), "100");
 
-  const none = await client.listProjects("nothing");
-  assert.deepEqual(none.content, []);
-  assert.equal(none.totalElements, 0);
+  // A blank search is treated as absent: no $filter on the wire.
+  await client.listProjects("   ");
+  assert.equal(
+    calls[2],
+    "https://vcfa.example.test/project-service/api/projects?page=0&size=100",
+  );
+});
 
-  const all = await client.listProjects("   ");
-  assert.equal(all.content.length, 3);
-  assert.equal(all.totalElements, 3);
-  assert.equal(all.scannedElements, undefined);
+test("project client falls back to a client-side match when the service rejects $filter with 400", async () => {
+  const calls = [];
+  const errors = [];
+  const originalError = console.error;
+  console.error = (...args) => errors.push(args.join(" "));
+  try {
+    globalThis.fetch = async (url) => {
+      calls.push(String(url));
+      if (calls.length === 1) return authResponse();
+      if (new URL(String(url)).searchParams.has("$filter")) {
+        return Response.json(
+          { message: "Unsupported query option $filter" },
+          { status: 400, statusText: "Bad Request" },
+        );
+      }
+      return Response.json({
+        totalElements: 3,
+        content: [
+          { id: "p-1", name: "Dev Sandbox" },
+          { id: "p-2", name: "Prod", description: "Production DEV mirror" },
+          { id: "p-3", name: "QA" },
+        ],
+      });
+    };
 
-  // The filter never reaches the wire: every list request is the bare page URL.
-  for (const url of calls.slice(1)) {
+    const client = new VroClient(config());
+    const dev = await client.listProjects("dev");
+
+    assert.deepEqual(
+      dev.content.map((project) => project.id),
+      ["p-1", "p-2"],
+    );
+    assert.equal(dev.totalElements, 2);
+    assert.equal(dev.numberOfElements, 2);
+    assert.equal(dev.truncated, undefined);
+
+    // One filtered attempt, then the bare page walk.
+    assert.equal(calls.length, 3);
+    assert.ok(new URL(calls[1]).searchParams.has("$filter"));
     assert.equal(
-      url,
+      calls[2],
       "https://vcfa.example.test/project-service/api/projects?page=0&size=100",
     );
+    assert.ok(
+      errors.some((line) =>
+        /project-service rejected the \$filter search with 400/.test(line),
+      ),
+      "the fallback is logged to stderr",
+    );
+
+    const none = await client.listProjects("nothing");
+    assert.deepEqual(none.content, []);
+    assert.equal(none.totalElements, 0);
+  } finally {
+    console.error = originalError;
   }
+});
+
+test("project client fallback keeps the truncation flag of the unfiltered walk", async () => {
+  const originalError = console.error;
+  console.error = () => {};
+  try {
+    let listCalls = 0;
+    globalThis.fetch = async (url) => {
+      const requestUrl = new URL(String(url));
+      if (!requestUrl.pathname.startsWith("/project-service")) return authResponse();
+      if (requestUrl.searchParams.has("$filter")) {
+        return Response.json({ message: "bad" }, { status: 400 });
+      }
+      // Never reports `last`/totals and always fills the page, so the pager
+      // runs into its request cap.
+      listCalls += 1;
+      const page = Number(requestUrl.searchParams.get("page"));
+      return Response.json({
+        content: Array.from({ length: 100 }, (_, index) => ({
+          id: `p-${page}-${index}`,
+          name: index === 0 ? `dev-${page}` : `other-${page}-${index}`,
+        })),
+      });
+    };
+
+    const client = new VroClient(config());
+    const dev = await client.listProjects("dev");
+    assert.equal(dev.truncated, true);
+    assert.equal(dev.content.length, listCalls);
+    assert.equal(dev.totalElements, listCalls);
+  } finally {
+    console.error = originalError;
+  }
+});
+
+test("project client surfaces a non-400 $filter failure instead of falling back", async () => {
+  const calls = [];
+  globalThis.fetch = async (url) => {
+    calls.push(String(url));
+    if (calls.length === 1) return authResponse();
+    return Response.json(
+      { message: "boom" },
+      { status: 500, statusText: "Internal Server Error" },
+    );
+  };
+
+  const client = new VroClient(config());
+  await assert.rejects(
+    client.listProjects("dev"),
+    /vRO API error: 500 Internal Server Error — GET \/projects\?/,
+  );
+  // No retry without the filter.
+  assert.equal(calls.length, 2);
+});
+
+test("apiErrorStatus reads the status attached by apiError and nothing else", async () => {
+  const http = new VroHttpClient(config());
+  const error = await http.apiError(
+    Response.json({ message: "nope" }, { status: 400, statusText: "Bad Request" }),
+    "GET /projects",
+  );
+  assert.equal(apiErrorStatus(error), 400);
+  assert.match(error.message, /^vRO API error: 400 Bad Request — GET \/projects/);
+  assert.equal(apiErrorStatus(new Error("plain")), undefined);
+  assert.equal(apiErrorStatus({ status: "400" }), undefined);
+  assert.equal(apiErrorStatus(null), undefined);
+  assert.equal(apiErrorStatus("400"), undefined);
 });
 
 test("Automation service list clients aggregate multiple page results", async () => {

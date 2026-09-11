@@ -105,6 +105,17 @@ export function formatStatus(res: Response): string {
 }
 
 /**
+ * HTTP status carried by an error built with `VroHttpClient.apiError`, or
+ * undefined for any other error. Lets a caller branch on the status without
+ * parsing the message text.
+ */
+export function apiErrorStatus(error: unknown): number | undefined {
+  if (typeof error !== "object" || error === null) return undefined;
+  const status = (error as { status?: unknown }).status;
+  return typeof status === "number" ? status : undefined;
+}
+
+/**
  * How a body that is neither JSON nor a recognizable HTML page is rendered by
  * sanitizeErrorBody. `excerpt` (the default) quotes its first
  * NON_JSON_BODY_LIMIT characters; `shape` reports only its size and declared
@@ -938,11 +949,15 @@ export class VroHttpClient {
    * Reads and consumes the response body. The one owner of this message shape,
    * used by the JSON path here and by the binary-export and multipart-import
    * paths in the artifact clients, which call authenticatedFetch directly.
+   * The HTTP status is attached as `status` for `apiErrorStatus`.
    */
   async apiError(res: Response, label: string): Promise<Error> {
     const text = await res.text().catch(() => "");
-    return new Error(
-      `vRO API error: ${formatStatus(res)} — ${label}\n${sanitizeErrorBody(text, res)}${this.apiErrorHint(res)}`,
+    return Object.assign(
+      new Error(
+        `vRO API error: ${formatStatus(res)} — ${label}\n${sanitizeErrorBody(text, res)}${this.apiErrorHint(res)}`,
+      ),
+      { status: res.status },
     );
   }
 
