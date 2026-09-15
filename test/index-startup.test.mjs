@@ -160,3 +160,13 @@ test("entry point treats a blank VCFA_VRO_HOST as unset", async () => {
   assert.equal(code, 0);
   assert.ok(!stderr.includes("VCFA_VRO_HOST="), stderr);
 });
+
+test("entry point treats a VCFA_VRO_HOST equal to VCFA_HOST as unset", async () => {
+  // No split, so no routing line — matching the client, which ignores an
+  // override equal to the Automation host.
+  const { code, stderr } = await runUntilStarted("SIGTERM", {
+    VCFA_VRO_HOST: validEnv.VCFA_HOST,
+  });
+  assert.equal(code, 0);
+  assert.ok(!stderr.includes("VCFA_VRO_HOST="), stderr);
+});

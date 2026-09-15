@@ -111,7 +111,9 @@ async function main(): Promise<void> {
       "[vcfa-server] WARNING: TLS certificate verification disabled for VCFA requests (VCFA_IGNORE_TLS=true)",
     );
   }
-  if (vroHost) {
+  // Logged only when the hosts actually differ: the client treats an override
+  // equal to VCFA_HOST as unset, so the routing line would misdescribe it.
+  if (vroHost && vroHost !== host) {
     console.error(
       `[vcfa-server] VCFA_VRO_HOST=${vroHost}: vRO API requests (/vco/api) are sent to this host; authentication and the Automation services use VCFA_HOST=${host}.`,
     );
