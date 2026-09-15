@@ -68,7 +68,7 @@ Required environment variables:
 
 | Variable | Description |
 | --- | --- |
-| `VCFA_HOST` | VCF Automation hostname, for example `vcfa.example.com`. |
+| `VCFA_HOST` | VCF Automation hostname or `host:port`, for example `vcfa.example.com`. A value carrying a URL scheme is rejected at startup. |
 | `VCFA_USERNAME` | Username without organization, for example `admin`. |
 | `VCFA_ORGANIZATION` | Organization name (the tenant URL slug, not the display name), or `system` for provider/system administrator logins, which are routed to `/cloudapi/1.0.0/sessions/provider`. In `vra8` mode this is the vIDM domain shown on the Workspace ONE login page, for example `System Domain` for local users. |
 | `VCFA_PASSWORD` | Password for the VCF Cloud API session, or the vIDM password used for the vRA 8 login when `VCFA_TARGET_PLATFORM=vra8`. |
@@ -78,7 +78,8 @@ Useful optional variables:
 | Variable | Description |
 | --- | --- |
 | `VCFA_TARGET_PLATFORM` | Target platform mode. Defaults to `vcfa`, which uses the VCF Cloud API session flow and auto-negotiates the API version (`9.1.0` preferred, then `9.0.0`) via the unauthenticated `GET /api/versions` discovery document. Set to `vcfa9.1` or `vcfa9.0` to pin the VCF Cloud API version and skip the probe. Set to `vra8` for vRA/vRO 8.12+. That mode authenticates with the vRA 8 bearer-token flow: a vIDM login at `POST /csp/gateway/am/api/login?access_token` with `VCFA_ORGANIZATION` as the domain, a refresh-token exchange at `POST /iaas/api/login`, and `Authorization: Bearer` on every `/vco/api` request. That mode supports the full vRO `/vco/api` surface plus Automation-service reads (catalog, deployments, templates, projects, subscriptions, event topics) and the blueprint-service and event-broker writes (`create-template`, `delete-template`, and the subscription create/update/delete tools). Catalog-service and deployment-service writes (`create-deployment`, `delete-deployment`, `run-deployment-action`) and `export-configuration-file` are unsupported there. See [Configuration](docs/guide/configuration.md) for the per-service detail. |
-| `VCFA_IGNORE_TLS` | Set to `true` to skip TLS certificate verification for this server's requests to the VCFA host (lab environments only). |
+| `VCFA_VRO_HOST` | Optional `host[:port]` of an external vRO appliance. Only the vRO `/vco/api` requests go there; the login, the `GET /api/versions` probe, and the Automation services stay on `VCFA_HOST`, and the token issued there is reused as-is. Leave unset for the embedded vRO. Works with `vcfa`, `vcfa9.x`, and `vra8`. See [Configuration](docs/guide/configuration.md#external-vro-appliance). |
+| `VCFA_IGNORE_TLS` | Set to `true` to skip TLS certificate verification for this server's requests to the VCFA host and, when `VCFA_VRO_HOST` is set, the vRO host (lab environments only). |
 | `VCFA_ARTIFACT_DIR` | Root directory for local artifact files. Defaults to `artifacts/` in the MCP server process working directory, typically the open project. |
 | `VCFA_PACKAGE_DIR` | Override package artifact directory. |
 | `VCFA_RESOURCE_DIR` | Override resource artifact directory. |

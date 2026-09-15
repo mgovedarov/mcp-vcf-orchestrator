@@ -58,6 +58,22 @@ Set `VCFA_TARGET_PLATFORM=vra8` for vRA/vRO 8.12+. The server authenticates with
 
 A `400` in this mode used to arrive with no usable detail: the vRA 8 gateway answers a rejected `/vco/api` request with a styled HTML page whose only diagnostic content is the status code and reason, buried past a stylesheet, and these responses arrive over HTTP/2, which carries no reason phrase. Such a body is now summarized as `[HTML body: 400 Bad Request — no further detail]` instead of an excerpt of CSS, and every error message fills in the standard reason phrase when the response carries none, so the status line reads `400 Bad Request` rather than a bare `400`.
 
+## External vRO Appliance
+
+Three signatures point at the vRO host rather than at credentials:
+
+- **Every vRO tool fails with `403 Forbidden` and `[HTML body: 403 … — no further detail]` while the catalog, deployment, template, and project tools work.** `/vco/api` is reaching the Automation appliance's embedded orchestrator, but the organization's vRO runs on an external appliance. A genuine vRO refusal is a `401` with an empty body; the HTML page is the appliance itself refusing the tenant, and the error carries a hint naming this variable. Set the external appliance as the vRO host and restart the server:
+
+```bash
+VCFA_HOST=vcfa.example.com
+VCFA_VRO_HOST=vro.example.com
+```
+
+- **`Request to vro.example.com failed: ENOTFOUND`** (or `ECONNREFUSED`, or a TLS error code). The named host is the one that failed — a typo in `VCFA_VRO_HOST`, or a host the server cannot reach. Transport failures name the host they were addressed to, for either variable.
+- **`302 Found — GET /workflows … on vro.example.com` with `Hint: the API answered with a redirect to …`.** The host answers the API path with a redirect to a UI or SSO page, so it is a load balancer, a portal, or the wrong appliance. Redirects are deliberately not followed; the hint names the target and the variable to check. The external vRO redirects `/cloudapi/1.0.0/sessions` the same way, which is why it cannot be used as `VCFA_HOST`.
+
+At startup the server logs `[vcfa-server] VCFA_VRO_HOST=…: vRO API requests (/vco/api) are sent to this host; authentication and the Automation services use VCFA_HOST=…`, and while the two hosts differ every `[vro-client]` log line and every `vRO API error` ends with ` on <host>`. Both variables reject a value carrying a URL scheme at startup; `VCFA_VRO_HOST` also rejects a path.
+
 ## Artifact Import Failures
 
 Run the matching preflight tool first. Common issues include:
