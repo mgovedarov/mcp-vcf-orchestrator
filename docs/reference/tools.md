@@ -794,7 +794,13 @@ Get detailed information about a specific deployment by its ID.
 
 ### `create-deployment`
 
-Create a new deployment from a catalog item. Use `list-catalog-items` to find the catalog item ID, `list-projects` to find the project ID, and `list-deployments` to verify afterwards.
+Create a new deployment from a catalog item. **This provisions real infrastructure**, with the cost and capacity that follow from it, and the only way to remove it afterwards is `delete-deployment`, which is itself a destructive day-2 operation rather than an undo. It is annotated destructive for that reason, the one additive `create-` tool that is (VCFO-084).
+
+Use `list-catalog-items` to find the catalog item ID, `list-projects` to find the project ID, and `list-deployments` to verify afterwards. Both IDs are opaque UUIDs that nothing else in the call identifies, so a transposed one requests a different blueprint into a different project and the request still reports success. Pass `expectedCatalogItemName` and `expectedProjectName` from that discovery to bind the request to the target you inspected: each is read back from live metadata before anything is submitted, and a mismatch refuses without provisioning. Only the names are offered — an expected *ID* would compare an argument of this call against itself and could never fail.
+
+When an expected name is supplied but the live record carries none, the call refuses with a "cannot verify" message rather than reporting a mismatch against a missing value: a caller who asked for two-phase verification is never told the target was confirmed when it was not. A verification read that fails outright is reported as such, so it is never mistaken for a failed provision.
+
+In `VCFA_TARGET_PLATFORM=vra8` mode the catalog-service request is unsupported and refused; any expected-field reads are GETs and are made first, so the refusal arrives after them.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
@@ -805,6 +811,8 @@ Create a new deployment from a catalog item. Use `list-catalog-items` to find th
 | `version` | string | No | latest | Catalog item version to deploy. |
 | `reason` | string | No | - | Reason or comment for the deployment request. |
 | `inputs` | object | No | `{}` | Catalog item input parameters as a key/value object. Use `get-catalog-item` or catalog documentation to verify the expected shape before deploying. |
+| `expectedCatalogItemName` | string | No | - | Expected catalog item name, verified against `get-catalog-item` before the request is submitted. |
+| `expectedProjectName` | string | No | - | Expected project name, verified against `get-project` before the request is submitted. |
 | `confirm` | boolean | Yes | - | Must be `true` to confirm deployment creation. If `false`, the deployment request is not submitted. |
 :::
 

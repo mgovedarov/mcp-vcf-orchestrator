@@ -180,7 +180,7 @@ Before authoring or importing workflow artifacts, read `docs/vro-artifact-author
 
 - For Cloud Assembly templates, inspect existing templates with `list-templates` and `get-template` (set `includeContent: true` to read the YAML) before drafting YAML. Reuse discovered resource types, inputs, image/flavor/network conventions, constraints, and catalog patterns. Do not invent provider-specific YAML.
 - Confirm the target `projectId` with `list-projects` or `get-project` and the template content before calling `create-template` with `confirm: true`.
-- For catalog work, inspect `list-catalog-items` and `get-catalog-item` before creating deployments.
+- For catalog work, inspect `list-catalog-items` and `get-catalog-item` before creating deployments. `create-deployment` provisions real infrastructure and is annotated destructive for that reason; pass `expectedCatalogItemName` and `expectedProjectName` from that discovery so the live target is verified before the request is submitted, and confirm the catalog item, project, inputs, and expected cost with the user first.
 - For deployments, inspect `get-deployment` and `list-deployment-actions` before proposing remediation. Do not run `run-deployment-action` until the user confirms the action, inputs, target deployment, and expected impact.
 - For extensibility subscriptions, inspect `list-event-topics`, `list-subscriptions`, and `get-subscription` (set `includeConstraints: true` to read constraints) first. During testing, disabling or updating a subscription may be safer than deleting it.
 

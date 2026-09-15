@@ -13,7 +13,7 @@ Recommended sequence:
 1. `list-catalog-items(search: "Ubuntu")`
 2. `get-catalog-item(id: "...")`
 3. `list-projects(search: "...")` to resolve the target `projectId`; never guess it
-4. `create-deployment(catalogItemId: "...", deploymentName: "...", projectId: "...", inputs: {...}, confirm: true)`
+4. `create-deployment(catalogItemId: "...", deploymentName: "...", projectId: "...", inputs: {...}, expectedCatalogItemName: "...", expectedProjectName: "...", confirm: true)` — steps 1-3 exist to produce those two expected names; they are verified against live metadata before the request is submitted, so a transposed ID refuses instead of provisioning the wrong thing
 5. `list-deployments(search: "...", projectId: "...")`
 
 ## Discover And Run Day-2 Actions

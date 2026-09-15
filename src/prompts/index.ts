@@ -26,7 +26,7 @@ function discoveryGuardrails(): string[] {
     "Workflow layout preference: when authoring or editing workflow XML/package content, arrange sequential workflow items horizontally from left to right.",
     "Workflow input form preference: generated workflows with inputs must include a valid input_form_ entry. Use page-level titles, section objects with only id and fields, field IDs that match schema keys, and options.externalValidations: []. Do not add section title or unverified field properties such as size.",
     "Publish reusable vRO content through the configured project package by default: ensure-project-package, add content, rebuild-project-package, export-project-package, inspect import details, and import-project-package. Use direct artifact imports only for narrow validation or explicitly requested one-off tests.",
-    "Two-phase confirmation preference: after discovery, include expected target fields such as expectedName, expectedWorkflowName, expectedCategoryName, expectedPackageName, expectedDeploymentName, expectedActionName, expectedEventTopicId, or expectedRunnableId in confirmed mutation calls when the tool supports them.",
+    "Two-phase confirmation preference: after discovery, include expected target fields such as expectedName, expectedWorkflowName, expectedCategoryName, expectedPackageName, expectedDeploymentName, expectedActionName, expectedCatalogItemName, expectedProjectName, expectedEventTopicId, or expectedRunnableId in confirmed mutation calls when the tool supports them.",
     "Prefer reading vcfa://docs/artifact-authoring and the relevant vcfa://patterns/* or vcfa://schemas/* resource before drafting artifacts.",
   ];
 }
