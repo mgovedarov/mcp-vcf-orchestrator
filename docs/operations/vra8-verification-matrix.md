@@ -152,3 +152,20 @@ containing the word "undefined" and validation errors from deliberately malforme
 `import-configuration-file` and the catalog/deployment item shapes and writes need an environment this lab
 cannot provide — a 9.x environment that can export a `.vsoconf`, and a vRA 8 environment with released
 catalog content and a live deployment. See [VCFO-074](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/170).
+
+VCFO-074 has since narrowed two of these against a VCFA 9.1 lab, without changing any row above:
+
+- **The catalog item shape is confirmed on 9.1**, where a released item renders correctly, but not on vRA 8.
+  No deployment exists on either lab, so the deployment item shape is still assumed. Both renderers now
+  fall back to `(unnamed)`, so a mismatch would be visible rather than silent.
+- **A 9.x `.vsoconf` export is not the way out after all.** vRO 9.1 answers the artifact request with
+  `406` exactly as vRA 8 does — every artifact `Accept` refused, `*/*` returning JSON — on a standalone
+  appliance and on an appliance-embedded orchestrator alike, while workflow, action and package exports
+  answer `200 application/zip` on those same hosts in the same session. The refusal is therefore specific
+  to configuration elements, not to vRA 8, and `import-configuration-file` has no genuine container to be
+  fed from any environment tested. The `406` is now reported as an actionable refusal everywhere, not
+  only in `vra8` mode.
+- **The configuration attribute key no longer branches by platform.** VCFA 9.1 accepts the plural
+  `attributes` on `POST /configurations` and `PUT /configurations/{id}` alike, with the stored values
+  confirmed by read-back, so the singular `attribute` vRA 8 rejects is no longer sent anywhere. The
+  `vra8` rows above are unaffected: that platform was already being sent the plural key.

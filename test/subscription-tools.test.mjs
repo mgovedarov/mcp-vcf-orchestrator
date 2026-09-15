@@ -261,3 +261,26 @@ test("subscription update and delete expected guards verify current target", asy
   assert.equal(deleteMismatch.isError, true);
   assert.equal(deletedId, undefined);
 });
+
+test("subscription tools render a nameless subscription without leaking undefined", async () => {
+  // Regression cover for the VCFO-070 fix itself: vRA 8 serves system
+  // subscriptions with no name at all, and until VCFO-074 nothing asserted the
+  // "(unnamed)" fallback that fix introduced.
+  const handlers = registeredSubscriptionTools({
+    listSubscriptions: async () => ({
+      totalElements: 1,
+      content: [{ id: "sub-1", eventTopicId: "compute.provision.post" }],
+    }),
+    getSubscription: async (id) => ({ id, eventTopicId: "compute.provision.post" }),
+  });
+
+  const list = await handlers.get("list-subscriptions")({});
+  assert.match(list.content[0].text, /• \(unnamed\) \(id: sub-1\)/);
+  assert.doesNotMatch(list.content[0].text, /undefined/);
+  assert.ok(!list.isError);
+
+  const detail = await handlers.get("get-subscription")({ id: "sub-1" });
+  assert.match(detail.content[0].text, /^Subscription: \(unnamed\)\nID: sub-1\n/);
+  assert.doesNotMatch(detail.content[0].text, /undefined/);
+  assert.ok(!detail.isError);
+});

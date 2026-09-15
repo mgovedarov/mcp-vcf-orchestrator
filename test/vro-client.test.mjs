@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   mkdtemp,
   readFile,
+  readdir,
   realpath,
   rm,
   symlink,
@@ -2480,7 +2481,7 @@ test("diffActionFile compares live export to local action artifact as zip", asyn
   }
 });
 
-test("createConfiguration sends singular attribute payload", async () => {
+test("createConfiguration sends the plural attributes payload", async () => {
   const calls = [];
   globalThis.fetch = async (url, init) => {
     calls.push({ url: String(url), init });
@@ -2498,7 +2499,7 @@ test("createConfiguration sends singular attribute payload", async () => {
     name: "Settings",
     "category-id": "category-1",
     description: "desc",
-    attribute: [
+    attributes: [
       {
         name: "host",
         type: "string",
@@ -2506,12 +2507,16 @@ test("createConfiguration sends singular attribute payload", async () => {
       },
     ],
   });
+  // VCFO-074: the key no longer branches by platform. VCFA 9.1 accepts the
+  // plural form on create and update alike, confirmed by reading the stored
+  // values back, so the singular key vRA 8 rejects is no longer sent anywhere.
+  assert.ok(!("attribute" in body), "the singular key must be absent");
 });
 
 // vRA 8 requires the plural attributes key on both configuration writes and
-// answers 400 for a body carrying the singular one — including a body that
-// carries both — so the key is chosen per platform (VCFO-068). The singular
-// case is covered by the test above.
+// answers 400 for a body carrying the singular one, including a body carrying
+// both (VCFO-068). Since VCFO-074 every platform sends that same key, so these
+// two tests now pin that vra8 mode did not regress rather than a branch.
 test("createConfiguration sends the plural attributes payload in vra8 mode", async () => {
   const calls = [];
   const login = vra8LoginStub();
@@ -2655,7 +2660,7 @@ test("updateConfiguration carries the live description forward when not supplied
   const body = JSON.parse(calls.at(-1).init.body);
   assert.equal(body.name, "Settings");
   assert.equal(body.description, "Runtime settings");
-  assert.equal(body.attribute[0].value.string.value, "new");
+  assert.equal(body.attributes[0].value.string.value, "new");
 });
 
 test("updateConfiguration refuses a secure attribute supplied without a value", async () => {
@@ -2740,7 +2745,7 @@ test("updateConfiguration clears attributes when given an empty array", async ()
   await client.updateConfiguration("config-1", { attributes: [] });
 
   const put = calls.find((c) => c.method === "PUT");
-  assert.deepEqual(JSON.parse(put.init.body).attribute, []);
+  assert.deepEqual(JSON.parse(put.init.body).attributes, []);
 });
 
 test("catalog client uses service broker endpoints and request payloads", async () => {
@@ -4607,6 +4612,46 @@ test("configuration import sends multipart file and category id", async () => {
     const body = calls[1].init.body;
     assert.equal(body.get("categoryId"), "category-1");
     assert.equal(body.get("file").name, "payload.vsoconf");
+  } finally {
+    await rm(configurationDir, { recursive: true, force: true });
+  }
+});
+
+test("a 406 on a configuration export becomes the actionable refusal", async () => {
+  // VCFO-074: a standalone vRO 9.1 refuses every artifact Accept for a
+  // configuration element with 406 and an HTML body carrying no diagnostic
+  // detail, exactly as vRA 8 does. On a non-vra8 platform no pre-emptive guard
+  // fires, so the status itself has to produce the guidance.
+  const configurationDir = await mkdtemp(
+    join(tmpdir(), "vcfa-configurations-"),
+  );
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return new Response("<html><body>406</body></html>", {
+      status: 406,
+      headers: { "content-type": "text/html;charset=utf-8" },
+    });
+  };
+
+  try {
+    const client = new VroClient(config({ configurationDir }));
+    await assert.rejects(
+      () => client.exportConfigurationFile("configuration-1", "probe.vsoconf"),
+      (error) => {
+        assert.match(error.message, /406 Not Acceptable/);
+        assert.match(error.message, /add-configuration-to-project-package/);
+        // The opaque HTML body must not be what the operator is handed.
+        assert.doesNotMatch(error.message, /<html>/);
+        return true;
+      },
+    );
+    assert.equal(
+      await readdir(configurationDir).then((f) => f.length),
+      0,
+      "a refused export must leave no partial file behind",
+    );
   } finally {
     await rm(configurationDir, { recursive: true, force: true });
   }

@@ -603,6 +603,8 @@ Export a vRO configuration element as a `.vsoconf` file under the configured con
 
 Not supported in `vra8` mode: vRA 8 serves a configuration element as JSON only and answers the artifact request with `406`, while the same request for a workflow or an action returns the artifact. Use `get-configuration` to read it, or `add-configuration-to-project-package` followed by `export-project-package` to get it into a file.
 
+The same `406` has since been observed on vRO 9.1, both standalone and appliance-embedded: `application/zip`, `application/vcoobject+zip` and `application/octet-stream` are all refused, while `*/*` returns the element as JSON. On those same hosts workflow, action and package exports answer `200 application/zip`, so the refusal is specific to configuration elements rather than to the host or the identity, and is not specific to vRA 8. No vRO tested serves a `.vsoconf` for a single element. Only the `vra8` refusal is pre-emptive; on any other platform the request is sent, and a `406` is reported with the same guidance rather than as the server's HTML error page.
+
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |

@@ -174,7 +174,7 @@ run-workflow-and-wait(id: "<workflow-id>", inputs: [], timeoutSeconds: 60, confi
 get-workflow-execution-logs(workflowId: "<workflow-id>", executionId: "<execution-id>", level: "info")
 ```
 
-The Automation-service list tools return the same shapes as on VCFA 9.x. Note that `list-catalog-items` and `list-deployments` were both empty in the environment VCFO-068 and VCFO-070 verified, so their item shapes are still unconfirmed on vRA 8 — an environment with released catalog content is the one worth re-running them against, and the same environment is what the catalog-service and deployment-service write checks need.
+The Automation-service list tools return the same shapes as on VCFA 9.x. Note that `list-catalog-items` and `list-deployments` were both empty in the environment VCFO-068 and VCFO-070 verified, so their item shapes are still unconfirmed on vRA 8 — an environment with released catalog content is the one worth re-running them against, and the same environment is what the catalog-service and deployment-service write checks need. VCFO-074 read a released catalog item on a VCFA 9.1 lab, which confirms the catalog item shape on that platform only; no deployment has been observed on either platform, so the deployment item shape remains assumed. Both renderers now fall back to `(unnamed)` for a row served without a name, so an unexpected shape degrades visibly instead of printing `undefined`.
 
 The vRO write surface is verified on vRA 8 but still mutates a live environment, so run it only against a disposable category and disposable content, and clean up afterwards:
 
@@ -185,6 +185,8 @@ create-configuration(categoryId: "<disposable-config-category-id>", name: "zz-sm
 delete-workflow(id: "<workflow-id>", confirm: true)
 delete-configuration(id: "<configuration-id>", confirm: true)
 ```
+
+Configuration writes send the plural `attributes` key on every platform since VCFO-074, so this mode no longer has an attribute-key difference to check; `PUT /configurations/{id}` still has to carry the element name.
 
 Template and subscription writes are supported in this mode (VCFO-070). They mutate a live environment, so use disposable objects and clean up. Create the subscription **disabled** and **non-blocking**, on a non-blockable topic, so it cannot stall provisioning:
 

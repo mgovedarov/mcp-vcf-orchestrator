@@ -34,7 +34,7 @@ export function registerCatalogTools(
           };
         }
         const lines = items.map((item) => {
-          let line = `• ${item.name} (id: ${item.id})`;
+          let line = `• ${item.name ?? "(unnamed)"} (id: ${item.id})`;
           if (item.type?.name) line += ` [${item.type.name}]`;
           if (item.description) line += ` — ${item.description}`;
           return line;
@@ -76,7 +76,7 @@ export function registerCatalogTools(
     async ({ id }): Promise<CallToolResult> => {
       try {
         const item = await client.getCatalogItem(id);
-        let text = `Catalog Item: ${item.name}\nID: ${item.id}\n`;
+        let text = `Catalog Item: ${item.name ?? "(unnamed)"}\nID: ${item.id}\n`;
         if (item.description) text += `Description: ${item.description}\n`;
         if (item.type?.name) text += `Type: ${item.type.name}\n`;
         if (item.sourceType) text += `Source Type: ${item.sourceType}\n`;

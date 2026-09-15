@@ -10,6 +10,7 @@ import {
 } from "./artifact-preflight.js";
 import {
   createUploadForm,
+  CONFIGURATION_EXPORT_NOT_ACCEPTABLE,
   UNSUPPORTED_VRA8_CONFIGURATION_EXPORT,
   type VroHttpClient,
 } from "./core.js";
@@ -21,6 +22,26 @@ import {
 } from "./files.js";
 import { applyListLimit, getFilteredVroList } from "./pagination.js";
 import { toVroParameters } from "./parameters.js";
+
+/**
+ * The request-body key carrying configuration attributes on a write.
+ *
+ * This used to branch by platform. vRA 8 requires the plural `attributes` and
+ * answers 400 for a body that carries the singular `attribute` at all —
+ * including one carrying both keys, so no single body could satisfy both
+ * (verified on vRO 8.18.1, VCFO-068) — while `vcfa` kept sending the singular
+ * key it had always sent, because the plural form had never been tried there.
+ *
+ * VCFA 9.1 accepts the plural key on `POST /configurations` and on
+ * `PUT /configurations/{id}` alike, with the stored values confirmed by a
+ * read-back rather than inferred from a 2xx (verified live, VCFO-074), so the
+ * branch is gone and one key serves every platform. Reads already returned
+ * the plural key everywhere, which is what made the request-side asymmetry the
+ * odd part. The `vcfa9.0` pin is generalized to rather than verified: no 9.0
+ * environment was available, and a 9.0 that rejected this key would fail loudly
+ * on create and update rather than silently storing nothing.
+ */
+const ATTRIBUTE_BODY_KEY = "attributes";
 
 export class ConfigurationClient {
   constructor(private http: VroHttpClient) {}
@@ -172,6 +193,12 @@ export class ConfigurationClient {
       { timeout: 60_000 },
     );
     if (!res.ok) {
+      // 406 is this server declining to serve the element as an artifact at
+      // all, not a transient failure, so it becomes the actionable message
+      // rather than an HTML body with no diagnostic detail (VCFO-074).
+      if (res.status === 406) {
+        throw new Error(CONFIGURATION_EXPORT_NOT_ACCEPTABLE);
+      }
       throw await this.http.apiError(res, this.http.requestLabel("export configuration"));
     }
     const buffer = Buffer.from(await res.arrayBuffer());
@@ -212,24 +239,6 @@ export class ConfigurationClient {
     }
   }
 
-  /**
-   * The request-body key carrying configuration attributes, which differs by
-   * platform even though both return the plural `attributes` on reads:
-   *
-   * - VCFA 9.x accepts the singular `attribute`.
-   * - vRA 8 requires the plural `attributes` and answers 400 for a body that
-   *   carries `attribute` at all — including one that carries both keys, so a
-   *   single body cannot satisfy both platforms (verified on vRO 8.18.1,
-   *   VCFO-068).
-   *
-   * The `vcfa` branch keeps the key it already ships: whether VCFA 9.x also
-   * accepts the plural form is unverified, so unifying on one key waits for a
-   * 9.x lab check rather than being inferred from the response shape.
-   */
-  private attributeBodyKey(): "attribute" | "attributes" {
-    return this.http.targetPlatform === "vra8" ? "attributes" : "attribute";
-  }
-
   createConfiguration(
     categoryId: string,
     name: string,
@@ -244,7 +253,7 @@ export class ConfigurationClient {
       body.description = description;
     }
     if (attributes && attributes.length > 0) {
-      body[this.attributeBodyKey()] = toVroParameters(attributes);
+      body[ATTRIBUTE_BODY_KEY] = toVroParameters(attributes);
     }
     return this.http.post<ConfigElement>("/configurations", body);
   }
@@ -289,7 +298,7 @@ export class ConfigurationClient {
     const description = params.description ?? live?.description;
     if (description !== undefined) body.description = description;
     if (params.attributes !== undefined) {
-      body[this.attributeBodyKey()] = toVroParameters(params.attributes);
+      body[ATTRIBUTE_BODY_KEY] = toVroParameters(params.attributes);
     }
     await this.http.put<unknown>(
       `/configurations/${encodeURIComponent(id)}`,
