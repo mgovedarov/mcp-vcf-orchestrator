@@ -22,7 +22,12 @@ import type {
 } from "../types.js";
 import { matchesFilter, normalizeFilter } from "./filter.js";
 import { getLinkAttrs, parseAttrs } from "./attrs.js";
-import { createUploadForm, type VroHttpClient } from "./core.js";
+import {
+  apiErrorStatus,
+  createUploadForm,
+  inUseForceHint,
+  type VroHttpClient,
+} from "./core.js";
 import {
   diffWorkflowArtifacts,
   ensurePreflightPassed,
@@ -762,8 +767,26 @@ export class WorkflowClient {
     };
   }
 
-  async deleteWorkflow(id: string): Promise<void> {
-    await this.http.del<unknown>(`/workflows/${encodeURIComponent(id)}`);
+  /**
+   * Delete a workflow. `force` adds vRO's own `?force=true`, which is the only
+   * way to remove an element vRO reports as in use — including one orphaned by
+   * a package delete that left its contents behind. Without it, a 409 is
+   * re-thrown carrying the hint that names the flag (VCFO-087).
+   */
+  async deleteWorkflow(id: string, force = false): Promise<void> {
+    const path = `/workflows/${encodeURIComponent(id)}${force ? "?force=true" : ""}`;
+    try {
+      await this.http.del<unknown>(path);
+    } catch (error) {
+      if (!force && apiErrorStatus(error) === 409) {
+        const message = (error as Error).message;
+        throw Object.assign(
+          new Error(`${message}${inUseForceHint("delete-workflow")}`),
+          { status: 409 },
+        );
+      }
+      throw error;
+    }
   }
 
   getWorkflowDirectory(): string {

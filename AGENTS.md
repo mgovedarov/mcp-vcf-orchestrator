@@ -161,6 +161,8 @@ Reusable project content should move through the stable project package flow by 
 
 Use direct artifact imports such as `import-workflow-file`, `import-action-file`, or `import-configuration-file` only for narrow validation or explicitly requested one-off tests. Normal project promotion should go through the package path.
 
+Deleting a package with `deleteContents: false` leaves its members behind, and on 9.x vRO then reports those orphans as in use: a plain `delete-workflow`, `delete-action`, or `delete-configuration` answers `409 Conflict` and the element cannot be removed through the ordinary path. Pass `force: true` on the individual delete to clear one, after confirming with the user that nothing which matters still references it — `force` skips vRO's reference check, it does not prove the element is unreferenced. The 409 itself carries a hint naming the flag, so the refusal is recoverable rather than terminal (VCFO-087). Prefer `deleteContents: true` when the intent really is to remove the package and its contents together.
+
 ## Workflow Authoring Rules
 
 Before authoring or importing workflow artifacts, read `docs/vro-artifact-authoring.md` and the relevant pattern resources.

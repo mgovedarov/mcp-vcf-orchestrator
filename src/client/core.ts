@@ -66,6 +66,21 @@ export const UNSUPPORTED_VRA8_CONFIGURATION_EXPORT =
 export const CONFIGURATION_EXPORT_NOT_ACCEPTABLE =
   "This vRO server does not serve a single configuration element as a .vsoconf artifact: it answered the export request with 406 Not Acceptable. Use get-configuration to read the element, or add it to the project package with add-configuration-to-project-package and export that package instead.";
 
+// Appended to a 409 on a workflow, action or configuration delete. vRO names
+// the remedy itself — "Specify '?force=true' parameter to delete it" — but an
+// MCP caller cannot send a query parameter, so the hint re-spells it as the
+// `force` argument the delete tools now take. vRO's own sentence is kept: it
+// names the element and is the most informative part of the body, unlike the
+// opaque HTML behind the 406 above. The likely cause is named because it was
+// isolated to one sequence on VCF Automation 9.1: create an element, add it
+// to a package, rebuild, then delete the package with deleteContents false.
+// Deleting the same element while the package still exists, or after running
+// it, both succeed — only orphaning it by the package delete trips the 409
+// (VCFO-087).
+export function inUseForceHint(tool: string): string {
+  return `\nHint: vRO reports this element as in use. The usual cause is delete-package with deleteContents false, which leaves members behind as orphans on 9.x. Re-run ${tool} with force set to true to delete it anyway, once nothing that matters still references it.`;
+}
+
 // Appended to vRA 8 login failures. The CSP login answers wrong credentials
 // and unknown domains with 400 (not 401), so the hint covers both.
 const VRA8_LOGIN_HINT =

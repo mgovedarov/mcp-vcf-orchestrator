@@ -157,13 +157,14 @@ Create a new empty workflow in VCF Automation Orchestrator. Use `list-categories
 
 ### `delete-workflow`
 
-Delete a workflow from VCF Automation Orchestrator. This action is irreversible.
+Delete a workflow from VCF Automation Orchestrator. This action is irreversible. Set `force` to `true` to delete a workflow vRO reports as in use.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `id` | string | Yes | - | Workflow ID to delete. |
 | `expectedName` | string | No | - | Expected live workflow name to verify before deletion. |
+| `force` | boolean | No | `false` | Delete even if vRO reports the element as in use, for example after `delete-package` with `deleteContents: false` left it orphaned. |
 | `confirm` | boolean | Yes | - | Must be `true` to confirm deletion. If `false`, deletion is not performed. |
 :::
 
@@ -495,7 +496,7 @@ Import a `.action` file from the configured action artifact directory into an ac
 
 ### `delete-action`
 
-Delete an action from VCF Automation Orchestrator. This action is irreversible.
+Delete an action from VCF Automation Orchestrator. This action is irreversible. Set `force` to `true` to delete an action vRO reports as in use.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
@@ -503,6 +504,7 @@ Delete an action from VCF Automation Orchestrator. This action is irreversible.
 | `id` | string | Yes | - | Action ID to delete. |
 | `expectedName` | string | No | - | Expected live action name to verify before deletion. |
 | `expectedModule` | string | No | - | Expected live action module to verify before deletion. |
+| `force` | boolean | No | `false` | Delete even if vRO reports the element as in use, for example after `delete-package` with `deleteContents: false` left it orphaned. |
 | `confirm` | boolean | Yes | - | Must be `true` to confirm deletion. If `false`, deletion is not performed. |
 :::
 
@@ -587,13 +589,14 @@ Call the tool with `confirm: false` first: the refusal, if any, is reported in t
 
 ### `delete-configuration`
 
-Delete a configuration element from VCF Automation Orchestrator. This action is irreversible.
+Delete a configuration element from VCF Automation Orchestrator. This action is irreversible. Set `force` to `true` to delete an element vRO reports as in use.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `id` | string | Yes | - | Configuration element ID to delete. |
 | `expectedName` | string | No | - | Expected live configuration element name to verify before deletion. |
+| `force` | boolean | No | `false` | Delete even if vRO reports the element as in use, for example after `delete-package` with `deleteContents: false` left it orphaned. |
 | `confirm` | boolean | Yes | - | Must be `true` to confirm deletion. If `false`, deletion is not performed. |
 :::
 
@@ -1117,7 +1120,7 @@ Delete a vRO package by its fully qualified name. Optionally delete all workflow
 | --- | --- | --- | --- | --- |
 | `name` | string | Yes | - | Fully qualified package name to delete, for example `com.example.mypackage`. |
 | `expectedName` | string | No | - | Expected live package name to verify before deletion. |
-| `deleteContents` | boolean | No | `false` | Also delete all elements inside the package. |
+| `deleteContents` | boolean | No | `false` | Also delete all elements inside the package. Leaving contents behind can orphan members on 9.x, which vRO then reports as in use; those need `force: true` on the individual delete. |
 | `confirm` | boolean | Yes | - | Must be `true` to confirm deletion. If `false`, deletion is not performed. |
 :::
 

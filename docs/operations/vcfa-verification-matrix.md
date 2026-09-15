@@ -29,6 +29,7 @@ vRA 8 evidence.
 | **Blocked by identity** | A provider session cannot reach the service. The refusal was confirmed; the functional path was not reachable. |
 | **Unverifiable here** | The call path works but this environment cannot supply the input or confirm the result. |
 | **Defect** | A defect this sweep found. |
+| **Defect, fix pending live re-check** | A defect this sweep found, for which a fix has since landed in the server but has not been re-measured against a live environment. |
 
 A 200 on an empty list is **not** a pass. Every captured result was also grepped for `undefined`,
 `[object Object]`, `NaN`, `(id: )` and for leaked secrets. There were no `[object Object]`, `NaN`
@@ -81,7 +82,7 @@ Consequences:
 | `preflight-workflow-file` | Verified | Passes live exports and scaffolds. Warns that the end item lacks an `<in-binding/>` on a live export. |
 | `diff-workflow-file` | Verified | All three modes: file/file, live/file, live/live. The discriminator key is `source`; the live variant takes `workflowId`. |
 | `import-workflow-file` | Verified | **A scaffolded container imports, opens and runs on vRO 9.1.0** — see VCFO-060 below. An `expectedCategoryName` mismatch refuses before importing. Note it reports that `overwrite` defaulted to true when the flag is omitted. |
-| `delete-workflow` | **Defect** | Guard mismatch refuses and a clean workflow deletes, but an element orphaned by `delete-package` with `deleteContents: false` cannot be deleted at all — see [#192](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/192). |
+| `delete-workflow` | **Defect, fix pending live re-check** | Guard mismatch refuses and a clean workflow deletes, but an element orphaned by `delete-package` with `deleteContents: false` answered `409 Conflict` and could not be deleted at all — [#192](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/192). A `force` flag sending vRO's own `?force=true` has since landed (VCFO-087); it is covered by unit tests but has **not** been re-measured against this environment, so this row stays a defect until probe F is re-run live. |
 
 ## Actions
 
@@ -95,7 +96,7 @@ Consequences:
 | `preflight-action-file` | Verified | Passes live exports. |
 | `diff-action-file` | Verified | live/file and file/file; the live variant takes `actionId`. |
 | `import-action-file` | Unverifiable here | Only the `confirm: false` refusal was exercised; the module-creation behaviour VCFO-079 measured on 8.18.1 was not re-tested on 9.1. |
-| `delete-action` | **Defect** | Deletes cleanly in isolation; same orphaning defect as `delete-workflow` ([#192](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/192)). |
+| `delete-action` | **Defect, fix pending live re-check** | Deletes cleanly in isolation; same orphaning defect as `delete-workflow` ([#192](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/192)), and the same unverified `force` fix. Note the 409 itself was observed only on `/workflows`; that `/actions/{id}` accepts `?force=true` is inferred from the vRO API, not measured. |
 
 ## Configuration elements
 
@@ -108,7 +109,7 @@ Consequences:
 | `export-configuration-file` | Expected refusal | **406**, reported as the actionable refusal naming the project-package route — VCFO-074 confirmed on 9.1, identical to vRA 8. |
 | `preflight-configuration-file` | Verified (local) | Validates ZIP/XML safety without contacting the server. It accepted a package zip merely renamed to `.vsoconf`, so **a local pass does not imply live import would accept the container** — the same caveat as on vRA 8. No genuine `.vsoconf` exists to feed it, because the export is refused. |
 | `import-configuration-file` | Unverifiable here | Same root cause as on vRA 8: no vRO tested serves a `.vsoconf` for a single element, and a package stores elements as `elements/<id>/data`. Only the `confirm: false` refusal was exercised. |
-| `delete-configuration` | Verified | Guard mismatch refuses; correct guard deletes. |
+| `delete-configuration` | Verified | Guard mismatch refuses; correct guard deletes. The orphaning defect behind [#192](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/192) was not probed for configuration elements; the `force` flag added under VCFO-087 covers them by symmetry with workflows and actions, unmeasured. |
 
 ## Resource elements
 

@@ -677,6 +677,71 @@ test("action import and delete expected guards stop mismatched mutations", async
   assert.equal(deletedId, undefined);
 });
 
+// VCFO-087: same force route as delete-workflow, for the two element types the
+// artifact tools own. An action or configuration element orphaned by a package
+// delete is equally undeletable without it.
+test("delete-action passes force through and states the impact first", async () => {
+  let deleted;
+  const handlers = registeredTools(registerActionTools, {
+    getAction: async (id) => ({
+      id,
+      name: "getVmIp",
+      module: "com.example.actions",
+    }),
+    deleteAction: async (id, force) => {
+      deleted = { id, force };
+    },
+  });
+
+  const refused = await handlers.get("delete-action")({
+    id: "action-1",
+    force: true,
+    confirm: false,
+  });
+  assert.equal(deleted, undefined);
+  assert.match(refused.content[0].text, /may still reference it/);
+
+  await handlers.get("delete-action")({ id: "action-1", confirm: true });
+  assert.deepEqual(deleted, { id: "action-1", force: false });
+
+  const forced = await handlers.get("delete-action")({
+    id: "action-1",
+    force: true,
+    confirm: true,
+  });
+  assert.deepEqual(deleted, { id: "action-1", force: true });
+  assert.match(forced.content[0].text, /deleted successfully with force/);
+});
+
+test("delete-configuration passes force through and states the impact first", async () => {
+  let deleted;
+  const handlers = registeredTools(registerConfigTools, {
+    getConfiguration: async (id) => ({ id, name: "Settings" }),
+    deleteConfiguration: async (id, force) => {
+      deleted = { id, force };
+    },
+  });
+
+  const refused = await handlers.get("delete-configuration")({
+    id: "config-1",
+    force: true,
+    confirm: false,
+  });
+  assert.equal(deleted, undefined);
+  assert.match(refused.content[0].text, /may still reference it/);
+
+  await handlers.get("delete-configuration")({ id: "config-1", confirm: true });
+  assert.deepEqual(deleted, { id: "config-1", force: false });
+
+  const forced = await handlers.get("delete-configuration")({
+    id: "config-1",
+    force: true,
+    confirm: true,
+  });
+  assert.deepEqual(deleted, { id: "config-1", force: true });
+  assert.match(forced.content[0].text, /deleted successfully with force/);
+});
+
 test("import-action-file verifies expected module against live list-actions", async () => {
   let imported;
   let listCalls = 0;

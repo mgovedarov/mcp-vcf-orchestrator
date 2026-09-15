@@ -10,7 +10,12 @@ import {
   preflightActionFile,
   type ArtifactPreflightReport,
 } from "./artifact-preflight.js";
-import { createUploadForm, type VroHttpClient } from "./core.js";
+import {
+  apiErrorStatus,
+  createUploadForm,
+  inUseForceHint,
+  type VroHttpClient,
+} from "./core.js";
 import {
   assertRealPathInside,
   getExistingFile,
@@ -434,7 +439,25 @@ export class ActionClient {
     return this.getAction(actionId);
   }
 
-  async deleteAction(id: string): Promise<void> {
-    await this.http.del<unknown>(`/actions/${encodeURIComponent(id)}`);
+  /**
+   * Delete an action. `force` adds vRO's own `?force=true`, which is the only
+   * way to remove an element vRO reports as in use — including one orphaned by
+   * a package delete that left its contents behind. Without it, a 409 is
+   * re-thrown carrying the hint that names the flag (VCFO-087).
+   */
+  async deleteAction(id: string, force = false): Promise<void> {
+    const path = `/actions/${encodeURIComponent(id)}${force ? "?force=true" : ""}`;
+    try {
+      await this.http.del<unknown>(path);
+    } catch (error) {
+      if (!force && apiErrorStatus(error) === 409) {
+        const message = (error as Error).message;
+        throw Object.assign(
+          new Error(`${message}${inUseForceHint("delete-action")}`),
+          { status: 409 },
+        );
+      }
+      throw error;
+    }
   }
 }

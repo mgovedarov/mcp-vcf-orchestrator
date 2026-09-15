@@ -182,8 +182,8 @@ export class VroClient {
     return this.workflows.listWorkflowExecutions(workflowId, options);
   }
 
-  deleteWorkflow(id: string): Promise<void> {
-    return this.workflows.deleteWorkflow(id);
+  deleteWorkflow(id: string, force = false): Promise<void> {
+    return this.workflows.deleteWorkflow(id, force);
   }
 
   getWorkflowDirectory(): string {
@@ -451,8 +451,8 @@ export class VroClient {
     return this.actions.findAction(moduleName, name);
   }
 
-  deleteAction(id: string): Promise<void> {
-    return this.actions.deleteAction(id);
+  deleteAction(id: string, force = false): Promise<void> {
+    return this.actions.deleteAction(id, force);
   }
 
   listConfigurations(
@@ -513,8 +513,8 @@ export class VroClient {
     );
   }
 
-  deleteConfiguration(id: string): Promise<void> {
-    return this.configurations.deleteConfiguration(id);
+  deleteConfiguration(id: string, force = false): Promise<void> {
+    return this.configurations.deleteConfiguration(id, force);
   }
 
   updateConfiguration(

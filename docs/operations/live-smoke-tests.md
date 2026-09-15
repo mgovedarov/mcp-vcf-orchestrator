@@ -246,6 +246,14 @@ delete-workflow(id: "<workflow-id>", confirm: true)
 delete-configuration(id: "<configuration-id>", confirm: true)
 ```
 
+An element that was added to a package which was then deleted with `deleteContents: false` is
+reported by vRO as in use and answers `409 Conflict`. The refusal names the remedy: re-run the
+delete with `force: true`, which sends vRO's own `?force=true` (VCFO-087).
+
+```text
+delete-workflow(id: "<workflow-id>", force: true, confirm: true)
+```
+
 Configuration writes send the plural `attributes` key on every platform since VCFO-074, so this mode no longer has an attribute-key difference to check; `PUT /configurations/{id}` still has to carry the element name.
 
 Template and subscription writes are supported in this mode (VCFO-070). They mutate a live environment, so use disposable objects and clean up. Create the subscription **disabled** and **non-blocking**, on a non-blockable topic, so it cannot stall provisioning:
