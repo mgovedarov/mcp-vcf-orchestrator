@@ -377,9 +377,10 @@ function describeTransportFailure(
  * Describe why a login response was unusable, in a form that is safe to
  * surface. A redirect names the host it points at; another non-2xx reports its
  * status plus the sanitized body — JSON diagnostic fields and gateway HTML
- * summaries only, never a raw non-JSON excerpt, because the login request body
- * carries the password or the refresh token and a gateway that reflects a
- * rejected payload would otherwise echo it; a 2xx that did not carry
+ * summaries only, never a raw non-JSON excerpt, because a login request carries
+ * the credentials — the password or the refresh token in the vra8 body, the
+ * Basic header on the vcfa session POST — and a gateway that reflects a
+ * rejected request would otherwise echo them; a 2xx that did not carry
  * `expectedField` reports the status, the declared content type, and the shape
  * of the body (unreadable, empty, non-JSON, or JSON without the field) but
  * never the body itself, because a login 2xx body can carry token material.
@@ -398,7 +399,7 @@ function describeLoginFailure(
   if (res.status >= 300 && res.status < 400) {
     const location = res.headers.get("location");
     const host = location ? urlHost(location) : undefined;
-    return `${status}: the login endpoint answered with a redirect${host ? ` to ${host}` : ""}, which is not followed because the request body carries the credentials. Verify VCFA_HOST addresses the appliance's API endpoint directly, with no SSO or load-balancer redirect in front of it.`;
+    return `${status}: the login endpoint answered with a redirect${host ? ` to ${host}` : ""}, which is not followed because the request carries the credentials. Verify VCFA_HOST addresses the appliance's API endpoint directly, with no SSO or load-balancer redirect in front of it.`;
   }
 
   if (!res.ok) {
@@ -904,7 +905,13 @@ export class VroHttpClient {
     console.error(
       `[vro-client] Authenticating via VCF Cloud API ${login.isProviderLogin ? "provider " : ""}sessions (version ${apiVersion})…`,
     );
-    const { res, text } = await this.fetchWithTimeout(
+    // Redirects are not followed. The credentials ride in the Basic
+    // Authorization header, which the Fetch standard strips on a cross-origin
+    // redirect, so a followed redirect could only ever reach an SSO portal or
+    // UI unauthenticated and answer 200 with HTML — which used to surface as a
+    // missing token header, naming nothing. An external vRO appliance answers
+    // this endpoint with exactly that redirect (VCFO-082).
+    const result = await this.fetchWithTimeout(
       login.sessionUrl,
       {
         method: "POST",
@@ -913,9 +920,11 @@ export class VroHttpClient {
           "Content-Type": `application/json;version=${apiVersion}`,
           Accept: `application/json;version=${apiVersion}`,
         },
+        redirect: "manual",
       },
       readLoginResponse,
     );
+    const { res } = result;
 
     if (!res.ok) {
       const hint =
@@ -925,14 +934,19 @@ export class VroHttpClient {
             : '\nHint: VCFA_ORGANIZATION must be the organization name (the tenant URL slug), not its display name. Provider/system administrators must set VCFA_ORGANIZATION=system, which routes the login to /cloudapi/1.0.0/sessions/provider.'
           : "";
       throw new Error(
-        `VCF authentication failed: ${formatStatus(res)}\n${sanitizeErrorBody(text, res, "shape")}${hint}`,
+        `VCF authentication failed: ${describeLoginFailure(result, "x-vmware-vcloud-access-token")}${hint}`,
       );
     }
 
+    // A 2xx that carries no token is not a success. A host that answers the
+    // session POST with an SSO page rather than redirecting to one lands here,
+    // so the status and the declared content type are named; the body never is,
+    // because a login 2xx body can carry token material.
     const token = res.headers.get("x-vmware-vcloud-access-token");
     if (!token) {
+      const contentType = res.headers.get("content-type") ?? "none";
       throw new Error(
-        "VCF authentication succeeded but x-vmware-vcloud-access-token header was missing",
+        `VCF authentication failed: ${formatStatus(res)} did not carry the x-vmware-vcloud-access-token header (content-type: ${contentType}). Verify VCFA_HOST addresses the appliance's API endpoint directly, with no SSO or load-balancer redirect in front of it.`,
       );
     }
 
