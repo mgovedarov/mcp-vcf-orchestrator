@@ -20,7 +20,17 @@ import { registerWorkflowTools } from "../dist/tools/workflow-tools.js";
 // Additive live writes (create-*, ensure-*, add-*-to-project-package) and
 // local-only artifact writes (export-*, scaffold-*, snapshot/promotion tools)
 // are deliberately excluded.
+//
+// create-deployment is the one deliberate exception to that exclusion, and it
+// does not match DESTRUCTIVE_NAME_PATTERN either, so it is listed here by hand
+// (VCFO-084). Every other additive create makes a metadata object -- a
+// workflow, an action, a configuration element, a DRAFT template, a disabled
+// subscription -- that a delete fully undoes. This one allocates compute,
+// storage and address space: it has cost and capacity consequences, it can
+// partially succeed, and its only removal path is delete-deployment, itself a
+// destructive day-2 operation rather than an undo.
 const DESTRUCTIVE_TOOLS = new Set([
+  "create-deployment",
   "delete-action",
   "delete-configuration",
   "delete-deployment",

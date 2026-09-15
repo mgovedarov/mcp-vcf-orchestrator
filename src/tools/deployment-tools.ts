@@ -95,6 +95,152 @@ export function formatDeploymentRequest(request: DeploymentRequest): string {
   return text;
 }
 
+/**
+ * Verify a catalog item and a project against the `expected*` arguments before
+ * `create-deployment` requests real infrastructure.
+ *
+ * `create-deployment` takes two opaque UUIDs and nothing else identifies the
+ * target, so a transposed id requests a different blueprint into a different
+ * project and the tool reports success (VCFO-084). Its siblings
+ * `delete-deployment` and `run-deployment-action` already re-read the live
+ * object first; this brings the one tool that *provisions* into the same
+ * two-phase flow.
+ *
+ * Both names need the `guardResourceTarget` treatment from VCFO-077, because
+ * both are optional on the wire: `CatalogItem.name` is absent on shapes that
+ * have never been observed, and a real 9.1 item is both narrower and wider
+ * than the interface claims. Feeding an absent value straight into
+ * `guardExpectedFields` reports it as a mismatch against "(missing)", which
+ * would refuse every legitimate call on a platform that omits the field. So
+ * absence is reported as "cannot verify here" -- and it still refuses, because
+ * a caller who asked for two-phase verification must not be told the target
+ * was confirmed when it was not.
+ *
+ * The catalog item is checked FIRST: deploying the wrong blueprint is the more
+ * urgent signal, and the caller would otherwise be told to fix the project only
+ * to hit the blueprint mismatch a round-trip later.
+ *
+ * Only the *names* are offered. An `expectedProjectId` or `expectedCatalogItemId`
+ * would look like verification and be incapable of failing: unlike
+ * `delete-deployment`, where `projectId` is a property of a live deployment the
+ * caller never typed, here both IDs are required arguments of this very call, so
+ * `getProject(projectId).id` echoes the input back by construction. The names
+ * are the datum the operator actually read during discovery, and they are
+ * exactly what a transposed UUID silently changes.
+ *
+ * Each read is made only when an argument needs it, so a caller passing no
+ * `expected*` value costs exactly what it did before.
+ */
+async function guardCreateDeploymentTarget(
+  client: Pick<VroClient, "getCatalogItem" | "getProject">,
+  catalogItemId: string,
+  projectId: string,
+  expectedCatalogItemName: string | undefined,
+  expectedProjectName: string | undefined,
+): Promise<CallToolResult | undefined> {
+  if (expectedCatalogItemName !== undefined) {
+    let item;
+    try {
+      item = await client.getCatalogItem(catalogItemId);
+    } catch (error) {
+      return unreadableTarget(
+        "expectedCatalogItemName",
+        `catalog item ${catalogItemId}`,
+        error,
+      );
+    }
+    if (!item.name) {
+      return unverifiableTarget(
+        "expectedCatalogItemName",
+        `catalog item ${catalogItemId}`,
+        "confirm it with list-catalog-items",
+      );
+    }
+    const guard = guardExpectedFields(`catalog item ${catalogItemId}`, [
+      {
+        label: "catalog item name",
+        expected: expectedCatalogItemName,
+        actual: item.name,
+      },
+    ]);
+    if (guard) return guard;
+  }
+
+  if (expectedProjectName === undefined) return undefined;
+
+  let project;
+  try {
+    project = await client.getProject(projectId);
+  } catch (error) {
+    return unreadableTarget(
+      "expectedProjectName",
+      `project ${projectId}`,
+      error,
+    );
+  }
+  if (!project.name) {
+    return unverifiableTarget(
+      "expectedProjectName",
+      `project ${projectId}`,
+      "confirm it with list-projects",
+    );
+  }
+
+  return guardExpectedFields(`project ${projectId}`, [
+    {
+      label: "project name",
+      expected: expectedProjectName,
+      actual: project.name,
+    },
+  ]);
+}
+
+/**
+ * The refusal for a verification read that failed outright.
+ *
+ * This is deliberately not left to the handler's outer catch: reported as
+ * `Failed to create deployment: <message>`, an operator cannot tell whether
+ * anything was provisioned before it failed. Naming the read says plainly that
+ * the request was never submitted.
+ */
+function unreadableTarget(
+  argument: string,
+  target: string,
+  error: unknown,
+): CallToolResult {
+  const message = error instanceof Error ? error.message : String(error);
+  return {
+    content: [
+      {
+        type: "text",
+        text: `Cannot verify ${argument}: reading ${target} failed: ${message}. No deployment was requested.`,
+      },
+    ],
+    isError: true,
+  };
+}
+
+/**
+ * The refusal for an expected value the live record cannot confirm either way.
+ * Shaped like the resource-element one (VCFO-077): it names the argument, says
+ * why it could not be checked, and states that nothing was provisioned.
+ */
+function unverifiableTarget(
+  argument: string,
+  target: string,
+  remedy: string,
+): CallToolResult {
+  return {
+    content: [
+      {
+        type: "text",
+        text: `Cannot verify ${argument} for ${target}: the live record reports no name, so the value cannot be confirmed either way. No deployment was requested. Omit ${argument} and ${remedy}, or re-run with the other expected fields only.`,
+      },
+    ],
+    isError: true,
+  };
+}
+
 export function registerDeploymentTools(
   server: McpServer,
   client: VroClient,
@@ -319,7 +465,7 @@ export function registerDeploymentTools(
     {
       title: "Create Deployment",
       description:
-        "Create a new deployment from a catalog item. Use list-catalog-items to find the catalog item ID, and list-deployments to verify afterwards.",
+        "Create a new deployment from a catalog item. This provisions real infrastructure. Use list-catalog-items to find the catalog item ID, list-projects to find the project ID, and list-deployments to verify afterwards. Both IDs are opaque, so pass expectedCatalogItemName and expectedProjectName to bind the request to the target you discovered: each is verified against live metadata first, and a mismatch refuses before anything is provisioned. In VCFA_TARGET_PLATFORM=vra8 mode the catalog-service request is unsupported and refused, but any expected-field reads are made first, so the refusal arrives after them.",
       inputSchema: z.object({
         catalogItemId: z.string().describe("The catalog item ID to deploy"),
         deploymentName: z.string().describe("Name for the new deployment"),
@@ -340,13 +486,25 @@ export function registerDeploymentTools(
           .record(z.string(), z.unknown())
           .optional()
           .describe("Catalog item input parameters as a key/value object"),
+        expectedCatalogItemName: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected catalog item name verified against live metadata before the deployment is requested",
+          ),
+        expectedProjectName: z
+          .string()
+          .optional()
+          .describe(
+            "Optional expected project name verified against live metadata before the deployment is requested",
+          ),
         confirm: z
           .boolean()
           .describe(
             "Must be set to true to confirm deployment creation. If false, the deployment request will not be submitted.",
           ),
       }),
-      annotations: { readOnlyHint: false },
+      annotations: DESTRUCTIVE_LIVE_WRITE,
     },
     async ({
       catalogItemId,
@@ -355,20 +513,41 @@ export function registerDeploymentTools(
       version,
       reason,
       inputs,
+      expectedCatalogItemName,
+      expectedProjectName,
       confirm,
     }): Promise<CallToolResult> => {
+      const verifiesTarget = hasAnyExpectedValue({
+        expectedCatalogItemName,
+        expectedProjectName,
+      });
+
       if (!confirm) {
+        const impact = verifiesTarget
+          ? "The catalog item and project will be verified against live metadata first."
+          : "No expected target fields were supplied, so the catalog item and project IDs will not be verified against live metadata before the request.";
         return {
           content: [
             {
               type: "text",
-              text: `Confirm deployment of catalog item ${catalogItemId} as ${deploymentName} in project ${projectId} by setting confirm to true.`,
+              text: `Confirm deployment of catalog item ${catalogItemId} as ${deploymentName} in project ${projectId} by setting confirm to true. This provisions real infrastructure, with the cost and capacity that follow from it, and removing it later means deleting the deployment. ${impact}`,
             },
           ],
         };
       }
 
       try {
+        if (verifiesTarget) {
+          const guard = await guardCreateDeploymentTarget(
+            client,
+            catalogItemId,
+            projectId,
+            expectedCatalogItemName,
+            expectedProjectName,
+          );
+          if (guard) return guard;
+        }
+
         const deployment = await client.createDeploymentFromCatalogItem({
           catalogItemId,
           deploymentName,

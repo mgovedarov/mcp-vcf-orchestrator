@@ -309,3 +309,225 @@ test("deployment tools render a nameless deployment without leaking undefined", 
   assert.doesNotMatch(detail.content[0].text, /undefined/);
   assert.ok(!detail.isError);
 });
+
+// create-deployment provisions real infrastructure from two opaque UUIDs, so it
+// carries the same expected-target guards as its delete and run siblings
+// (VCFO-084). The reads that back them are made only when an expected value is
+// supplied, and an absent live name refuses rather than passing silently --
+// the VCFO-077 resolution, since both names are optional on the wire.
+
+function createDeploymentClient(overrides = {}) {
+  const calls = { catalogItem: 0, project: 0, created: 0 };
+  const client = {
+    getCatalogItem: async (id) => {
+      calls.catalogItem += 1;
+      return { id, name: "Ubuntu Server" };
+    },
+    getProject: async (id) => {
+      calls.project += 1;
+      return { id, name: "Development" };
+    },
+    createDeploymentFromCatalogItem: async (params) => {
+      calls.created += 1;
+      return { id: "deployment-1", name: params.deploymentName, status: "SUBMITTED" };
+    },
+    ...overrides,
+  };
+  return { client, calls };
+}
+
+const CREATE_ARGS = {
+  catalogItemId: "catalog-1",
+  deploymentName: "Ubuntu VM",
+  projectId: "project-1",
+  confirm: true,
+};
+
+test("create-deployment skips the verification reads when no expected field is passed", async () => {
+  const { client, calls } = createDeploymentClient({
+    getCatalogItem: async () => {
+      throw new Error("getCatalogItem must not be called");
+    },
+    getProject: async () => {
+      throw new Error("getProject must not be called");
+    },
+  });
+  const handlers = registeredDeploymentTools(client);
+
+  const created = await handlers.get("create-deployment")({ ...CREATE_ARGS });
+
+  assert.ok(!created.isError);
+  assert.equal(calls.created, 1);
+  assert.match(created.content[0].text, /ID: deployment-1/);
+});
+
+test("create-deployment reads only what the supplied expected fields need", async () => {
+  const { client, calls } = createDeploymentClient();
+  const handlers = registeredDeploymentTools(client);
+
+  await handlers.get("create-deployment")({
+    ...CREATE_ARGS,
+    expectedCatalogItemName: "Ubuntu Server",
+  });
+  assert.deepEqual(calls, { catalogItem: 1, project: 0, created: 1 });
+
+  const { client: second, calls: secondCalls } = createDeploymentClient();
+  const secondHandlers = registeredDeploymentTools(second);
+  await secondHandlers.get("create-deployment")({
+    ...CREATE_ARGS,
+    expectedProjectName: "Development",
+  });
+  assert.deepEqual(secondCalls, { catalogItem: 0, project: 1, created: 1 });
+});
+
+test("create-deployment refuses a catalog item name mismatch before provisioning", async () => {
+  const { client, calls } = createDeploymentClient();
+  const handlers = registeredDeploymentTools(client);
+
+  const result = await handlers.get("create-deployment")({
+    ...CREATE_ARGS,
+    expectedCatalogItemName: "Windows Server",
+  });
+
+  assert.equal(result.isError, true);
+  assert.equal(calls.created, 0);
+  assert.match(result.content[0].text, /catalog item name: expected/);
+  assert.match(result.content[0].text, /No live mutation was performed/);
+});
+
+test("create-deployment refuses a project mismatch before provisioning", async () => {
+  const { client, calls } = createDeploymentClient();
+  const handlers = registeredDeploymentTools(client);
+
+  const byName = await handlers.get("create-deployment")({
+    ...CREATE_ARGS,
+    expectedProjectName: "Production",
+  });
+  assert.equal(byName.isError, true);
+  assert.equal(calls.created, 0);
+  assert.match(byName.content[0].text, /project name: expected/);
+  assert.match(byName.content[0].text, /No live mutation was performed/);
+});
+
+test("create-deployment checks the catalog item before the project", async () => {
+  const { client, calls } = createDeploymentClient();
+  const handlers = registeredDeploymentTools(client);
+
+  const result = await handlers.get("create-deployment")({
+    ...CREATE_ARGS,
+    expectedCatalogItemName: "Windows Server",
+    expectedProjectName: "Production",
+  });
+
+  assert.equal(result.isError, true);
+  assert.match(result.content[0].text, /catalog item name: expected/);
+  assert.doesNotMatch(result.content[0].text, /project name: expected/);
+  // A blueprint mismatch is the more urgent signal, so the project read never
+  // happens and cannot mask it.
+  assert.equal(calls.project, 0);
+});
+
+test("create-deployment refuses when a live name cannot confirm the expected value", async () => {
+  const { client, calls } = createDeploymentClient({
+    getCatalogItem: async (id) => ({ id }),
+  });
+  const handlers = registeredDeploymentTools(client);
+
+  const result = await handlers.get("create-deployment")({
+    ...CREATE_ARGS,
+    expectedCatalogItemName: "Ubuntu Server",
+  });
+
+  assert.equal(result.isError, true);
+  assert.equal(calls.created, 0);
+  assert.match(result.content[0].text, /Cannot verify expectedCatalogItemName/);
+  assert.match(result.content[0].text, /No deployment was requested/);
+  assert.doesNotMatch(result.content[0].text, /undefined/);
+
+  const { client: nameless, calls: namelessCalls } = createDeploymentClient({
+    getProject: async (id) => ({ id }),
+  });
+  const namelessHandlers = registeredDeploymentTools(nameless);
+  const project = await namelessHandlers.get("create-deployment")({
+    ...CREATE_ARGS,
+    expectedProjectName: "Development",
+  });
+  assert.equal(project.isError, true);
+  assert.equal(namelessCalls.created, 0);
+  assert.match(project.content[0].text, /Cannot verify expectedProjectName/);
+});
+
+test("create-deployment passes matching expected fields through to the request", async () => {
+  let createParams;
+  const { client, calls } = createDeploymentClient({
+    createDeploymentFromCatalogItem: async (params) => {
+      createParams = params;
+      return { id: "deployment-1", status: "SUBMITTED" };
+    },
+  });
+  const handlers = registeredDeploymentTools(client);
+
+  const result = await handlers.get("create-deployment")({
+    ...CREATE_ARGS,
+    expectedCatalogItemName: "Ubuntu Server",
+    expectedProjectName: "Development",
+  });
+
+  assert.ok(!result.isError);
+  assert.equal(calls.catalogItem, 1);
+  assert.equal(calls.project, 1);
+  // The expected* arguments are guards, not request fields.
+  assert.deepEqual(createParams, {
+    catalogItemId: "catalog-1",
+    deploymentName: "Ubuntu VM",
+    projectId: "project-1",
+    version: undefined,
+    reason: undefined,
+    inputs: undefined,
+  });
+});
+
+test("create-deployment states the provisioning impact before it is confirmed", async () => {
+  const { client, calls } = createDeploymentClient();
+  const handlers = registeredDeploymentTools(client);
+
+  const unguarded = await handlers.get("create-deployment")({
+    ...CREATE_ARGS,
+    confirm: false,
+  });
+  assert.equal(calls.created, 0);
+  assert.equal(calls.catalogItem, 0);
+  assert.match(unguarded.content[0].text, /provisions real infrastructure/);
+  assert.match(unguarded.content[0].text, /will not be verified against live metadata/);
+
+  const guarded = await handlers.get("create-deployment")({
+    ...CREATE_ARGS,
+    expectedCatalogItemName: "Ubuntu Server",
+    confirm: false,
+  });
+  assert.equal(calls.created, 0);
+  assert.match(guarded.content[0].text, /will be verified against live metadata/);
+});
+
+test("create-deployment reports a failed verification read without provisioning", async () => {
+  const { client, calls } = createDeploymentClient({
+    getCatalogItem: async () => {
+      throw new Error("catalog service unavailable");
+    },
+  });
+  const handlers = registeredDeploymentTools(client);
+
+  const result = await handlers.get("create-deployment")({
+    ...CREATE_ARGS,
+    expectedCatalogItemName: "Ubuntu Server",
+  });
+
+  assert.equal(result.isError, true);
+  assert.equal(calls.created, 0);
+  // Named as a verification-read failure, not as "Failed to create deployment":
+  // an operator must be able to tell that nothing was provisioned.
+  assert.match(result.content[0].text, /Cannot verify expectedCatalogItemName/);
+  assert.match(result.content[0].text, /catalog service unavailable/);
+  assert.match(result.content[0].text, /No deployment was requested/);
+  assert.doesNotMatch(result.content[0].text, /Failed to create deployment/);
+});
