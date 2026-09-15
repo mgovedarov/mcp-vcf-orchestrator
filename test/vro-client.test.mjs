@@ -2481,7 +2481,7 @@ test("diffActionFile compares live export to local action artifact as zip", asyn
   }
 });
 
-test("createConfiguration sends singular attribute payload", async () => {
+test("createConfiguration sends the plural attributes payload", async () => {
   const calls = [];
   globalThis.fetch = async (url, init) => {
     calls.push({ url: String(url), init });
@@ -2499,7 +2499,7 @@ test("createConfiguration sends singular attribute payload", async () => {
     name: "Settings",
     "category-id": "category-1",
     description: "desc",
-    attribute: [
+    attributes: [
       {
         name: "host",
         type: "string",
@@ -2507,12 +2507,16 @@ test("createConfiguration sends singular attribute payload", async () => {
       },
     ],
   });
+  // VCFO-074: the key no longer branches by platform. VCFA 9.1 accepts the
+  // plural form on create and update alike, confirmed by reading the stored
+  // values back, so the singular key vRA 8 rejects is no longer sent anywhere.
+  assert.ok(!("attribute" in body), "the singular key must be absent");
 });
 
 // vRA 8 requires the plural attributes key on both configuration writes and
-// answers 400 for a body carrying the singular one — including a body that
-// carries both — so the key is chosen per platform (VCFO-068). The singular
-// case is covered by the test above.
+// answers 400 for a body carrying the singular one, including a body carrying
+// both (VCFO-068). Since VCFO-074 every platform sends that same key, so these
+// two tests now pin that vra8 mode did not regress rather than a branch.
 test("createConfiguration sends the plural attributes payload in vra8 mode", async () => {
   const calls = [];
   const login = vra8LoginStub();
@@ -2656,7 +2660,7 @@ test("updateConfiguration carries the live description forward when not supplied
   const body = JSON.parse(calls.at(-1).init.body);
   assert.equal(body.name, "Settings");
   assert.equal(body.description, "Runtime settings");
-  assert.equal(body.attribute[0].value.string.value, "new");
+  assert.equal(body.attributes[0].value.string.value, "new");
 });
 
 test("updateConfiguration refuses a secure attribute supplied without a value", async () => {
@@ -2741,7 +2745,7 @@ test("updateConfiguration clears attributes when given an empty array", async ()
   await client.updateConfiguration("config-1", { attributes: [] });
 
   const put = calls.find((c) => c.method === "PUT");
-  assert.deepEqual(JSON.parse(put.init.body).attribute, []);
+  assert.deepEqual(JSON.parse(put.init.body).attributes, []);
 });
 
 test("catalog client uses service broker endpoints and request payloads", async () => {

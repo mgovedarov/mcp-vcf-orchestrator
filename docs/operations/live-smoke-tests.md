@@ -186,6 +186,8 @@ delete-workflow(id: "<workflow-id>", confirm: true)
 delete-configuration(id: "<configuration-id>", confirm: true)
 ```
 
+Configuration writes send the plural `attributes` key on every platform since VCFO-074, so this mode no longer has an attribute-key difference to check; `PUT /configurations/{id}` still has to carry the element name.
+
 Template and subscription writes are supported in this mode (VCFO-070). They mutate a live environment, so use disposable objects and clean up. Create the subscription **disabled** and **non-blocking**, on a non-blockable topic, so it cannot stall provisioning:
 
 ```text

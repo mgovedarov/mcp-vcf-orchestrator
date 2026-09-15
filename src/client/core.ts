@@ -51,17 +51,18 @@ const UNSUPPORTED_AUTOMATION_WRITE_UNKNOWN =
 export const UNSUPPORTED_VRA8_CONFIGURATION_EXPORT =
   "Exporting a single configuration element as a .vsoconf artifact is not supported in VCFA_TARGET_PLATFORM=vra8 mode: vRA 8 serves configuration elements as JSON only and rejects the artifact request with 406. Use get-configuration to read it, or add it to the project package with add-configuration-to-project-package and export that package instead.";
 
-// The same refusal is not confined to vRA 8: one standalone vRO 9.1 appliance
-// answers 406 to every artifact Accept for a configuration element —
-// application/zip, application/vcoobject+zip and application/octet-stream
-// alike — while `*/*` returns the element as JSON (verified live, VCFO-074).
-// Whether that generalizes is unknown: the identity used there could see no
-// workflow or package, so no successful artifact export was available on that
-// host as a control, and the appliance-embedded orchestrator was not reached.
+// The refusal is not confined to vRA 8, and it is specific to configuration
+// elements rather than to artifact export. Both a standalone vRO 9.1 and an
+// appliance-embedded vRO 9.1 answer 406 to every artifact Accept for a
+// configuration element — application/zip, application/vcoobject+zip and
+// application/octet-stream alike — while `*/*` returns the element as JSON.
+// On those same hosts, in the same session, workflow, action and package
+// exports all answer 200 application/zip, so the 406 is the element type
+// being unsupported, not the identity or the host (verified live, VCFO-074).
 // The vra8 guard above stays a pre-emptive fast path; this message is what a
 // 406 from any other platform is turned into, so the operator gets the same
-// actionable route instead of an opaque HTML error body. The wording states
-// what the server answered and makes no platform claim.
+// actionable route instead of an opaque HTML error body. The wording still
+// states only what the server answered, since no vRO is known to support it.
 export const CONFIGURATION_EXPORT_NOT_ACCEPTABLE =
   "This vRO server does not serve a single configuration element as a .vsoconf artifact: it answered the export request with 406 Not Acceptable. Use get-configuration to read the element, or add it to the project package with add-configuration-to-project-package and export that package instead.";
 
