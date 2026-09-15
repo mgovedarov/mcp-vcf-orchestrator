@@ -130,7 +130,7 @@ export function registerDeploymentTools(
           };
         }
         const lines = items.map((d) => {
-          let line = `• ${d.name ?? "(unnamed)"} (id: ${d.id})`;
+          let line = `• ${d.name || "(unnamed)"} (id: ${d.id})`;
           if (d.status) line += ` [${d.status}]`;
           if (d.projectName) line += ` — project: ${d.projectName}`;
           else if (d.projectId) line += ` — projectId: ${d.projectId}`;
@@ -173,7 +173,7 @@ export function registerDeploymentTools(
     async ({ id }): Promise<CallToolResult> => {
       try {
         const d = await client.getDeployment(id);
-        let text = `Deployment: ${d.name ?? "(unnamed)"}\nID: ${d.id}\n`;
+        let text = `Deployment: ${d.name || "(unnamed)"}\nID: ${d.id}\n`;
         if (d.status) text += `Status: ${d.status}\n`;
         if (d.description) text += `Description: ${d.description}\n`;
         if (d.projectName) text += `Project: ${d.projectName}\n`;

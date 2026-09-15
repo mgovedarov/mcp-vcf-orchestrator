@@ -32,11 +32,17 @@ export class ProjectClient {
    * project carries a non-empty description.
    *
    * The fallback remains for a platform that supports neither `substringof`
-   * nor `tolower`. Neither lab is that platform, so its trigger stays the 400
-   * that a malformed filter earns on both; a service that refused the whole
-   * parameter with some other status would surface as an error instead. Both
-   * labs answer 500 rather than 400 for an *unknown field*, but the client
-   * only ever names `name` and `description`, which both serve.
+   * nor `tolower`. Neither lab is that platform, so the trigger is both of the
+   * statuses a filter the service cannot satisfy earns on the ones we have:
+   * the 400 a malformed filter earns on either, and the 500 both answer for an
+   * element of the filter expression they do not know — an unknown field,
+   * which is the nearest observable stand-in for an unknown operator. It stays
+   * those two: a 401 — and, on `vcfa`, a JSON 403 — has to reach the
+   * re-authenticate-and-retry path in `core.ts` first, and an authorization
+   * denial is not something a second, unfiltered walk could improve on.
+   * The status is logged because a transient 500 now costs a full-inventory
+   * walk instead of surfacing — and if the service is genuinely down, that
+   * walk fails too and reports it.
    */
   async listProjects(search?: string, options?: ListOptions): Promise<ProjectList> {
     const needle = normalizeFilter(search);
@@ -53,9 +59,10 @@ export class ProjectClient {
         { maxItems: options?.limit },
       );
     } catch (error) {
-      if (apiErrorStatus(error) !== 400) throw error;
+      const status = apiErrorStatus(error);
+      if (status !== 400 && status !== 500) throw error;
       console.error(
-        "[vro-client] project-service rejected the $filter search with 400; matching name and description client-side instead",
+        `[vro-client] project-service rejected the $filter search with ${status}; matching name and description client-side instead`,
       );
     }
 

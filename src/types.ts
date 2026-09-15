@@ -577,10 +577,6 @@ export interface TemplateList {
 // --- Projects (project-service) ---
 
 /**
- * VCF Automation project as returned by the project-service API. Only the
- * fields the tools render are declared; extend after live verification.
- */
-/**
  * A user or group granted a role on a project. The role arrays of the
  * project-service response hold these, and the two platforms name those
  * arrays differently — see `Project`. Both labs returned every array empty,
@@ -608,7 +604,8 @@ export interface ProjectPrincipal {
  *   arrays — `administrators`/`advancedUsers`/`users`/`auditors`.
  *
  * Only `administrators` is common to the two, which is why the renderer prints
- * whichever arrays arrive rather than a fixed list. The 9.1 observation is one
+ * the known arrays that arrive and then any further array of principal-shaped
+ * entries, rather than a fixed list of names. The 9.1 observation is one
  * project, auto-created and with every role array empty, so the absence of
  * `constraints`, `properties`, `operationTimeout` and `sharedResources` there
  * is what that response carried — not evidence that 9.x never serves them on a
@@ -616,7 +613,12 @@ export interface ProjectPrincipal {
  */
 export interface Project {
   id: string;
-  name: string;
+  /**
+   * Optional for the same reason `CatalogItem.name` is (VCFO-074): a renderer
+   * must not interpolate it unguarded. Every project on both labs carried one,
+   * so this follows the convention rather than an observed gap.
+   */
+  name?: string;
   description?: string;
   /** Owning organization. */
   orgId?: string;
