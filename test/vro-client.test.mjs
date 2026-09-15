@@ -5163,10 +5163,14 @@ test("second consecutive 401 after re-auth is surfaced without infinite loop", a
   assert.equal(authCount, 2, "should authenticate exactly twice (initial + refresh)");
 });
 
-test("403 triggers the same token refresh as 401", async () => {
+test("a vcfa 403 is surfaced as an authorization result, with no re-login (VCFO-083)", async () => {
+  // Was the opposite until VCFO-083/VCFO-085: a non-HTML 403 was treated as a
+  // stale session. A VCF Automation 9.1 lab says otherwise — a revoked session
+  // answers 401 ("The token is not valid or revoked."), so a 403 is a denial
+  // and the extra login could never change it.
   const calls = [];
   let authCount = 0;
-  globalThis.fetch = async (url, init) => {
+  globalThis.fetch = async (url) => {
     calls.push({ url: String(url) });
     if (String(url).includes("/cloudapi/1.0.0/sessions")) {
       authCount++;
@@ -5175,16 +5179,85 @@ test("403 triggers the same token refresh as 401", async () => {
         headers: { "x-vmware-vcloud-access-token": `token-${authCount}` },
       });
     }
-    if (calls.filter((c) => !c.url.includes("/sessions")).length === 1) {
-      return new Response("", { status: 403, statusText: "Forbidden" });
+    return new Response(
+      JSON.stringify({ message: "does not have required access rights" }),
+      { status: 403, statusText: "Forbidden" },
+    );
+  };
+
+  const client = new VroClient(config());
+  await assert.rejects(
+    () => client.listWorkflows(),
+    (e) => {
+      assert.match(e.message, /vRO API error: 403 Forbidden/);
+      assert.match(e.message, /authorization result/);
+      assert.ok(
+        e.message.includes("vRO permissions"),
+        "should point at permissions rather than credentials",
+      );
+      return true;
+    },
+  );
+  assert.equal(authCount, 1, "a permission 403 must not cost a second login");
+  assert.equal(
+    calls.filter((c) => c.url.includes("/vco/api/")).length,
+    1,
+    "nor a retry",
+  );
+});
+
+test("a vcfa 403 on an already cached token still does not re-authenticate", async () => {
+  // The fresh-client tests all mint their token on the first attempt; this one
+  // proves the rule holds for a token the client has been carrying.
+  const calls = [];
+  let authCount = 0;
+  globalThis.fetch = async (url) => {
+    calls.push({ url: String(url) });
+    if (String(url).includes("/cloudapi/1.0.0/sessions")) {
+      authCount++;
+      return new Response("", {
+        status: 200,
+        headers: { "x-vmware-vcloud-access-token": `token-${authCount}` },
+      });
+    }
+    if (calls.filter((c) => c.url.includes("/vco/api/")).length === 1) {
+      return Response.json({ link: [], total: 0 });
+    }
+    return new Response("", { status: 403, statusText: "Forbidden" });
+  };
+
+  const client = new VroClient(config());
+  assert.equal((await client.listWorkflows()).total, 0);
+  await assert.rejects(() => client.listWorkflows(), /403 Forbidden/);
+  assert.equal(authCount, 1, "the cached token is neither discarded nor renewed");
+  assert.equal(calls.filter((c) => c.url.includes("/vco/api/")).length, 2);
+});
+
+test("a vcfa 401 still refreshes the token, so the 403 rule does not disable recovery", async () => {
+  const calls = [];
+  let authCount = 0;
+  globalThis.fetch = async (url) => {
+    calls.push({ url: String(url) });
+    if (String(url).includes("/cloudapi/1.0.0/sessions")) {
+      authCount++;
+      return new Response("", {
+        status: 200,
+        headers: { "x-vmware-vcloud-access-token": `token-${authCount}` },
+      });
+    }
+    if (calls.filter((c) => c.url.includes("/vco/api/")).length === 1) {
+      // What a revoked VCF Automation session actually answers (VCFO-083).
+      return new Response(
+        JSON.stringify({ message: 'The token is not valid or revoked.' }),
+        { status: 401, statusText: "Unauthorized" },
+      );
     }
     return Response.json({ link: [], total: 0 });
   };
 
   const client = new VroClient(config());
-  const result = await client.listWorkflows();
-  assert.equal(result.total, 0);
-  assert.equal(authCount, 2, "should re-authenticate on 403");
+  assert.equal((await client.listWorkflows()).total, 0);
+  assert.equal(authCount, 2, "a 401 is still the stale-session signal");
 });
 
 test("vra8 401 renews the bearer token from the cached refresh token and retries once", async () => {
@@ -6184,7 +6257,7 @@ test("401 from the external vRO re-logins at host and retries at the vRO host", 
   assert.equal(calls[3].init.headers.Authorization, "Bearer token-2");
 });
 
-test("a 403 from the external vRO costs one re-login and one retry, then surfaces naming the vRO host", async () => {
+test("a 403 from the external vRO surfaces naming the vRO host, with no re-login", async () => {
   const calls = [];
   let authCount = 0;
   globalThis.fetch = async (url, init) => {
@@ -6213,13 +6286,13 @@ test("a 403 from the external vRO costs one re-login and one retry, then surface
   );
   const sessions = calls.filter((c) => c.url.includes("/sessions"));
   const vro = calls.filter((c) => c.url.includes("/vco/api/"));
-  assert.equal(authCount, 2, "one re-login, not a loop");
-  assert.equal(vro.length, 2, "one retry, not a loop");
+  assert.equal(authCount, 1, "a denial costs no second login (VCFO-083)");
+  assert.equal(vro.length, 1, "nor a retry");
   assert.ok(sessions.every((c) => new URL(c.url).host === "vcfa.example.test"));
   assert.ok(vro.every((c) => new URL(c.url).host === "vro.example.test"));
   assert.deepEqual(
     vro.map((c) => c.auth),
-    ["Bearer token-1", "Bearer token-2"],
+    ["Bearer token-1"],
   );
 });
 
@@ -6434,4 +6507,125 @@ test("the external-vRO hint is not shown once vroHost is set, nor on vra8", asyn
   );
   assert.equal(vroCalls, 1, "a challenge-less vra8 403 still costs no re-login");
   assert.equal(counts.csp, 1);
+});
+
+// ─── Provider-session Automation refusals (VCFO-085) ───
+
+// A provider (`system`) session authenticates fine but has no auth-context in
+// the tenant-scoped Automation stack. On VCF Automation 9.1 project-service
+// answers 403 while catalog-, deployment-, blueprint- and event-broker-service
+// answer 500; vRO answers 200 on the same session.
+const automationStub = (respond) => async (url) => {
+  if (String(url).includes("/cloudapi/1.0.0/sessions")) return authResponse();
+  return respond(String(url));
+};
+const providerConfig = (overrides) =>
+  config({ organization: "system", ...overrides });
+
+test("a provider-session 403 from an Automation service names VCFA_ORGANIZATION", async () => {
+  let authCount = 0;
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/cloudapi/1.0.0/sessions")) {
+      authCount++;
+      return authResponse();
+    }
+    return new Response("", { status: 403, statusText: "Forbidden" });
+  };
+
+  await assert.rejects(
+    () => new VroClient(providerConfig()).listProjects(),
+    (e) => {
+      assert.match(e.message, /vRO API error: 403 Forbidden — GET \/projects/);
+      assert.ok(e.message.includes("tenant-scoped"), e.message);
+      assert.ok(e.message.includes("VCFA_ORGANIZATION=system"), e.message);
+      return true;
+    },
+  );
+  assert.equal(
+    authCount,
+    1,
+    "the identity is wrong, not the token: no re-login, no retry",
+  );
+});
+
+test("a provider-session 5xx from an Automation service carries the same hint", async () => {
+  // The four services that answer 500 rather than 403 are the ones a user is
+  // most likely to reach for, so the hint has to cover them too.
+  globalThis.fetch = automationStub(() =>
+    new Response(
+      JSON.stringify({
+        status: 500,
+        error: "Internal Server Error",
+        message:
+          "403 Forbidden from GET https://project-service/rbac-service/api/auth-context",
+      }),
+      { status: 500, statusText: "Internal Server Error" },
+    ),
+  );
+
+  await assert.rejects(
+    () => new VroClient(providerConfig()).listDeployments(),
+    (e) => {
+      assert.match(e.message, /vRO API error: 500/);
+      assert.ok(e.message.includes("tenant-scoped"), e.message);
+      return true;
+    },
+  );
+});
+
+test("a tenant-session Automation 403 blames roles, not VCFA_ORGANIZATION", async () => {
+  globalThis.fetch = automationStub(
+    () => new Response("", { status: 403, statusText: "Forbidden" }),
+  );
+
+  await assert.rejects(
+    () => new VroClient(config()).listProjects(),
+    (e) => {
+      assert.match(e.message, /authorization result/);
+      assert.ok(e.message.includes("role this VCF Automation service"), e.message);
+      assert.ok(
+        !e.message.includes("VCFA_ORGANIZATION=system"),
+        "a tenant user must not be sent to change their organization",
+      );
+      return true;
+    },
+  );
+});
+
+test("a tenant-session Automation 5xx carries no hint", async () => {
+  // Only a provider session makes a server error a known, explainable symptom.
+  globalThis.fetch = automationStub(
+    () =>
+      new Response(JSON.stringify({ status: 500 }), {
+        status: 500,
+        statusText: "Internal Server Error",
+      }),
+  );
+
+  await assert.rejects(
+    () => new VroClient(config()).listCatalogItems(),
+    (e) => {
+      assert.ok(!e.message.includes("Hint:"), e.message);
+      return true;
+    },
+  );
+});
+
+test("a vRO 403 carries the vRO hint, not the Automation one", async () => {
+  globalThis.fetch = automationStub(
+    () =>
+      new Response(JSON.stringify({ message: "no access rights" }), {
+        status: 403,
+        statusText: "Forbidden",
+      }),
+  );
+
+  await assert.rejects(
+    () => new VroClient(providerConfig()).listWorkflows(),
+    (e) => {
+      assert.ok(e.message.includes("vRO permissions"), e.message);
+      assert.ok(!e.message.includes("tenant-scoped"), e.message);
+      return true;
+    },
+  );
 });

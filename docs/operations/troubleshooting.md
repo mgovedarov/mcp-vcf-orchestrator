@@ -25,7 +25,18 @@ For `VCFA_TARGET_PLATFORM=vra8` the login is the vRA 8 bearer-token flow, a vIDM
 - The domain must reach the server as the exact string, spaces included. In an MCP client's JSON `env` block that is simply `"VCFA_ORGANIZATION": "System Domain"` — quotes written inside the value become part of it and the CSP login rejects them with `400`. On a command line the value needs shell quoting (`VCFA_ORGANIZATION="System Domain"`), or the shell treats the word after the space as the command. Surrounding whitespace is trimmed before the login.
 - A `401` from `/vco/api` after a successful login is treated as an expired token: the server renews it (exchanging the cached refresh token, or repeating the CSP login if that is rejected) and retries once before surfacing the error.
 - A `403` from `/vco/api` is not a login problem. Unless it carries a `WWW-Authenticate` challenge, it is reported directly as an authorization result: the vIDM user has no permission for that vRO object or operation.
+
+On the default VCFA platform a `403` is never a login problem either, and is reported directly the same way — a revoked or invalid session answers `401` there, not `403`.
 - A redirect on either login endpoint is reported as a login failure naming the host it points at, and is deliberately not followed — the request body carries the credentials. Point `VCFA_HOST` at the appliance's API endpoint rather than at an SSO portal or a redirecting load balancer.
+
+## Provider Session Cannot Read The Automation Services
+
+`VCFA_ORGANIZATION=system` authenticates a provider/system administrator, and vRO works normally — but the VCF Automation services are tenant-scoped and a provider identity has no auth-context in that stack. Two signatures, both fixed the same way:
+
+- **`403 Forbidden — GET /projects` with an empty body, carrying a hint that names `VCFA_ORGANIZATION`.** `list-projects` and `get-project` are the tools that reach project-service.
+- **`500 Internal Server Error` from the catalog, deployment, template, or subscription tools.** Those services turn the refusal into a server error rather than passing the `403` through; on VCF Automation 9.1 the blueprint-service body names the cause outright, a refused `GET .../rbac-service/api/auth-context`. The same hint is attached whenever the session is a provider one.
+
+Set `VCFA_ORGANIZATION` to the tenant organization's name (its URL slug) and restart the server. vRO (`/vco/api`) works on either session, so a configuration that only drives workflows, actions, configuration elements, resources, and packages can stay on the provider account.
 
 ## TLS Errors In Lab Environments
 

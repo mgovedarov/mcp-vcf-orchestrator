@@ -71,6 +71,29 @@ export const CONFIGURATION_EXPORT_NOT_ACCEPTABLE =
 const VRA8_LOGIN_HINT =
   '\nHint: in VCFA_TARGET_PLATFORM=vra8 mode, VCFA_USERNAME and VCFA_PASSWORD are the vIDM (Workspace ONE Access) credentials and VCFA_ORGANIZATION is the vIDM domain shown on the login page, for example "System Domain" for local users.';
 
+// Appended to a 403, or to a 5xx, from one of the five Automation services
+// while the session is a provider one. Those services are tenant-scoped, and a
+// provider identity has no auth-context in that stack: on VCF Automation 9.1
+// project-service answers 403 while catalog-, deployment-, blueprint- and
+// event-broker-service answer 500, two of them naming the refused
+// rbac-service/api/auth-context call as the cause (VCFO-085). vRO is
+// unaffected and answers 200 on the same session, which is what makes the
+// symptom confusing enough to be worth a hint.
+const PROVIDER_SESSION_AUTOMATION_HINT =
+  "\nHint: the VCF Automation services are tenant-scoped and a provider session carries no tenant context, so VCFA_ORGANIZATION=system cannot read them. Set VCFA_ORGANIZATION to the tenant organization's name (its URL slug) to use the catalog, deployment, template, subscription, and project tools; vRO (/vco/api) works on either session.";
+
+// Appended to an Automation-service 403 on a tenant session: the login worked,
+// so the refusal is about the user's roles, not their credentials.
+const AUTOMATION_AUTHORIZATION_HINT =
+  "\nHint: the login succeeded, so this 403 is an authorization result, not an authentication one — the user lacks the role this VCF Automation service requires. Check the user's roles rather than VCFA_USERNAME, VCFA_PASSWORD, or VCFA_ORGANIZATION.";
+
+// The same reassurance for a vRO 403, worded per platform. Both say the login
+// is not the problem; only the credential variables differ in relevance.
+const VRA8_AUTHORIZATION_HINT =
+  "\nHint: the vRA 8 login succeeded, so this 403 is an authorization result, not an authentication one — the vIDM user has no permission for this vRO object or operation. Check the user's vRO permissions rather than VCFA_USERNAME, VCFA_PASSWORD, or VCFA_ORGANIZATION.";
+const VCFA_AUTHORIZATION_HINT =
+  "\nHint: the VCF Automation login succeeded, so this 403 is an authorization result, not an authentication one — the user has no permission for this vRO object or operation. Check the user's vRO permissions rather than VCFA_USERNAME, VCFA_PASSWORD, or VCFA_ORGANIZATION.";
+
 // The default TypeScript lib's RequestInit lacks undici's dispatcher option.
 type DispatchedRequestInit = RequestInit & { dispatcher?: Agent };
 
@@ -328,16 +351,6 @@ function urlHost(value: string): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-/**
- * Whether a response declares an HTML body. Read from the header, so a caller
- * can branch on it without consuming the body.
- */
-function isHtmlContentType(res: Response): boolean {
-  return (res.headers.get("content-type") ?? "")
-    .toLowerCase()
-    .includes("text/html");
 }
 
 /**
@@ -976,31 +989,32 @@ export class VroHttpClient {
   /**
    * Decide whether a rejected response earns one re-authentication.
    *
-   * A 401 always does. On the vcfa platform a 403 does too: the Cloud API has
-   * answered an unusable session with either status. In vra8 mode an expired
-   * bearer token comes back as a 401 with a WWW-Authenticate challenge, while a
-   * 403 from /vco/api normally means the vIDM user lacks the vRO permission —
-   * repeating the two-step login cannot change that, so a challenge-less 403 is
-   * surfaced immediately instead of costing an extra login and a retry that is
-   * certain to fail the same way. Confirmed against a vRA 8.18 lab under
-   * VCFO-068: an invalid or expired token answers 401 with a
-   * `WWW-Authenticate: Bearer` challenge — on /vco/api and on the Automation
-   * services alike — while a genuine authorization denial answers 403 with no
-   * challenge.
+   * A 401 always does. A 403 never does: it is an authorization result, and
+   * repeating the login cannot change it — the one exception is vra8, where a
+   * 403 carrying a WWW-Authenticate challenge is how an unusable token can
+   * present (VCFO-068, verified against a vRA 8.18 lab: an invalid or expired
+   * token answers 401 with a challenge on /vco/api and on the Automation
+   * services alike, while a genuine denial answers 403 with none).
    *
-   * On vcfa a 403 that arrives as an HTML page is declined for the same
-   * reason: vRO and the Cloud API both answer JSON, so an HTML refusal is the
-   * appliance itself turning the tenant away — its embedded orchestrator, when
-   * the organization's vRO lives elsewhere — which a fresh token cannot
-   * change. The content type says so without consuming the body (VCFO-081).
+   * The vcfa rule used to be the opposite — every non-HTML 403 was retried, on
+   * the VCFO-038 assumption that "the Cloud API has answered an unusable
+   * session with either status". Measured against a VCF Automation 9.1 lab
+   * under VCFO-083/VCFO-085, it does not: a revoked session answers 401
+   * (`The token is not valid or revoked.`), an absent or malformed token
+   * answers 401 on /vco/api and on all five Automation services, and every
+   * observed 403 there was a real denial — a vRO permission refusal, or a
+   * provider session reaching the tenant-scoped Automation services.
+   *
+   * The challenge is deliberately *not* consulted on vcfa. It is not a
+   * discriminator there: /vco/api, catalog-, deployment- and blueprint-service
+   * omit it even on a 401, while project-service sends `WWW-Authenticate:
+   * Bearer` on a 403 that is a genuine denial — so keying on it would retry
+   * exactly the case this rule exists to stop.
    */
   private shouldReauthenticate(res: Response): boolean {
     if (res.status === 401) return true;
     if (res.status !== 403) return false;
-    if (this.targetPlatform === "vra8") {
-      return res.headers.has("www-authenticate");
-    }
-    return !isHtmlContentType(res);
+    return this.targetPlatform === "vra8" && res.headers.has("www-authenticate");
   }
 
   /**
@@ -1224,8 +1238,17 @@ export class VroHttpClient {
    *   HTML 403 from catalog-, deployment-, blueprint-, or project-service
    *   would be pointing the operator at a variable that cannot affect it
    *   (VCFO-081).
-   * - A vra8 403 that shouldReauthenticate declined to retry: the login
-   *   worked and the token is valid — the vIDM user simply has no permission.
+   * - A vcfa refusal from an Automation service: a provider session cannot
+   *   read those at all, so a 403 or a 5xx there names VCFA_ORGANIZATION,
+   *   while a tenant session's 403 is about the user's roles (VCFO-085). The
+   *   5xx arm is limited to provider sessions because only there is a server
+   *   error the known symptom rather than an actual fault.
+   * - A 403 that shouldReauthenticate declined to retry: the login worked and
+   *   the token is valid — the user simply has no permission. On vcfa that is
+   *   every vRO 403 (VCFO-083); on vra8, one carrying no challenge.
+   *
+   * Decided from the status, the headers and the base alone: `text` is the
+   * body apiError already read and sanitized, and a 5xx body can be large.
    */
   private apiErrorHint(res: Response, text: string, base: string): string {
     if (res.status >= 300 && res.status < 400) {
@@ -1242,11 +1265,22 @@ export class VroHttpClient {
       return "\nHint: the Automation appliance answered 403 with an HTML page rather than a vRO JSON error. If this organization uses an external vRO appliance, the appliance's embedded orchestrator is the wrong target for /vco/api: set VCFA_VRO_HOST to the external vRO's hostname. Otherwise check the user's vRO permissions.";
     }
     if (
-      res.status === 403 &&
-      this.targetPlatform === "vra8" &&
-      !this.shouldReauthenticate(res)
+      this.targetPlatform === "vcfa" &&
+      this.automationServiceFor(base) !== undefined
     ) {
-      return "\nHint: the vRA 8 login succeeded, so this 403 is an authorization result, not an authentication one — the vIDM user has no permission for this vRO object or operation. Check the user's vRO permissions rather than VCFA_USERNAME, VCFA_PASSWORD, or VCFA_ORGANIZATION.";
+      const providerSession =
+        this.login.kind === "vcfa" && this.login.isProviderLogin;
+      const serverError = res.status >= 500 && res.status < 600;
+      if (providerSession && (res.status === 403 || serverError)) {
+        return PROVIDER_SESSION_AUTOMATION_HINT;
+      }
+      if (res.status === 403) return AUTOMATION_AUTHORIZATION_HINT;
+      return "";
+    }
+    if (res.status === 403 && !this.shouldReauthenticate(res)) {
+      return this.targetPlatform === "vra8"
+        ? VRA8_AUTHORIZATION_HINT
+        : VCFA_AUTHORIZATION_HINT;
     }
     return "";
   }
