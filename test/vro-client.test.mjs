@@ -1389,6 +1389,93 @@ test("provider 401 failure hints at provider account verification", async () => 
   );
 });
 
+// A redirecting VCFA_HOST — an external vRO appliance, an SSO portal, a load
+// balancer — used to surface as "token header was missing" once the redirect
+// was followed to an HTML page (VCFO-082). These stub a plain 302 Response, so
+// they cover the message routing rather than undici's manual-redirect
+// semantics, mirroring the vra8 login redirect tests below.
+test("the vcfa session POST does not follow a redirect and names its target", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    return new Response("", {
+      status: 302,
+      statusText: "Found",
+      headers: {
+        Location: "https://ui.example.invalid/orchestration-ui?ticket=secret",
+      },
+    });
+  };
+
+  const client = new VroClient(config());
+  await assert.rejects(
+    () => client.listWorkflows(),
+    (e) => {
+      assert.match(e.message, /VCF authentication failed: 302 Found/);
+      assert.ok(
+        e.message.includes("ui.example.invalid"),
+        "should name the redirect host",
+      );
+      assert.ok(
+        !e.message.includes("ticket=secret"),
+        "should not echo the redirect URL query",
+      );
+      return true;
+    },
+  );
+  assert.equal(calls.length, 1, "the workflow request must not run after a redirect");
+  assert.equal(
+    calls[0].init.redirect,
+    "manual",
+    "the session POST must not follow redirects",
+  );
+});
+
+test("a relative vcfa login redirect is reported without naming a host", async () => {
+  globalThis.fetch = async () =>
+    new Response("", {
+      status: 302,
+      statusText: "Found",
+      headers: { Location: "/orchestration-ui" },
+    });
+
+  const client = new VroClient(config());
+  await assert.rejects(
+    () => client.listWorkflows(),
+    (e) => {
+      assert.match(e.message, /VCF authentication failed: 302 Found/);
+      assert.match(e.message, /answered with a redirect, which is not followed/);
+      return true;
+    },
+  );
+});
+
+test("a 2xx session response without the token header names the status and content type", async () => {
+  globalThis.fetch = async () =>
+    new Response("<html><body>Sign in</body></html>", {
+      status: 200,
+      statusText: "OK",
+      headers: { "content-type": "text/html; charset=utf-8" },
+    });
+
+  const client = new VroClient(config());
+  await assert.rejects(
+    () => client.listWorkflows(),
+    (e) => {
+      assert.match(
+        e.message,
+        /VCF authentication failed: 200 OK did not carry the x-vmware-vcloud-access-token header/,
+      );
+      assert.ok(
+        e.message.includes("content-type: text/html; charset=utf-8"),
+        "should name the declared content type",
+      );
+      assert.ok(!e.message.includes("Sign in"), "should not echo the response body");
+      return true;
+    },
+  );
+});
+
 // The vra8 support surface after the VCFO-068 (vRO 8.18.1) and VCFO-070 (vRA
 // 8.18 Automation services) lab verifications: every Automation-service read,
 // the whole vRO surface, and the blueprint-service and event-broker writes go
