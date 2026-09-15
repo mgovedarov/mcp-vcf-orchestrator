@@ -97,6 +97,27 @@ Run the matching preflight tool first. Common issues include:
 - unsafe file name or path
 - package contents that include malformed nested artifacts
 
+## 409 Conflict On An Element Delete
+
+`delete-workflow`, `delete-action`, and `delete-configuration` can answer `409` with vRO reporting the element as in use. Right after `delete-package` with `deleteContents: false`, that is almost always a transient release race rather than a genuine reference: the package release takes a couple of seconds to settle, and the same delete then succeeds.
+
+Retry the plain delete first. Only if the conflict persists should you pass `force: true`, which sends vRO's own `?force=true` and skips the reference check — it does not establish that nothing references the element, so confirm the impact before using it. The error carries this hint for the same reason.
+
+If the conflict survives a `force`, the element genuinely has live references. Find them before deleting: list the package contents, or check the workflows and actions in the same category.
+
+## 406 On A Configuration Element Export
+
+`export-configuration-file` answers `406 Not Acceptable` because no vRO tested, on either platform, serves a single configuration element as a `.vsoconf` artifact. `application/zip`, `application/vcoobject+zip`, and `application/octet-stream` are all refused, while `*/*` returns the element as JSON. Workflow, action, and package exports succeed on those same hosts, so the refusal is specific to configuration elements rather than to the host or the identity.
+
+In `vra8` mode the request is refused pre-emptively. On every other platform it is sent and the `406` is reported with the same guidance rather than as the server's HTML error page.
+
+Two routes work instead:
+
+- `get-configuration` to read the element, including its attribute values.
+- `add-configuration-to-project-package` followed by `export-project-package` to get it into a file.
+
+`prepare-artifact-promotion` reports a configuration backup as skipped in `vra8` mode for the same reason and still returns its report. On other platforms that backup attempts the export and surfaces the refusal.
+
 ## Catalog Or Template Ambiguity
 
 Catalog items, templates, and deployments can be project-scoped. If a search returns no match or several plausible matches, inspect with `get-catalog-item`, `get-template`, or `get-deployment` before creating or updating anything.

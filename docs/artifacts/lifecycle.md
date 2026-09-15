@@ -49,6 +49,8 @@ Export live artifacts before modifying or replacing them:
 
 Export targets must be plain file names under the configured artifact directory. Existing targets require `overwrite: true`.
 
+`export-configuration-file` is the exception: no vRO tested, on either platform, serves a single configuration element as a `.vsoconf` artifact. vRA 8 is refused pre-emptively, and vRO 9.1 — standalone and appliance-embedded alike — answers the request with `406`. To capture a configuration element before replacing it, read it with `get-configuration`, or add it to the project package with `add-configuration-to-project-package` and export that package instead. `prepare-artifact-promotion` skips the configuration backup in `vra8` mode for the same reason; on other platforms it attempts the export and surfaces the `406`.
+
 ## 4. Create Or Update Locally
 
 Use `scaffold-workflow-file` to generate `.workflow` artifacts from structured metadata and linear scriptable tasks.
