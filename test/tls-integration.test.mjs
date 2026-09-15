@@ -50,10 +50,18 @@ async function startSelfSignedVcfaStub() {
   // Captures the last multipart upload so a test can assert the body was
   // serialized as real multipart/form-data rather than a stringified FormData.
   const captured = { contentType: null, body: null };
+  // Every request this stub saw, so a two-host test can prove which appliance
+  // each call reached and which token it carried.
+  const requests = [];
 
   const server = https.createServer(
     { key: await readFile(keyPath), cert: await readFile(certPath) },
     (req, res) => {
+      requests.push({
+        method: req.method,
+        url: req.url,
+        authorization: req.headers.authorization,
+      });
       if (req.method === "POST" && req.url === "/cloudapi/1.0.0/sessions") {
         res.writeHead(200, { "x-vmware-vcloud-access-token": "integration-token" });
         res.end();
@@ -86,6 +94,7 @@ async function startSelfSignedVcfaStub() {
     // address the stub listens on and avoid any localhost -> ::1 resolution.
     host: `127.0.0.1:${server.address().port}`,
     captured,
+    requests,
     async close() {
       server.closeAllConnections?.();
       await new Promise((resolve) => server.close(resolve));
@@ -112,6 +121,58 @@ test("ignoreTls client completes a real TLS handshake with a self-signed host", 
   } finally {
     await client.close();
     await stub.close();
+    if (previous !== undefined) {
+      process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = previous;
+    }
+  }
+});
+
+test("ignoreTls client splits login and /vco/api across two self-signed hosts", { skip }, async () => {
+  // VCFO-081: one dispatcher serves both origins. The login must reach the
+  // Automation host and the vRO call the vRO host, carrying the Automation
+  // host's token, with no request crossing over.
+  const previous = process.env["NODE_TLS_REJECT_UNAUTHORIZED"];
+  delete process.env["NODE_TLS_REJECT_UNAUTHORIZED"];
+  const automation = await startSelfSignedVcfaStub();
+  const vro = await startSelfSignedVcfaStub();
+  const client = new VroClient(
+    config(automation.host, { ignoreTls: true, vroHost: vro.host }),
+  );
+
+  try {
+    const workflows = await client.listWorkflows();
+    assert.equal(workflows.total, 0);
+
+    assert.ok(
+      automation.requests.some(
+        (r) => r.method === "POST" && r.url === "/cloudapi/1.0.0/sessions",
+      ),
+      "the login goes to the Automation host",
+    );
+    assert.ok(
+      !automation.requests.some((r) => r.url.startsWith("/vco/api")),
+      "no vRO call reaches the Automation host",
+    );
+    const vroCalls = vro.requests.filter((r) => r.url.startsWith("/vco/api/workflows"));
+    assert.equal(vroCalls.length, 1, "the vRO call goes to the vRO host");
+    assert.equal(
+      vroCalls[0].authorization,
+      "Bearer integration-token",
+      "the Automation-issued token is presented to the vRO host as-is",
+    );
+    assert.ok(
+      !vro.requests.some((r) => r.url.startsWith("/cloudapi")),
+      "no login reaches the vRO host",
+    );
+    assert.equal(
+      process.env["NODE_TLS_REJECT_UNAUTHORIZED"],
+      undefined,
+      "TLS relaxation must not leak into the process-wide env var",
+    );
+  } finally {
+    await client.close();
+    await vro.close();
+    await automation.close();
     if (previous !== undefined) {
       process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = previous;
     }

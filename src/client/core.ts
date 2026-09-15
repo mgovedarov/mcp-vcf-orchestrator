@@ -314,6 +314,45 @@ function redirectHost(location: string): string | undefined {
 }
 
 /**
+ * Name the host a transport-level failure was addressed to. undici reports
+ * DNS, connection, and TLS failures as a bare `TypeError: fetch failed` with
+ * the detail on `cause`, and the tools render only `message`, so a typo in a
+ * hostname used to surface as "fetch failed" with no host at all — terse with
+ * one host, ambiguous once /vco/api can live on a second one. The original
+ * error is kept as `cause` for callers that inspect it (VCFO-081).
+ */
+function describeTransportFailure(
+  url: string,
+  error: unknown,
+  timeoutMs: number,
+): Error {
+  const host = redirectHost(url) ?? url;
+  const outer = error instanceof Error ? error : undefined;
+  if (outer?.name === "AbortError") {
+    return Object.assign(
+      new Error(`Request to ${host} timed out after ${timeoutMs} ms`),
+      { cause: error },
+    );
+  }
+  const inner: unknown = outer?.cause;
+  const code =
+    inner !== null &&
+    typeof inner === "object" &&
+    "code" in inner &&
+    typeof inner.code === "string"
+      ? inner.code
+      : undefined;
+  const reason =
+    code ??
+    (inner instanceof Error ? inner.message : undefined) ??
+    outer?.message ??
+    String(error);
+  return Object.assign(new Error(`Request to ${host} failed: ${reason}`), {
+    cause: error,
+  });
+}
+
+/**
  * Describe why a login response was unusable, in a form that is safe to
  * surface. A redirect names the host it points at; another non-2xx reports its
  * status plus the sanitized body — JSON diagnostic fields and gateway HTML
@@ -505,6 +544,10 @@ export class VroHttpClient {
   readonly contextDir: string;
 
   private readonly versionsUrl: string;
+  // The external vRO host, when one is configured and differs from the
+  // Automation host: only /vco/api is served there, so a request label can say
+  // which appliance answered. Undefined means the embedded vRO (VCFO-081).
+  private readonly vroHost: string | undefined;
   private pinnedApiVersion: string | undefined;
   private negotiatedApiVersion: string | null = null;
   // Credential material for exactly one platform's login flow, so the process
@@ -536,13 +579,28 @@ export class VroHttpClient {
     // back as an opaque 400 or 401 on a value that looks correct.
     const config: VroClientConfig = {
       ...rawConfig,
+      host: rawConfig.host.trim(),
       organization: rawConfig.organization.trim(),
+      // Blank counts as unset so an empty VCFA_VRO_HOST does not become
+      // https:///vco/api. A host with surrounding whitespace could never have
+      // connected, so trimming both hosts changes no working configuration.
+      vroHost: rawConfig.vroHost?.trim() || undefined,
     };
     this.targetPlatform = normalizeTargetPlatform(config.targetPlatform);
     this.dispatcher = config.ignoreTls
       ? new Agent({ connect: { rejectUnauthorized: false } })
       : undefined;
-    this.baseUrl = `https://${config.host}/vco/api`;
+    // An external vRO appliance serves /vco/api on its own host. Only that base
+    // follows it: the session/CSP/IaaS logins, GET /api/versions, and the five
+    // Automation services stay on config.host, and the token the Automation
+    // appliance mints is sent verbatim to the vRO host — verified live on VCF
+    // Automation 9.1 with an external vRO 9.1 (VCFO-081). An override equal to
+    // config.host is no split at all and is treated as unset.
+    this.vroHost =
+      config.vroHost !== undefined && config.vroHost !== config.host
+        ? config.vroHost
+        : undefined;
+    this.baseUrl = `https://${this.vroHost ?? config.host}/vco/api`;
     this.eventBrokerBaseUrl = `https://${config.host}/event-broker/api`;
     this.catalogBaseUrl = `https://${config.host}/catalog/api`;
     this.deploymentBaseUrl = `https://${config.host}/deployment/api`;
@@ -638,7 +696,12 @@ export class VroHttpClient {
         signal: controller.signal,
         dispatcher: this.dispatcher,
       };
-      const res = await requestFetch()(url, dispatchedInit);
+      let res: Response;
+      try {
+        res = await requestFetch()(url, dispatchedInit);
+      } catch (error) {
+        throw describeTransportFailure(url, error, timeoutMs);
+      }
       return await consume(res);
     } finally {
       clearTimeout(timeoutId);
@@ -882,6 +945,13 @@ export class VroHttpClient {
    *
    * Callers receive the raw `Response` and are responsible for checking
    * `res.ok` and reading the body.
+   *
+   * Redirects are not followed. Fetch strips `Authorization` on a cross-origin
+   * redirect, so following one can only ever reach a UI or SSO page
+   * unauthenticated, and a followed 302 then masquerades as a 200 HTML body
+   * that fails JSON parsing with no host named. Surfacing the 3xx itself lets
+   * apiErrorHint name the redirect target and the variable to check, which is
+   * how a VCFA_VRO_HOST pointing at the wrong appliance shows up (VCFO-081).
    */
   async authenticatedFetch(
     url: string,
@@ -895,7 +965,12 @@ export class VroHttpClient {
     // The response is handed back unread, so the deadline covers connecting
     // and the response headers; callers read the body themselves.
     const doFetch = (): Promise<Response> =>
-      this.fetchWithTimeout(url, init, async (res) => res, timeout);
+      this.fetchWithTimeout(
+        url,
+        { ...init, redirect: "manual" },
+        async (res) => res,
+        timeout,
+      );
 
     const res = await doFetch();
 
@@ -964,6 +1039,17 @@ export class VroHttpClient {
     if (refusal !== null) throw new Error(refusal);
   }
 
+  /**
+   * `GET /workflows`, or `GET /workflows on vro.example.com` once an external
+   * vRO host is configured, so a log line or an error says which appliance
+   * answered. Applied to every request, Automation services included; when the
+   * hosts are not split the label is unchanged (VCFO-081).
+   */
+  private requestLabel(method: string, path: string, base: string): string {
+    const label = `${method} ${path}`;
+    return this.vroHost ? `${label} on ${new URL(base).host}` : label;
+  }
+
   private async send(
     method: string,
     path: string,
@@ -971,8 +1057,10 @@ export class VroHttpClient {
     overrideBaseUrl?: string,
   ): Promise<{ res: Response; text: string }> {
     this.assertOperationSupported(method, overrideBaseUrl);
-    const url = `${overrideBaseUrl ?? this.baseUrl}${path}`;
-    console.error(`[vro-client] ${method} ${path}`);
+    const base = overrideBaseUrl ?? this.baseUrl;
+    const url = `${base}${path}`;
+    const label = this.requestLabel(method, path, base);
+    console.error(`[vro-client] ${label}`);
 
     const headers: Record<string, string> = {
       Accept: "application/json",
@@ -992,7 +1080,7 @@ export class VroHttpClient {
     );
 
     if (!res.ok) {
-      throw await this.apiError(res, `${method} ${path}`);
+      throw await this.apiError(res, label);
     }
 
     return { res, text: await res.text() };
@@ -1010,19 +1098,40 @@ export class VroHttpClient {
     const text = await res.text().catch(() => "");
     return Object.assign(
       new Error(
-        `vRO API error: ${formatStatus(res)} — ${label}\n${sanitizeErrorBody(text, res)}${this.apiErrorHint(res)}`,
+        `vRO API error: ${formatStatus(res)} — ${label}\n${sanitizeErrorBody(text, res)}${this.apiErrorHint(res, text)}`,
       ),
       { status: res.status },
     );
   }
 
   /**
-   * Extra guidance for a status that is easy to misread as a login problem: a
-   * 403 that shouldReauthenticate declined to retry. That is only ever the
-   * vra8 challenge-less 403, which means the login worked and the token is
-   * valid — the vIDM user simply has no permission here.
+   * Extra guidance for a status that is easy to misread as a login problem.
+   *
+   * - A 3xx: authenticatedFetch does not follow redirects, so one surfaces
+   *   here with its status. The configured host is then not the API endpoint
+   *   — an SSO portal, a UI, or a load balancer — and the hint names the
+   *   redirect target (host only, never the query, which can carry a ticket).
+   * - A vcfa 403 with an HTML body while no external vRO host is configured:
+   *   the Automation appliance's embedded orchestrator refusing a tenant whose
+   *   organization is wired to an external vRO. vRO itself answers JSON, so
+   *   the HTML body is the tell; the wording is hedged because the signature
+   *   was observed on one appliance (VCFO-081).
+   * - A vra8 403 that shouldReauthenticate declined to retry: the login
+   *   worked and the token is valid — the vIDM user simply has no permission.
    */
-  private apiErrorHint(res: Response): string {
+  private apiErrorHint(res: Response, text: string): string {
+    if (res.status >= 300 && res.status < 400) {
+      const host = redirectHost(res.headers.get("location") ?? "");
+      return `\nHint: the API answered with a redirect${host ? ` to ${host}` : ""}, which is not followed. Verify the configured host addresses the API endpoint directly — VCFA_HOST, or VCFA_VRO_HOST for /vco/api — with no SSO or load-balancer redirect in front of it.`;
+    }
+    if (
+      res.status === 403 &&
+      this.targetPlatform === "vcfa" &&
+      this.vroHost === undefined &&
+      summarizeHtmlErrorPage(text) !== undefined
+    ) {
+      return "\nHint: the Automation appliance answered 403 with an HTML page rather than a vRO JSON error. If this organization uses an external vRO appliance, the appliance's embedded orchestrator is the wrong target for /vco/api: set VCFA_VRO_HOST to the external vRO's hostname. Otherwise check the user's vRO permissions.";
+    }
     if (res.status === 403 && !this.shouldReauthenticate(res)) {
       return "\nHint: the vRA 8 login succeeded, so this 403 is an authorization result, not an authentication one — the vIDM user has no permission for this vRO object or operation. Check the user's vRO permissions rather than VCFA_USERNAME, VCFA_PASSWORD, or VCFA_ORGANIZATION.";
     }

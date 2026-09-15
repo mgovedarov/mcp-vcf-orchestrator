@@ -41,9 +41,54 @@ function getRequiredEnv(name: string): string {
   return value;
 }
 
+/**
+ * Read a host[:port] environment variable. Both hosts are trimmed, and a blank
+ * optional value counts as unset, so an empty `VCFA_VRO_HOST=` line in an MCP
+ * client's env block does not become `https:///vco/api`. A URL scheme is
+ * rejected for either variable — `https://host` would build
+ * `https://https://host/...`, which has never connected — while a path is
+ * rejected only for the vRO host: a path-prefixed reverse proxy in VCFA_HOST
+ * could plausibly have worked, and this must not break it (VCFO-081).
+ */
+function readHostEnv(
+  name: string,
+  options: { required: true; strict: boolean },
+): string;
+function readHostEnv(
+  name: string,
+  options: { required: false; strict: boolean },
+): string | undefined;
+function readHostEnv(
+  name: string,
+  options: { required: boolean; strict: boolean },
+): string | undefined {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    if (!options.required) return undefined;
+    console.error(`ERROR: Required environment variable ${name} is not set.`);
+    process.exit(1);
+  }
+  const rejected = options.strict
+    ? value.includes("://") || /[\/@?#\s]/.test(value)
+    : value.includes("://");
+  if (rejected) {
+    console.error(
+      options.strict
+        ? `ERROR: ${name} must be a hostname or host:port (for example vro.example.com or vro.example.com:8281), not a URL: remove the scheme and any path.`
+        : `ERROR: ${name} must be a hostname or host:port (for example vcfa.example.com), not a URL: remove the scheme.`,
+    );
+    process.exit(1);
+  }
+  return value;
+}
+
 async function main(): Promise<void> {
   // Read configuration from environment variables
-  const host = getRequiredEnv("VCFA_HOST");
+  const host = readHostEnv("VCFA_HOST", { required: true, strict: false });
+  const vroHost = readHostEnv("VCFA_VRO_HOST", {
+    required: false,
+    strict: true,
+  });
   const username = getRequiredEnv("VCFA_USERNAME");
   const organization = getRequiredEnv("VCFA_ORGANIZATION");
   const password = getRequiredEnv("VCFA_PASSWORD");
@@ -66,10 +111,16 @@ async function main(): Promise<void> {
       "[vcfa-server] WARNING: TLS certificate verification disabled for VCFA requests (VCFA_IGNORE_TLS=true)",
     );
   }
+  if (vroHost) {
+    console.error(
+      `[vcfa-server] VCFA_VRO_HOST=${vroHost}: vRO API requests (/vco/api) are sent to this host; authentication and the Automation services use VCFA_HOST=${host}.`,
+    );
+  }
 
   // Create vRO API client
   const client = new VroClient({
     host,
+    vroHost,
     username,
     organization,
     password,
