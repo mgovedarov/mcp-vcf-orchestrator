@@ -5233,6 +5233,39 @@ test("a vcfa 403 on an already cached token still does not re-authenticate", asy
   assert.equal(calls.filter((c) => c.url.includes("/vco/api/")).length, 2);
 });
 
+test("a vcfa 403 carrying a WWW-Authenticate challenge still does not re-login", async () => {
+  // #186 proposed keying the vcfa rule on the challenge, the way vra8 does.
+  // The lab says it is not a discriminator there: project-service sends
+  // `WWW-Authenticate: Bearer` on a 403 that is a genuine denial, while
+  // /vco/api and the catalog, deployment and blueprint services omit it even
+  // on a 401. This pins the decision so re-introducing the check fails here.
+  let authCount = 0;
+  const calls = [];
+  globalThis.fetch = async (url) => {
+    calls.push({ url: String(url) });
+    if (String(url).includes("/cloudapi/1.0.0/sessions")) {
+      authCount++;
+      return authResponse();
+    }
+    return new Response("", {
+      status: 403,
+      statusText: "Forbidden",
+      headers: { "WWW-Authenticate": 'Bearer error="insufficient_scope"' },
+    });
+  };
+
+  await assert.rejects(
+    () => new VroClient(config()).listProjects(),
+    /vRO API error: 403 Forbidden/,
+  );
+  assert.equal(authCount, 1, "the challenge is not consulted on vcfa");
+  assert.equal(
+    calls.filter((c) => c.url.includes("/project-service/")).length,
+    1,
+    "nor does it earn a retry",
+  );
+});
+
 test("a vcfa 401 still refreshes the token, so the 403 rule does not disable recovery", async () => {
   const calls = [];
   let authCount = 0;
@@ -6515,9 +6548,19 @@ test("the external-vRO hint is not shown once vroHost is set, nor on vra8", asyn
 // the tenant-scoped Automation stack. On VCF Automation 9.1 project-service
 // answers 403 while catalog-, deployment-, blueprint- and event-broker-service
 // answer 500; vRO answers 200 on the same session.
-const automationStub = (respond) => async (url) => {
-  if (String(url).includes("/cloudapi/1.0.0/sessions")) return authResponse();
-  return respond(String(url));
+// The session branch lives here, so the login counter does too: every test
+// built on this stub can assert the refusal cost no second login, instead of
+// only the one below that inlines its own stub to count them.
+const automationStub = (respond) => {
+  const counts = { auth: 0 };
+  const stub = async (url) => {
+    if (String(url).includes("/cloudapi/1.0.0/sessions")) {
+      counts.auth++;
+      return authResponse();
+    }
+    return respond(String(url));
+  };
+  return Object.assign(stub, { counts });
 };
 const providerConfig = (overrides) =>
   config({ organization: "system", ...overrides });
@@ -6548,10 +6591,10 @@ test("a provider-session 403 from an Automation service names VCFA_ORGANIZATION"
   );
 });
 
-test("a provider-session 5xx from an Automation service carries the same hint", async () => {
+test("a provider-session 500 from an Automation service carries the same hint", async () => {
   // The four services that answer 500 rather than 403 are the ones a user is
   // most likely to reach for, so the hint has to cover them too.
-  globalThis.fetch = automationStub(() =>
+  const stub = automationStub(() =>
     new Response(
       JSON.stringify({
         status: 500,
@@ -6562,6 +6605,7 @@ test("a provider-session 5xx from an Automation service carries the same hint", 
       { status: 500, statusText: "Internal Server Error" },
     ),
   );
+  globalThis.fetch = stub;
 
   await assert.rejects(
     () => new VroClient(providerConfig()).listDeployments(),
@@ -6571,12 +6615,45 @@ test("a provider-session 5xx from an Automation service carries the same hint", 
       return true;
     },
   );
+  assert.equal(stub.counts.auth, 1, "no re-login, no retry");
+});
+
+test("a provider-session 502, 503 or 504 is not blamed on VCFA_ORGANIZATION", async () => {
+  // The measured symptom is a 500 from the service itself. A gateway status
+  // comes from whatever fronts it and means the appliance is down or slow, so
+  // sending the operator to change a correct organization would be wrong.
+  for (const [status, statusText] of [
+    [502, "Bad Gateway"],
+    [503, "Service Unavailable"],
+    [504, "Gateway Timeout"],
+  ]) {
+    const stub = automationStub(
+      () =>
+        new Response("<html><body>upstream unavailable</body></html>", {
+          status,
+          statusText,
+          headers: { "Content-Type": "text/html" },
+        }),
+    );
+    globalThis.fetch = stub;
+
+    await assert.rejects(
+      () => new VroClient(providerConfig()).listDeployments(),
+      (e) => {
+        assert.match(e.message, new RegExp(`vRO API error: ${status} `));
+        assert.ok(!e.message.includes("Hint:"), e.message);
+        return true;
+      },
+    );
+    assert.equal(stub.counts.auth, 1, `${status} must not cost a re-login`);
+  }
 });
 
 test("a tenant-session Automation 403 blames roles, not VCFA_ORGANIZATION", async () => {
-  globalThis.fetch = automationStub(
+  const stub = automationStub(
     () => new Response("", { status: 403, statusText: "Forbidden" }),
   );
+  globalThis.fetch = stub;
 
   await assert.rejects(
     () => new VroClient(config()).listProjects(),
@@ -6590,17 +6667,43 @@ test("a tenant-session Automation 403 blames roles, not VCFA_ORGANIZATION", asyn
       return true;
     },
   );
+  assert.equal(stub.counts.auth, 1, "no re-login, no retry");
 });
 
-test("a tenant-session Automation 5xx carries no hint", async () => {
+test("a vra8 Automation 403 blames roles too, not vRO permissions", async () => {
+  // VCFA_VRO_HOST aside, project-service is not vRO: the hint that sends the
+  // operator to audit vRO permissions names the wrong system on either
+  // platform, so the role wording is not gated on vcfa.
+  const counts = { csp: 0, iaas: 0 };
+  const login = vra8LoginStub(counts);
+  globalThis.fetch = async (url) => {
+    const loginResponse = login(url);
+    if (loginResponse) return loginResponse;
+    return new Response("", { status: 403, statusText: "Forbidden" });
+  };
+
+  await assert.rejects(
+    () => new VroClient(vra8Config()).listProjects(),
+    (e) => {
+      assert.match(e.message, /vRO API error: 403 Forbidden — GET \/projects/);
+      assert.ok(e.message.includes("role this VCF Automation service"), e.message);
+      assert.ok(!e.message.includes("vRO permissions"), e.message);
+      return true;
+    },
+  );
+  assert.equal(counts.csp, 1, "a denial costs no second login");
+});
+
+test("a tenant-session Automation 500 carries no hint", async () => {
   // Only a provider session makes a server error a known, explainable symptom.
-  globalThis.fetch = automationStub(
+  const stub = automationStub(
     () =>
       new Response(JSON.stringify({ status: 500 }), {
         status: 500,
         statusText: "Internal Server Error",
       }),
   );
+  globalThis.fetch = stub;
 
   await assert.rejects(
     () => new VroClient(config()).listCatalogItems(),
@@ -6609,16 +6712,18 @@ test("a tenant-session Automation 5xx carries no hint", async () => {
       return true;
     },
   );
+  assert.equal(stub.counts.auth, 1, "no re-login, no retry");
 });
 
 test("a vRO 403 carries the vRO hint, not the Automation one", async () => {
-  globalThis.fetch = automationStub(
+  const stub = automationStub(
     () =>
       new Response(JSON.stringify({ message: "no access rights" }), {
         status: 403,
         statusText: "Forbidden",
       }),
   );
+  globalThis.fetch = stub;
 
   await assert.rejects(
     () => new VroClient(providerConfig()).listWorkflows(),
@@ -6628,12 +6733,13 @@ test("a vRO 403 carries the vRO hint, not the Automation one", async () => {
       return true;
     },
   );
+  assert.equal(stub.counts.auth, 1, "no re-login, no retry");
 });
 
 test("a redirect from an Automation service still gets the redirect hint", async () => {
   // The 3xx branch runs before the Automation one, so a misconfigured host is
   // still diagnosed as a redirect rather than as a tenant-scoping refusal.
-  globalThis.fetch = automationStub(
+  const stub = automationStub(
     () =>
       new Response("", {
         status: 302,
@@ -6641,6 +6747,7 @@ test("a redirect from an Automation service still gets the redirect hint", async
         headers: { location: "https://sso.example.test/login?ticket=secret" },
       }),
   );
+  globalThis.fetch = stub;
 
   await assert.rejects(
     () => new VroClient(providerConfig()).listProjects(),
@@ -6652,4 +6759,5 @@ test("a redirect from an Automation service still gets the redirect hint", async
       return true;
     },
   );
+  assert.equal(stub.counts.auth, 1, "no re-login, no retry");
 });

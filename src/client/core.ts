@@ -71,28 +71,52 @@ export const CONFIGURATION_EXPORT_NOT_ACCEPTABLE =
 const VRA8_LOGIN_HINT =
   '\nHint: in VCFA_TARGET_PLATFORM=vra8 mode, VCFA_USERNAME and VCFA_PASSWORD are the vIDM (Workspace ONE Access) credentials and VCFA_ORGANIZATION is the vIDM domain shown on the login page, for example "System Domain" for local users.';
 
-// Appended to a 403, or to a 5xx, from one of the five Automation services
+// Appended to a 403, or to a 500, from one of the five Automation services
 // while the session is a provider one. Those services are tenant-scoped, and a
 // provider identity has no auth-context in that stack: on VCF Automation 9.1
 // project-service answers 403 while catalog-, deployment-, blueprint- and
 // event-broker-service answer 500, two of them naming the refused
 // rbac-service/api/auth-context call as the cause (VCFO-085). vRO is
 // unaffected and answers 200 on the same session, which is what makes the
-// symptom confusing enough to be worth a hint.
+// symptom confusing enough to be worth a hint. The server-error arm is that
+// one status, not the 5xx range: 502, 503 and 504 are emitted by whatever sits
+// in front of the service rather than by the service itself, so they cannot
+// carry this signature and must not be diagnosed as a configuration mistake.
 const PROVIDER_SESSION_AUTOMATION_HINT =
-  "\nHint: the VCF Automation services are tenant-scoped and a provider session carries no tenant context, so VCFA_ORGANIZATION=system cannot read them. Set VCFA_ORGANIZATION to the tenant organization's name (its URL slug) to use the catalog, deployment, template, subscription, and project tools; vRO (/vco/api) works on either session.";
+  "\nHint: the VCF Automation services are tenant-scoped and a provider session carries no tenant context, so VCFA_ORGANIZATION=system cannot read them. Set VCFA_ORGANIZATION to the tenant organization's name (its URL slug) to use the catalog, deployment, template, event topic, subscription, and project tools; vRO (/vco/api) works on either session.";
 
-// Appended to an Automation-service 403 on a tenant session: the login worked,
-// so the refusal is about the user's roles, not their credentials.
-const AUTOMATION_AUTHORIZATION_HINT =
-  "\nHint: the login succeeded, so this 403 is an authorization result, not an authentication one — the user lacks the role this VCF Automation service requires. Check the user's roles rather than VCFA_USERNAME, VCFA_PASSWORD, or VCFA_ORGANIZATION.";
+// The reassurance every settled 403 carries: one sentence with three slots —
+// which login ran, what was denied, and what to audit instead. The shared half
+// says the credentials are not the problem, so it is written once; a variant
+// differs only in its slots.
+const authorizationHint = (
+  login: string,
+  denied: string,
+  check: string,
+): string =>
+  `\nHint: the ${login} succeeded, so this 403 is an authorization result, not an authentication one — ${denied}. Check ${check} rather than VCFA_USERNAME, VCFA_PASSWORD, or VCFA_ORGANIZATION.`;
+
+// Appended to an Automation-service 403 on a session that is not a provider
+// one: the login worked, so the refusal is about the user's roles, not their
+// credentials. Names no platform, because both reach these services.
+const AUTOMATION_AUTHORIZATION_HINT = authorizationHint(
+  "login",
+  "the user lacks the role this VCF Automation service requires",
+  "the user's roles",
+);
 
 // The same reassurance for a vRO 403, worded per platform. Both say the login
 // is not the problem; only the credential variables differ in relevance.
-const VRA8_AUTHORIZATION_HINT =
-  "\nHint: the vRA 8 login succeeded, so this 403 is an authorization result, not an authentication one — the vIDM user has no permission for this vRO object or operation. Check the user's vRO permissions rather than VCFA_USERNAME, VCFA_PASSWORD, or VCFA_ORGANIZATION.";
-const VCFA_AUTHORIZATION_HINT =
-  "\nHint: the VCF Automation login succeeded, so this 403 is an authorization result, not an authentication one — the user has no permission for this vRO object or operation. Check the user's vRO permissions rather than VCFA_USERNAME, VCFA_PASSWORD, or VCFA_ORGANIZATION.";
+const VRA8_AUTHORIZATION_HINT = authorizationHint(
+  "vRA 8 login",
+  "the vIDM user has no permission for this vRO object or operation",
+  "the user's vRO permissions",
+);
+const VCFA_AUTHORIZATION_HINT = authorizationHint(
+  "VCF Automation login",
+  "the user has no permission for this vRO object or operation",
+  "the user's vRO permissions",
+);
 
 // The default TypeScript lib's RequestInit lacks undici's dispatcher option.
 type DispatchedRequestInit = RequestInit & { dispatcher?: Agent };
@@ -1018,6 +1042,23 @@ export class VroHttpClient {
   }
 
   /**
+   * Whether a 403 is a settled authorization denial — one a fresh token cannot
+   * turn into a 200 — and so earns a hint saying the credentials are fine.
+   *
+   * The same rule as shouldReauthenticate above, stated positively rather than
+   * read backwards through it, because on `vcfa` the negation is a constant:
+   * every 403 there is settled (VCFO-083), so `!shouldReauthenticate(res)`
+   * would read as a live two-platform guard while only ever discriminating on
+   * `vra8`. There the challenge is the discriminator, and a challenge-carrying
+   * 403 that survives its one retry is left unhinted, since "the login
+   * succeeded" is exactly what it disputes (VCFO-068).
+   */
+  private isSettledDenial(res: Response): boolean {
+    if (res.status !== 403) return false;
+    return this.targetPlatform !== "vra8" || !res.headers.has("www-authenticate");
+  }
+
+  /**
    * Perform an authenticated fetch with automatic token refresh. If the
    * response is rejected in a way that a fresh token could fix (see
    * shouldReauthenticate) the token used for the attempt is invalidated, a
@@ -1238,17 +1279,22 @@ export class VroHttpClient {
    *   HTML 403 from catalog-, deployment-, blueprint-, or project-service
    *   would be pointing the operator at a variable that cannot affect it
    *   (VCFO-081).
-   * - A vcfa refusal from an Automation service: a provider session cannot
-   *   read those at all, so a 403 or a 5xx there names VCFA_ORGANIZATION,
-   *   while a tenant session's 403 is about the user's roles (VCFO-085). The
-   *   5xx arm is limited to provider sessions because only there is a server
-   *   error the known symptom rather than an actual fault.
-   * - A 403 that shouldReauthenticate declined to retry: the login worked and
-   *   the token is valid — the user simply has no permission. On vcfa that is
-   *   every vRO 403 (VCFO-083); on vra8, one carrying no challenge.
+   * - A refusal from an Automation service: a provider session cannot read
+   *   those at all, so a 403 or a 500 there names VCFA_ORGANIZATION, while
+   *   any other session's 403 is about the user's roles (VCFO-085). The
+   *   server-error arm is limited to provider sessions — and to 500, the
+   *   status those services actually answer with — because only there is a
+   *   server error the known symptom rather than an actual fault; a 502, 503
+   *   or 504 comes from whatever fronts the service and means it is down.
+   *   Both platforms reach these services, so neither arm is vcfa-only: the
+   *   provider one narrows itself through the login's own discriminant.
+   * - A settled 403 (see isSettledDenial): the login worked and the token is
+   *   valid — the user simply has no permission. On vcfa that is every vRO
+   *   403 (VCFO-083); on vra8, one carrying no challenge.
    *
-   * Decided from the status, the headers and the base alone: `text` is the
-   * body apiError already read and sanitized, and a 5xx body can be large.
+   * Only the HTML-403 arm reads `text`, the body apiError already read and
+   * sanitized; every other arm decides from the status, the headers, the base
+   * and the login, so a large 5xx body is never scanned.
    */
   private apiErrorHint(res: Response, text: string, base: string): string {
     if (res.status >= 300 && res.status < 400) {
@@ -1264,21 +1310,18 @@ export class VroHttpClient {
     ) {
       return "\nHint: the Automation appliance answered 403 with an HTML page rather than a vRO JSON error. If this organization uses an external vRO appliance, the appliance's embedded orchestrator is the wrong target for /vco/api: set VCFA_VRO_HOST to the external vRO's hostname. Otherwise check the user's vRO permissions.";
     }
-    if (
-      this.targetPlatform === "vcfa" &&
-      this.automationServiceFor(base) !== undefined
-    ) {
+    if (this.automationServiceFor(base) !== undefined) {
       const providerSession =
         this.login.kind === "vcfa" && this.login.isProviderLogin;
-      const serverError = res.status >= 500 && res.status < 600;
-      if (providerSession && (res.status === 403 || serverError)) {
+      if (providerSession && (res.status === 403 || res.status === 500)) {
         return PROVIDER_SESSION_AUTOMATION_HINT;
       }
-      if (res.status === 403) return AUTOMATION_AUTHORIZATION_HINT;
+      if (this.isSettledDenial(res)) return AUTOMATION_AUTHORIZATION_HINT;
       // No bare return here: anything else falls through to the tail, which
-      // cannot double-answer an Automation 403 because both arms above did.
+      // answers only a settled 403 — and every settled Automation 403 was
+      // already answered by one of the two arms above, so neither can double.
     }
-    if (res.status === 403 && !this.shouldReauthenticate(res)) {
+    if (this.isSettledDenial(res)) {
       return this.targetPlatform === "vra8"
         ? VRA8_AUTHORIZATION_HINT
         : VCFA_AUTHORIZATION_HINT;

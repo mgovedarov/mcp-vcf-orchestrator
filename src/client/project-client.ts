@@ -37,9 +37,10 @@ export class ProjectClient {
    * the 400 a malformed filter earns on either, and the 500 both answer for an
    * element of the filter expression they do not know — an unknown field,
    * which is the nearest observable stand-in for an unknown operator. It stays
-   * those two: a 401 — and, on `vcfa`, a JSON 403 — has to reach the
-   * re-authenticate-and-retry path in `core.ts` first, and an authorization
-   * denial is not something a second, unfiltered walk could improve on.
+   * those two: a 401 reaches the re-authenticate-and-retry path in `core.ts`
+   * first, and a 403 arrives here intact since VCFO-083 — measured, not
+   * assumed — stopped `vcfa` retrying one, but an authorization denial is not
+   * something a second, unfiltered walk could improve on either.
    * The status is logged because a transient 500 now costs a full-inventory
    * walk instead of surfacing — and if the service is genuinely down, that
    * walk fails too and reports it.
