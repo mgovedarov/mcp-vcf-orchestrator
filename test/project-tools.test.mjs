@@ -180,6 +180,48 @@ test("get-project renders the project-service fields verified on vRA 8.18", asyn
   assert.doesNotMatch(result.content[0].text, /must-not-print/);
 });
 
+test("get-project renders the project-service fields verified on VCF Automation 9.1", async () => {
+  // Shape observed on a VCF Automation 9.1 lab under VCFO-065, tenant session:
+  // exactly id, name, description, orgId and the four role arrays. None of
+  // constraints, properties, operationTimeout or sharedResources is served, and
+  // the role arrays are named differently from the vRA 8 ones. The lab returned
+  // every array empty; two are populated here to cover the rendering as well.
+  const handlers = registeredTools(registerProjectTools, {
+    getProject: async (id) => ({
+      id,
+      name: "default-project",
+      description: "This first project was created by VCF Automation.",
+      orgId: "org-9",
+      administrators: [],
+      advancedUsers: [{ email: "power@example.test", type: "user" }],
+      users: [],
+      auditors: [{ email: "audit@example.test", type: "group" }],
+    }),
+  });
+
+  const result = await handlers.get("get-project")({ id: "p-9" });
+  assert.equal(result.isError, undefined);
+  assert.equal(
+    result.content[0].text,
+    [
+      "Project: default-project",
+      "ID: p-9",
+      "Description: This first project was created by VCF Automation.",
+      "Organization ID: org-9",
+      "Administrators: none",
+      "Advanced users: 1 — power@example.test (user)",
+      "Users: none",
+      "Auditors: 1 — audit@example.test (group)",
+      "",
+    ].join("\n"),
+  );
+  // The vRA 8 role labels must not appear for a 9.x response that omits them.
+  assert.doesNotMatch(result.content[0].text, /Members|Viewers|Supervisors/);
+  // 9.x serves no constraints object, so the "Constraints: none" line that the
+  // vRA 8 shape earns must not be invented here.
+  assert.doesNotMatch(result.content[0].text, /Constraints/);
+});
+
 test("get-project omits sections the response does not carry", async () => {
   const handlers = registeredTools(registerProjectTools, {
     getProject: async (id) => ({

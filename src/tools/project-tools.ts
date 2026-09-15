@@ -81,10 +81,17 @@ export function formatProjectDetails(project: Project): string {
   if (typeof project.operationTimeout === "number")
     text += `Operation timeout: ${project.operationTimeout}s\n`;
   text += formatProperties(project.properties);
+  // Role arrays differ by platform and only administrators is common to both:
+  // vRA 8 serves members/viewers/supervisors, VCF Automation 9.x serves
+  // advancedUsers/users/auditors. formatPrincipals returns "" for an array the
+  // response does not carry, so each platform prints only its own (VCFO-065).
   text += formatPrincipals("Administrators", project.administrators);
   text += formatPrincipals("Members", project.members);
   text += formatPrincipals("Viewers", project.viewers);
   text += formatPrincipals("Supervisors", project.supervisors);
+  text += formatPrincipals("Advanced users", project.advancedUsers);
+  text += formatPrincipals("Users", project.users);
+  text += formatPrincipals("Auditors", project.auditors);
   text += formatConstraints(project.constraints);
   return text;
 }

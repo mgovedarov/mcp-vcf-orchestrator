@@ -21,13 +21,22 @@ export class ProjectClient {
   /**
    * List projects from the project-service API. The optional search is sent
    * server-side as an OData `$filter` (case-insensitive substring match on
-   * name and description; verified on vRA 8.18 under VCFO-065/072), so
-   * `totalElements` and the truncation flag describe the matches and a
-   * narrower search reaches projects beyond the page-request cap.
+   * name and description), so `totalElements` and the truncation flag describe
+   * the matches and a narrower search reaches projects beyond the page-request
+   * cap.
    *
-   * VCFA 9.x has not yet been probed for `$filter` support. If the service
-   * rejects the filter with a 400, the search falls back to the previous
-   * behavior: walk the unfiltered list and match client-side.
+   * Both platforms accept the filter *and apply it*, verified under VCFO-065
+   * by asking for a needle that matches nothing and getting an empty page
+   * rather than the full inventory: vRA 8.18 under VCFO-072, VCF Automation
+   * 9.1 on a tenant session. Description matching is confirmed on 9.1, where a
+   * project carries a non-empty description.
+   *
+   * The fallback remains for a platform that supports neither `substringof`
+   * nor `tolower`. Neither lab is that platform, so its trigger stays the 400
+   * that a malformed filter earns on both; a service that refused the whole
+   * parameter with some other status would surface as an error instead. Both
+   * labs answer 500 rather than 400 for an *unknown field*, but the client
+   * only ever names `name` and `description`, which both serve.
    */
   async listProjects(search?: string, options?: ListOptions): Promise<ProjectList> {
     const needle = normalizeFilter(search);
