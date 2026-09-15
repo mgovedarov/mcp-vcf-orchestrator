@@ -53,6 +53,10 @@ export default defineConfig({
           { text: "Safety", link: "/operations/safety" },
           { text: "Live Smoke Tests", link: "/operations/live-smoke-tests" },
           {
+            text: "VCF Automation Verification Matrix",
+            link: "/operations/vcfa-verification-matrix",
+          },
+          {
             text: "vRA 8 Verification Matrix",
             link: "/operations/vra8-verification-matrix",
           },

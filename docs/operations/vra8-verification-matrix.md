@@ -10,6 +10,10 @@ categories, 2 configuration elements, 11 resource elements, 25 packages, 22 plug
 All 78 registered tools were invoked through the real MCP tool handlers over stdio (277 captured calls).
 The environment was returned to its exact starting counts afterwards.
 
+This matrix covers `vra8` only. For the default `VCFA_TARGET_PLATFORM=vcfa` platform, see the
+[VCF Automation Verification Matrix](./vcfa-verification-matrix.md). Neither matrix is evidence
+for the other platform.
+
 ## How to read the status column
 
 | Status | Meaning |
