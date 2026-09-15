@@ -734,6 +734,8 @@ List categories by type. Categories are needed to create or import workflows, ac
 
 List VCF Automation projects so agents can resolve the `projectId` consumed by `create-deployment`, `create-template`, `create-subscription`, and the project-scoped list tools instead of guessing it. The optional search is a case-insensitive substring match on project name and description, sent to the project-service as an OData `$filter` (`substringof('<search>', tolower(name)) or substringof('<search>', tolower(description))`, with the search trimmed and lower-cased and single quotes escaped), so the reported total describes the matches and a narrower search reaches projects beyond the pagination cap. If pagination still stops at the request cap, the result (including an empty match list) carries the shared truncation warning. The server-side filter is lab-verified on both platforms under VCFO-065: vRA 8.18 in `vra8` mode (VCFO-072) and VCF Automation 9.1 on a tenant session. Both accept it *and apply it* — a needle matching nothing returns an empty page rather than the full inventory — and `substringof` is case-sensitive on both, which is why the filter wraps each field in `tolower()`. A service that rejects the filter with `400` falls back to the previous client-side match on the full project list, noted on the server's stderr; neither lab does.
 
+A project served without a name renders as `(unnamed)` rather than `undefined`. That fallback is shared by every Automation-service renderer — the catalog item, deployment, project, and subscription list and detail tools, and the role principals under `get-project` — and it describes an upstream shape, not a client defect: vRA 8 serves system subscriptions with no name at all, and VCFO-070 found 5 of 68 on a lab. Every one of these guards tests truthiness rather than nullishness, so an empty-string name renders the same way. No project on either lab has been seen without a name; for projects the fallback is the convention, not an observed gap.
+
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
@@ -743,7 +745,7 @@ List VCF Automation projects so agents can resolve the `projectId` consumed by `
 
 ### `get-project`
 
-Get details for a specific project by its ID. Beyond the name, ID, and description the output renders the fields the project-service response carries: the owning organization ID, the shared-resources flag, the operation timeout, the machine naming template and placement policy, custom properties (a value is shown as `[redacted]` when its key suggests a password, token, secret, credential, or key), the role assignments, and a per-kind count of placement constraints. The two platforms serve different role arrays — administrators, members, viewers and supervisors on vRA 8, administrators, advanced users, users and auditors on VCF Automation 9.x — and only the arrays the response carries are printed. The one 9.1 project checked carried none of the shared-resources flag, operation timeout, properties or constraints, so it rendered as name, ID, description, organization ID and its four role arrays. Sections the response does not carry are omitted. Cloud zones are not part of the project-service view and are not shown. The endpoint, page envelope, `page`/`size` pagination and the 404 for an unknown ID are lab-verified on vRA 8.18 in `vra8` mode and on VCF Automation 9.1 (VCFO-065). Use `list-projects` to discover project IDs.
+Get details for a specific project by its ID. Beyond the name, ID, and description the output renders the fields the project-service response carries: the owning organization ID, the shared-resources flag, the operation timeout, the machine naming template and placement policy, custom properties (a value is shown as `[redacted]` when its key suggests a password, token, secret, credential, or key), the role assignments, and a per-kind count of placement constraints. The two platforms serve different role arrays — administrators, members, viewers and supervisors on vRA 8, administrators, advanced users, users and auditors on VCF Automation 9.x — and only the arrays the response carries are printed. The one 9.1 project checked carried none of the shared-resources flag, operation timeout, properties or constraints, so it rendered as name, ID, description, organization ID and its four role arrays. Sections the response does not carry are omitted. Cloud zones are not part of the project-service view and are not shown. The endpoint, page envelope, `page`/`size` pagination and the 404 for an unknown ID are lab-verified on vRA 8.18 in `vra8` mode and on VCF Automation 9.1 (VCFO-065). Use `list-projects` to discover project IDs. A project served without a name renders as `(unnamed)`, the convention described under `list-projects`. Within each role array a principal is printed by email, with its `type` in parentheses when present; a principal served with no email, or an empty one, renders as `(unnamed)` too — the one fallback in the surface that stands in for something other than a name.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
@@ -755,7 +757,7 @@ Get details for a specific project by its ID. Beyond the name, ID, and descripti
 
 ### `list-catalog-items`
 
-List available Service Broker catalog items. Optionally search by name or keyword.
+List available Service Broker catalog items. Optionally search by name or keyword. A catalog item served without a name renders as `(unnamed)`, the convention described under `list-projects`.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
@@ -766,7 +768,7 @@ List available Service Broker catalog items. Optionally search by name or keywor
 
 ### `get-catalog-item`
 
-Get catalog item details including type, source, and project assignments.
+Get catalog item details including type, source, and project assignments. A catalog item served without a name renders as `(unnamed)`, the convention described under `list-projects`.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
@@ -778,7 +780,7 @@ Get catalog item details including type, source, and project assignments.
 
 ### `list-deployments`
 
-List deployments, optionally filtered by name or keyword and project ID. Use `list-projects` to discover project IDs.
+List deployments, optionally filtered by name or keyword and project ID. Use `list-projects` to discover project IDs. A deployment served without a name renders as `(unnamed)`, the convention described under `list-projects`; no deployment has yet been observed on either platform, so that fallback is what makes an unexpected shape degrade visibly rather than print `undefined`.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
@@ -790,7 +792,7 @@ List deployments, optionally filtered by name or keyword and project ID. Use `li
 
 ### `get-deployment`
 
-Get detailed information about a specific deployment by its ID.
+Get detailed information about a specific deployment by its ID. A deployment served without a name renders as `(unnamed)`, the convention described under `list-projects`.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
@@ -1167,7 +1169,7 @@ List available Event Broker topics.
 
 ### `list-subscriptions`
 
-List extensibility subscriptions, optionally filtered by project ID.
+List extensibility subscriptions, optionally filtered by project ID. A subscription served without a name renders as `(unnamed)`, the convention described under `list-projects`; this is the tool where that shape was first seen live, since vRA 8 serves its system subscriptions with no name at all.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
@@ -1178,7 +1180,7 @@ List extensibility subscriptions, optionally filtered by project ID.
 
 ### `get-subscription`
 
-Get subscription details including blocking setting and priority. Constraints are summarized (sha256 + length) unless `includeConstraints` is set.
+Get subscription details including blocking setting and priority. Constraints are summarized (sha256 + length) unless `includeConstraints` is set. A subscription served without a name renders as `(unnamed)`, the convention described under `list-projects`.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
@@ -1189,7 +1191,7 @@ Get subscription details including blocking setting and priority. Constraints ar
 
 ### `create-subscription`
 
-Create a subscription linking an Event Broker topic to a vRO workflow or ABX action.
+Create a subscription linking an Event Broker topic to a vRO workflow or ABX action. The success line renders the element the service returned, so on a platform that serves it without a name it reads `(unnamed)`, the convention described under `list-projects`.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
@@ -1209,7 +1211,7 @@ Create a subscription linking an Event Broker topic to a vRO workflow or ABX act
 
 ### `update-subscription`
 
-Update a subscription. All fields except `id` are optional; only supplied fields are updated.
+Update a subscription. All fields except `id` are optional; only supplied fields are updated. The success line renders the element the service returned, so on a platform that serves it without a name it reads `(unnamed)`, the convention described under `list-projects`.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
