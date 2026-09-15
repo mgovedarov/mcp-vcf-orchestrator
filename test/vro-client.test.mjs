@@ -5802,3 +5802,456 @@ test("vra8 403 without a challenge on a multipart import carries the authorizati
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+// ─── External vRO host (VCFO-081) ───
+
+const VRO_HOST = "vro.example.test";
+const EXTERNAL_VRO_WORKFLOWS_URL =
+  "https://vro.example.test/vco/api/workflows?maxResult=100&startIndex=0&queryCount=true";
+const VCFA_WORKFLOWS_LABEL =
+  "GET /workflows?maxResult=100&startIndex=0&queryCount=true";
+// The Automation appliance's embedded orchestrator refusing a tenant whose
+// organization is wired to an external vRO: an HTML page, not vRO JSON.
+const EMBEDDED_ORCHESTRATOR_403 =
+  '<!doctype html><html><head><title>VCF Operations orchestrator</title></head><body><div class="status-code">403</div><div class="status-message">Forbidden</div></body></html>';
+
+test("vroHost moves only /vco/api on vcfa; the version probe and session POST stay on host", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (String(url).endsWith("/api/versions")) {
+      return new Response(versionsXml(["9.1.0"]), { status: 200 });
+    }
+    if (String(url).includes("/cloudapi/1.0.0/sessions")) return authResponse();
+    return Response.json({ link: [], total: 0 });
+  };
+
+  const client = new VroClient(
+    config({ targetPlatform: "vcfa", vroHost: VRO_HOST }),
+  );
+  await client.listWorkflows();
+
+  assert.equal(calls[0].url, "https://vcfa.example.test/api/versions");
+  assert.equal(
+    calls[1].url,
+    "https://vcfa.example.test/cloudapi/1.0.0/sessions",
+  );
+  assert.equal(calls[2].url, EXTERNAL_VRO_WORKFLOWS_URL);
+  assert.equal(
+    calls[2].init.headers.Authorization,
+    "Bearer token",
+    "the Automation-issued token is reused verbatim on the vRO host",
+  );
+});
+
+test("vroHost leaves every Automation-service base URL on host", async () => {
+  const http = new VroHttpClient(config({ vroHost: VRO_HOST }));
+  assert.equal(http.baseUrl, "https://vro.example.test/vco/api");
+  for (const base of [
+    http.eventBrokerBaseUrl,
+    http.catalogBaseUrl,
+    http.deploymentBaseUrl,
+    http.blueprintBaseUrl,
+    http.projectBaseUrl,
+  ]) {
+    assert.ok(base.startsWith("https://vcfa.example.test/"), base);
+  }
+
+  const calls = [];
+  globalThis.fetch = async (url) => {
+    calls.push(String(url));
+    if (calls.length === 1) return authResponse();
+    return Response.json({ content: [], totalElements: 0, numberOfElements: 0 });
+  };
+  const client = new VroClient(config({ vroHost: VRO_HOST }));
+  await client.listProjects();
+  assert.ok(
+    calls[1].startsWith("https://vcfa.example.test/project-service/api/projects"),
+    calls[1],
+  );
+});
+
+test("unset, blank, or same-as-host vroHost leaves the vRO base URL and error text unchanged", async () => {
+  for (const vroHost of [undefined, "", "   ", "vcfa.example.test", " vcfa.example.test "]) {
+    const http = new VroHttpClient(config({ vroHost }));
+    assert.equal(
+      http.baseUrl,
+      "https://vcfa.example.test/vco/api",
+      JSON.stringify(vroHost),
+    );
+  }
+
+  const calls = [];
+  globalThis.fetch = async (url) => {
+    calls.push(String(url));
+    if (calls.length === 1) return authResponse();
+    return new Response(JSON.stringify({ message: "nope" }), {
+      status: 404,
+      statusText: "Not Found",
+    });
+  };
+  const client = new VroClient(config({ vroHost: "vcfa.example.test" }));
+  await assert.rejects(
+    () => client.listWorkflows(),
+    (e) => {
+      assert.equal(
+        e.message.split("\n")[0],
+        `vRO API error: 404 Not Found — ${VCFA_WORKFLOWS_LABEL}`,
+        "no host suffix when the hosts are not split",
+      );
+      return true;
+    },
+  );
+});
+
+test("vra8 with vroHost keeps the CSP and IaaS logins on host and sends /vco/api to the vRO host", async () => {
+  const calls = [];
+  const login = vra8LoginStub();
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    const loginResponse = login(url);
+    if (loginResponse) return loginResponse;
+    return Response.json({ link: [], total: 0 });
+  };
+
+  const client = new VroClient(vra8Config({ vroHost: VRO_HOST }));
+  await client.listWorkflows();
+
+  assert.equal(calls[0].url, CSP_LOGIN_URL);
+  assert.equal(calls[1].url, IAAS_LOGIN_URL);
+  assert.equal(calls[2].url, EXTERNAL_VRO_WORKFLOWS_URL);
+  assert.equal(calls[2].init.headers.Authorization, "Bearer jwt-1");
+  assert.ok(!calls.some((c) => c.url.endsWith("/api/versions")), "no version probe in vra8");
+  assert.ok(!calls.some((c) => c.url.includes("/cloudapi/")), "no Cloud API session in vra8");
+});
+
+test("binary export path follows vroHost and keeps fetch's redirect default", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (String(url).includes("/cloudapi/1.0.0/sessions")) return authResponse();
+    return new Response(new Uint8Array([0x50, 0x4b, 0x03, 0x04]), {
+      status: 200,
+      headers: { "Content-Type": "application/zip" },
+    });
+  };
+
+  const client = new VroClient(config({ vroHost: VRO_HOST }));
+  const buffer = await client.exportWorkflowBuffer("wf-1");
+  assert.ok(Buffer.isBuffer(buffer));
+  const exportCall = calls.find((c) => c.url.includes("/content/workflows/"));
+  assert.equal(
+    exportCall.url,
+    "https://vro.example.test/vco/api/content/workflows/wf-1",
+  );
+  assert.equal(exportCall.init.headers.Accept, "application/zip");
+  // Only the JSON path opts out of following redirects; a same-origin 302 the
+  // binary path relied on before VCFO-081 is still followed.
+  assert.equal(exportCall.init.redirect, "follow");
+});
+
+test("a failing binary export names the appliance that answered", async () => {
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/cloudapi/1.0.0/sessions")) return authResponse();
+    return new Response(JSON.stringify({ message: "nope" }), {
+      status: 404,
+      statusText: "Not Found",
+    });
+  };
+
+  const client = new VroClient(config({ vroHost: VRO_HOST }));
+  await assert.rejects(
+    () => client.exportWorkflowBuffer("wf-1"),
+    (e) => {
+      assert.equal(
+        e.message.split("\n")[0],
+        "vRO API error: 404 Not Found — export workflow on vro.example.test",
+      );
+      return true;
+    },
+  );
+});
+
+test("401 from the external vRO re-logins at host and retries at the vRO host", async () => {
+  const calls = [];
+  let authCount = 0;
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (String(url).includes("/cloudapi/1.0.0/sessions")) {
+      authCount++;
+      return new Response("", {
+        status: 200,
+        headers: { "x-vmware-vcloud-access-token": `token-${authCount}` },
+      });
+    }
+    if (calls.filter((c) => !c.url.includes("/sessions")).length === 1) {
+      return new Response("", { status: 401, statusText: "Unauthorized" });
+    }
+    return Response.json({ link: [], total: 0 });
+  };
+
+  const client = new VroClient(config({ vroHost: VRO_HOST }));
+  const result = await client.listWorkflows();
+
+  assert.equal(result.total, 0);
+  assert.equal(calls.length, 4);
+  assert.equal(
+    calls[2].url,
+    "https://vcfa.example.test/cloudapi/1.0.0/sessions",
+    "the re-login goes to the Automation host",
+  );
+  assert.equal(calls[3].url, EXTERNAL_VRO_WORKFLOWS_URL, "the retry goes to the vRO host");
+  assert.equal(calls[3].init.headers.Authorization, "Bearer token-2");
+});
+
+test("a 403 from the external vRO costs one re-login and one retry, then surfaces naming the vRO host", async () => {
+  const calls = [];
+  let authCount = 0;
+  globalThis.fetch = async (url, init) => {
+    // Snapshot the header: the retry mutates the shared init.headers in place.
+    calls.push({ url: String(url), auth: init.headers.Authorization });
+    if (String(url).includes("/cloudapi/1.0.0/sessions")) {
+      authCount++;
+      return new Response("", {
+        status: 200,
+        headers: { "x-vmware-vcloud-access-token": `token-${authCount}` },
+      });
+    }
+    return new Response("", { status: 403, statusText: "Forbidden" });
+  };
+
+  const client = new VroClient(config({ vroHost: VRO_HOST }));
+  await assert.rejects(
+    () => client.listWorkflows(),
+    (e) => {
+      assert.match(
+        e.message,
+        /vRO API error: 403 Forbidden — GET \/workflows\?.* on vro\.example\.test/,
+      );
+      return true;
+    },
+  );
+  const sessions = calls.filter((c) => c.url.includes("/sessions"));
+  const vro = calls.filter((c) => c.url.includes("/vco/api/"));
+  assert.equal(authCount, 2, "one re-login, not a loop");
+  assert.equal(vro.length, 2, "one retry, not a loop");
+  assert.ok(sessions.every((c) => new URL(c.url).host === "vcfa.example.test"));
+  assert.ok(vro.every((c) => new URL(c.url).host === "vro.example.test"));
+  assert.deepEqual(
+    vro.map((c) => c.auth),
+    ["Bearer token-1", "Bearer token-2"],
+  );
+});
+
+test("with vroHost set, log lines and errors name the host each request went to", async () => {
+  const errors = [];
+  const originalError = console.error;
+  console.error = (...args) => errors.push(args.join(" "));
+  try {
+    globalThis.fetch = async (url) => {
+      if (String(url).includes("/cloudapi/1.0.0/sessions")) return authResponse();
+      return new Response(JSON.stringify({ message: "missing" }), {
+        status: 404,
+        statusText: "Not Found",
+      });
+    };
+    const client = new VroClient(config({ vroHost: VRO_HOST }));
+    await assert.rejects(
+      () => client.listWorkflows(),
+      (e) => {
+        assert.match(
+          e.message,
+          /^vRO API error: 404 Not Found — GET \/workflows\?.* on vro\.example\.test\n/,
+        );
+        return true;
+      },
+    );
+    await assert.rejects(
+      () => client.listCatalogItems(),
+      (e) => {
+        assert.match(e.message, /^vRO API error: 404 Not Found — GET \/items.* on vcfa\.example\.test\n/);
+        return true;
+      },
+    );
+    assert.ok(
+      errors.some((line) => /^\[vro-client\] GET \/workflows\?.* on vro\.example\.test$/.test(line)),
+      errors.join("\n"),
+    );
+    assert.ok(
+      errors.some((line) => /^\[vro-client\] GET \/items.* on vcfa\.example\.test$/.test(line)),
+      errors.join("\n"),
+    );
+  } finally {
+    console.error = originalError;
+  }
+});
+
+test("a transport failure names the host it was addressed to and keeps the cause", async () => {
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/cloudapi/1.0.0/sessions")) return authResponse();
+    const dns = Object.assign(new Error("getaddrinfo ENOTFOUND vro.example.test"), {
+      code: "ENOTFOUND",
+    });
+    throw Object.assign(new TypeError("fetch failed"), { cause: dns });
+  };
+
+  const client = new VroClient(config({ vroHost: VRO_HOST }));
+  await assert.rejects(
+    () => client.listWorkflows(),
+    (e) => {
+      assert.match(e.message, /Request to vro\.example\.test failed: ENOTFOUND/);
+      assert.equal(e.cause?.message, "fetch failed", "the original error is kept as cause");
+      return true;
+    },
+  );
+});
+
+test("a timed-out request names the host and the deadline", async () => {
+  globalThis.fetch = (url, init) => {
+    if (String(url).includes("/cloudapi/1.0.0/sessions")) {
+      return Promise.resolve(authResponse());
+    }
+    return new Promise((_, reject) => {
+      init.signal.addEventListener("abort", () =>
+        reject(Object.assign(new Error("This operation was aborted"), { name: "AbortError" })),
+      );
+    });
+  };
+
+  const http = new VroHttpClient(config());
+  await assert.rejects(
+    () =>
+      http.authenticatedFetch(
+        "https://vcfa.example.test/vco/api/workflows",
+        { method: "GET", headers: {} },
+        { timeout: 10 },
+      ),
+    /Request to vcfa\.example\.test timed out after 10 ms/,
+  );
+});
+
+test("a redirect from the vRO host is surfaced, not followed, and names the target without its query", async () => {
+  const calls = [];
+  let authCount = 0;
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (String(url).includes("/cloudapi/1.0.0/sessions")) {
+      authCount++;
+      return authResponse();
+    }
+    return new Response("", {
+      status: 302,
+      statusText: "Found",
+      headers: { Location: "https://ui.example.test/orchestration-ui?ticket=secret" },
+    });
+  };
+
+  const client = new VroClient(config({ vroHost: VRO_HOST }));
+  await assert.rejects(
+    () => client.listWorkflows(),
+    (e) => {
+      assert.match(
+        e.message,
+        /vRO API error: 302 Found — GET \/workflows\?.* on vro\.example\.test/,
+      );
+      assert.ok(e.message.includes("redirect to ui.example.test"), e.message);
+      assert.ok(e.message.includes("VCFA_VRO_HOST for /vco/api"), e.message);
+      assert.ok(!e.message.includes("ticket=secret"), "must not echo the redirect query");
+      return true;
+    },
+  );
+  const vroCall = calls.find((c) => c.url.includes("/vco/api/"));
+  assert.equal(vroCall.init.redirect, "manual");
+  assert.equal(authCount, 1, "a redirect must not trigger a re-login");
+});
+
+test("a vcfa HTML 403 with no vroHost hints at an external vRO appliance", async () => {
+  let authCount = 0;
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/cloudapi/1.0.0/sessions")) {
+      authCount++;
+      return authResponse();
+    }
+    return new Response(EMBEDDED_ORCHESTRATOR_403, {
+      status: 403,
+      statusText: "Forbidden",
+      headers: { "Content-Type": "text/html" },
+    });
+  };
+
+  const client = new VroClient(config());
+  await assert.rejects(
+    () => client.listWorkflows(),
+    (e) => {
+      assert.equal(
+        e.message.split("\n")[0],
+        `vRO API error: 403 Forbidden — ${VCFA_WORKFLOWS_LABEL}`,
+      );
+      assert.ok(e.message.includes("[HTML body: 403 Forbidden — no further detail]"), e.message);
+      assert.ok(e.message.includes("set VCFA_VRO_HOST"), e.message);
+      return true;
+    },
+  );
+  assert.equal(
+    authCount,
+    1,
+    "an HTML 403 is the appliance refusing the tenant, so no re-login is spent",
+  );
+});
+
+test("an HTML 403 from an Automation service does not blame VCFA_VRO_HOST", async () => {
+  // VCFA_VRO_HOST moves only /vco/api, so it cannot explain a project-service
+  // refusal — and the documented signature is vRO failing while these work.
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/cloudapi/1.0.0/sessions")) return authResponse();
+    return new Response(EMBEDDED_ORCHESTRATOR_403, {
+      status: 403,
+      statusText: "Forbidden",
+      headers: { "Content-Type": "text/html" },
+    });
+  };
+
+  await assert.rejects(
+    () => new VroClient(config()).listProjects(),
+    (e) => {
+      assert.match(e.message, /vRO API error: 403 Forbidden — GET \/projects/);
+      assert.ok(!e.message.includes("VCFA_VRO_HOST"), e.message);
+      return true;
+    },
+  );
+});
+
+test("the external-vRO hint is not shown once vroHost is set, nor on vra8", async () => {
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/cloudapi/1.0.0/sessions")) return authResponse();
+    return new Response(EMBEDDED_ORCHESTRATOR_403, { status: 403, statusText: "Forbidden" });
+  };
+  await assert.rejects(
+    () => new VroClient(config({ vroHost: VRO_HOST })).listWorkflows(),
+    (e) => {
+      assert.ok(!e.message.includes("set VCFA_VRO_HOST"), e.message);
+      assert.match(e.message, / on vro\.example\.test/);
+      return true;
+    },
+  );
+
+  const counts = { csp: 0, iaas: 0 };
+  const login = vra8LoginStub(counts);
+  let vroCalls = 0;
+  globalThis.fetch = async (url) => {
+    const loginResponse = login(url);
+    if (loginResponse) return loginResponse;
+    vroCalls += 1;
+    return new Response(EMBEDDED_ORCHESTRATOR_403, { status: 403, statusText: "Forbidden" });
+  };
+  await assert.rejects(
+    () => new VroClient(vra8Config()).listWorkflows(),
+    (e) => {
+      assert.match(e.message, /authorization result/);
+      assert.ok(!e.message.includes("set VCFA_VRO_HOST"), e.message);
+      return true;
+    },
+  );
+  assert.equal(vroCalls, 1, "a challenge-less vra8 403 still costs no re-login");
+  assert.equal(counts.csp, 1);
+});

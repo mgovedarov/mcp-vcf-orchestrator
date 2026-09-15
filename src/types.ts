@@ -734,6 +734,13 @@ export type VroTargetPlatformInput =
 
 export interface VroClientConfig {
   host: string;
+  /**
+   * Optional `host[:port]` of an external vRO appliance. Only the vRO
+   * `/vco/api` base URL follows it; the logins, `GET /api/versions`, and the
+   * Automation services stay on `host`. Unset, blank, or equal to `host`
+   * means the vRO embedded in the Automation appliance (VCFO-081).
+   */
+  vroHost?: string;
   username: string;
   organization: string;
   password: string;

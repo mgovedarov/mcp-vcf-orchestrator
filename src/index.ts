@@ -32,18 +32,84 @@ const { version: SERVER_VERSION } = require("../package.json") as {
 const DEFAULT_ARTIFACT_DIR = join(process.cwd(), "artifacts");
 const TARGET_PLATFORM_ENV = "VCFA_TARGET_PLATFORM";
 
+/** Report an unset required variable and stop. The one owner of this exit. */
+function missingRequiredEnv(name: string): never {
+  console.error(`ERROR: Required environment variable ${name} is not set.`);
+  process.exit(1);
+}
+
 function getRequiredEnv(name: string): string {
   const value = process.env[name];
+  if (!value) missingRequiredEnv(name);
+  return value;
+}
+
+/**
+ * Read a host[:port] environment variable. Both hosts are trimmed, and a blank
+ * optional value counts as unset, so an empty `VCFA_VRO_HOST=` line in an MCP
+ * client's env block does not become `https:///vco/api`. A URL scheme is
+ * rejected for either variable — `https://host` would build
+ * `https://https://host/...`, which has never connected — while a path is
+ * rejected only for the vRO host: a path-prefixed reverse proxy in VCFA_HOST
+ * could plausibly have worked, and this must not break it.
+ *
+ * What survives that check still has to be usable as the authority of a URL.
+ * `foo:bar`, `:8281`, and a bare `::1` carry no scheme and no path, but
+ * `new URL` rejects all three, so accepting them here only defers the failure
+ * to an opaque `TypeError: Invalid URL` on the first request (VCFO-081).
+ */
+function readHostEnv(
+  name: string,
+  options: { required: true; strict: boolean },
+): string;
+function readHostEnv(
+  name: string,
+  options: { required: false; strict: boolean },
+): string | undefined;
+function readHostEnv(
+  name: string,
+  options: { required: boolean; strict: boolean },
+): string | undefined {
+  const value = process.env[name]?.trim();
   if (!value) {
-    console.error(`ERROR: Required environment variable ${name} is not set.`);
+    if (!options.required) return undefined;
+    missingRequiredEnv(name);
+  }
+  // In strict mode the character class already covers "://", since any value
+  // carrying a scheme carries its slashes too.
+  const malformed = options.strict
+    ? /[\/@?#\s]/.test(value)
+    : value.includes("://");
+  if (malformed || !isUsableHost(value)) {
+    console.error(
+      options.strict
+        ? `ERROR: ${name} must be a hostname or host:port (for example vro.example.com or vro.example.com:8281), with no scheme and no path.`
+        : `ERROR: ${name} must be a hostname or host:port (for example vcfa.example.com), with no scheme.`,
+    );
     process.exit(1);
   }
   return value;
 }
 
+/**
+ * Whether `https://<value>/` parses and names a host. A non-strict value may
+ * carry a path, which `new URL` parses as one.
+ */
+function isUsableHost(value: string): boolean {
+  try {
+    return new URL(`https://${value}/`).host !== "";
+  } catch {
+    return false;
+  }
+}
+
 async function main(): Promise<void> {
   // Read configuration from environment variables
-  const host = getRequiredEnv("VCFA_HOST");
+  const host = readHostEnv("VCFA_HOST", { required: true, strict: false });
+  const vroHost = readHostEnv("VCFA_VRO_HOST", {
+    required: false,
+    strict: true,
+  });
   const username = getRequiredEnv("VCFA_USERNAME");
   const organization = getRequiredEnv("VCFA_ORGANIZATION");
   const password = getRequiredEnv("VCFA_PASSWORD");
@@ -70,6 +136,7 @@ async function main(): Promise<void> {
   // Create vRO API client
   const client = new VroClient({
     host,
+    vroHost,
     username,
     organization,
     password,
@@ -86,6 +153,15 @@ async function main(): Promise<void> {
     configurationDir,
     contextDir,
   });
+
+  // Reported from the client, which owns the rule that an override equal to
+  // VCFA_HOST is no split at all: asking it keeps this line from ever
+  // describing a routing that does not happen.
+  if (client.externalVroHost) {
+    console.error(
+      `[vcfa-server] VCFA_VRO_HOST=${client.externalVroHost}: vRO API requests (/vco/api) are sent to this host; authentication and the Automation services use VCFA_HOST=${host}.`,
+    );
+  }
 
   // Create MCP server
   const server = new McpServer(

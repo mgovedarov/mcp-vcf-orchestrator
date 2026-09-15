@@ -6,7 +6,7 @@ The server reads all runtime configuration from environment variables.
 
 | Variable | Required | Description |
 | --- | --- | --- |
-| `VCFA_HOST` | Yes | VCF Automation hostname, for example `vcfa.example.com`. |
+| `VCFA_HOST` | Yes | VCF Automation hostname or `host:port`, for example `vcfa.example.com`. A value carrying a URL scheme is rejected at startup. |
 | `VCFA_USERNAME` | Yes | Username without organization, for example `admin`. |
 | `VCFA_ORGANIZATION` | Yes | Organization name (the tenant URL slug, not the display name), or `system` for provider/system administrator logins. In `vra8` mode, the vIDM domain shown on the Workspace ONE login page, for example `System Domain`. |
 | `VCFA_PASSWORD` | Yes | Password for the VCF Cloud API session, or the vIDM password used for the vRA 8 login when `VCFA_TARGET_PLATFORM=vra8`. |
@@ -44,12 +44,27 @@ Subscription writes differ from the `vcfa` path in this mode: vRA 8 requires the
 
 Two configuration request bodies also differ in this mode: configuration writes send the plural `attributes` key, because vRA 8 answers `400` for the singular `attribute` and for a body carrying both; and `PUT /configurations/{id}` must carry the element name. That `PUT` replaces the element on both platforms, so `update-configuration` reads the live element once and carries an omitted name and description forward (see the tools reference for the attribute rules). Catalog items and deployments were both empty in the verification lab, so those two endpoints and their page envelopes are verified but their item shapes are not.
 
+### External vRO Appliance
+
+When an organization's vRO runs on its own appliance rather than embedded in the VCF Automation appliance, set `VCFA_VRO_HOST` to that appliance's `host[:port]`. Only the vRO API base moves:
+
+```text
+https://{VCFA_VRO_HOST}/vco/api
+```
+
+Everything else stays on `VCFA_HOST`: the session endpoints above, the `GET /api/versions` probe, the vRA 8 CSP and IaaS logins in `vra8` mode, and the catalog, deployment, blueprint, project, and event-broker services. No second login runs — the token the Automation appliance issues is sent to the external vRO as-is, which VCFO-081 verified live on VCF Automation 9.1 with an external vRO 9.1. The `vra8` topology is wired the same way but has not been live-verified against an external vRO.
+
+An external vRO cannot stand in as `VCFA_HOST`: it answers the session endpoint and `/api/versions` with a redirect to its own UI, so the login fails. Conversely, leaving `VCFA_VRO_HOST` unset in such an environment sends `/vco/api` to the Automation appliance's embedded orchestrator, which refuses a tenant with a `403` and an HTML page rather than a vRO JSON error — that error carries a hint pointing at this variable.
+
+While the two hosts differ, every request log line and every `vRO API error` names the host it went to (`GET /workflows on vro.example.com`, `export workflow on vro.example.com`), a transport failure names it too (`Request to vro.example.com failed: ENOTFOUND`), and a redirect answer to a JSON API request is surfaced rather than followed, naming its target. Unset, blank, or equal to `VCFA_HOST`, the variable changes nothing. The value must be a hostname or `host:port`: a scheme, a path, or anything that cannot serve as the host of a URL is rejected at startup.
+
 ## Optional Variables
 
 | Variable | Description |
 | --- | --- |
 | `VCFA_TARGET_PLATFORM` | Target platform mode: `vcfa` (default, auto-negotiates the VCF Cloud API version), `vcfa9.1`/`vcfa9.0` (pin the VCF Cloud API version, skipping the `GET /api/versions` probe), or `vra8` (vRA/vRO 8.12+, vIDM bearer-token auth). |
-| `VCFA_IGNORE_TLS` | Set to `true` to disable TLS certificate verification for this server's requests to the VCFA host (lab environments only). |
+| `VCFA_VRO_HOST` | Optional `host[:port]` of an external vRO appliance. Only the vRO `/vco/api` requests go there; the login, the `GET /api/versions` probe, and the Automation services stay on `VCFA_HOST`, and the token issued there is reused as-is. Leave unset for the embedded vRO. Works with `vcfa`, `vcfa9.x`, and `vra8`. See [External vRO Appliance](#external-vro-appliance). |
+| `VCFA_IGNORE_TLS` | Set to `true` to disable TLS certificate verification for this server's requests to the VCFA host and, when `VCFA_VRO_HOST` is set, the vRO host (lab environments only). |
 | `VCFA_ARTIFACT_DIR` | Root directory for local artifact import/export files. Defaults to `artifacts/` in the MCP server process working directory, typically the open project. |
 | `VCFA_PACKAGE_DIR` | Override the package artifact directory. |
 | `VCFA_RESOURCE_DIR` | Override the resource element artifact directory. |
@@ -80,4 +95,4 @@ Use the specific directory overrides only when you need different storage locati
 
 ## TLS Warning
 
-`VCFA_IGNORE_TLS=true` disables TLS certificate verification only for this server's requests to the configured VCFA host, using a dedicated HTTPS agent. It does not set `NODE_TLS_REJECT_UNAUTHORIZED` or affect any other HTTPS traffic in the process. Use it only for lab or test environments where the risk is understood.
+`VCFA_IGNORE_TLS=true` disables TLS certificate verification only for this server's requests to the configured VCFA host — and, when `VCFA_VRO_HOST` is set, the vRO host — using a dedicated HTTPS agent. It does not set `NODE_TLS_REJECT_UNAUTHORIZED` or affect any other HTTPS traffic in the process. Use it only for lab or test environments where the risk is understood.

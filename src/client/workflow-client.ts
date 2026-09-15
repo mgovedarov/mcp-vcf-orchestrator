@@ -895,7 +895,7 @@ export class WorkflowClient {
   async exportWorkflowBuffer(id: string): Promise<Buffer> {
     const path = `/content/workflows/${encodeURIComponent(id)}`;
     const url = `${this.http.baseUrl}${path}`;
-    console.error(`[vro-client] GET ${path}`);
+    console.error(`[vro-client] ${this.http.requestLabel(`GET ${path}`)}`);
 
     const res = await this.http.authenticatedFetch(
       url,
@@ -903,7 +903,7 @@ export class WorkflowClient {
       { timeout: 60_000 },
     );
     if (!res.ok) {
-      throw await this.http.apiError(res, "export workflow");
+      throw await this.http.apiError(res, this.http.requestLabel("export workflow"));
     }
     return Buffer.from(await res.arrayBuffer());
   }
@@ -980,7 +980,7 @@ export class WorkflowClient {
     const form = createUploadForm(buffer, fileName);
 
     const url = `${this.http.baseUrl}${path}`;
-    console.error(`[vro-client] POST ${path}`);
+    console.error(`[vro-client] ${this.http.requestLabel(`POST ${path}`)}`);
 
     const res = await this.http.authenticatedFetch(
       url,
@@ -988,7 +988,7 @@ export class WorkflowClient {
       { timeout: 60_000 },
     );
     if (!res.ok) {
-      throw await this.http.apiError(res, "import workflow");
+      throw await this.http.apiError(res, this.http.requestLabel("import workflow"));
     }
   }
 }

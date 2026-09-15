@@ -44,6 +44,8 @@ function actionClient(fetchImpl) {
   return new ActionClient({
     baseUrl: "https://vro.example/vco/api",
     authenticatedFetch: fetchImpl,
+    // What the real client returns when the hosts are not split.
+    requestLabel: (operation) => operation,
   });
 }
 
@@ -137,6 +139,7 @@ test("exportActionFile writes the artifact resolved from a reference", async () 
       requested.push(url);
       return zipResponse();
     },
+    requestLabel: (operation) => operation,
   });
   client.getAction = async () => ({ id: "action-uuid", name: "zzProbe" });
 

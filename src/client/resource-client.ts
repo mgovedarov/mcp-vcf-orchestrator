@@ -96,7 +96,7 @@ export class ResourceClient {
     }
     const path = `/resources/${encodeURIComponent(id)}`;
     const url = `${this.http.baseUrl}${path}`;
-    console.error(`[vro-client] GET ${path}`);
+    console.error(`[vro-client] ${this.http.requestLabel(`GET ${path}`)}`);
 
     const res = await this.http.authenticatedFetch(
       url,
@@ -104,7 +104,7 @@ export class ResourceClient {
       { timeout: 60_000 },
     );
     if (!res.ok) {
-      throw await this.http.apiError(res, "export resource");
+      throw await this.http.apiError(res, this.http.requestLabel("export resource"));
     }
     const buffer = Buffer.from(await res.arrayBuffer());
     await writeFile(destPath, buffer, { flag: overwrite ? "w" : "wx" });
@@ -131,7 +131,7 @@ export class ResourceClient {
     changesetSha?: string,
   ): Promise<void> {
     const url = `${this.http.baseUrl}${path}`;
-    console.error(`[vro-client] POST ${path}`);
+    console.error(`[vro-client] ${this.http.requestLabel(`POST ${path}`)}`);
 
     const headers: Record<string, string> = {
       Accept: "application/json",
@@ -146,7 +146,7 @@ export class ResourceClient {
       { timeout: 60_000 },
     );
     if (!res.ok) {
-      throw await this.http.apiError(res, `POST ${path}`);
+      throw await this.http.apiError(res, this.http.requestLabel(`POST ${path}`));
     }
   }
 

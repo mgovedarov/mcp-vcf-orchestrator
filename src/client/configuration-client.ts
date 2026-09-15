@@ -164,7 +164,7 @@ export class ConfigurationClient {
 
     const path = `/configurations/${encodeURIComponent(id)}`;
     const url = `${this.http.baseUrl}${path}`;
-    console.error(`[vro-client] GET ${path}`);
+    console.error(`[vro-client] ${this.http.requestLabel(`GET ${path}`)}`);
 
     const res = await this.http.authenticatedFetch(
       url,
@@ -172,7 +172,7 @@ export class ConfigurationClient {
       { timeout: 60_000 },
     );
     if (!res.ok) {
-      throw await this.http.apiError(res, "export configuration");
+      throw await this.http.apiError(res, this.http.requestLabel("export configuration"));
     }
     const buffer = Buffer.from(await res.arrayBuffer());
     await writeFile(destPath, buffer, { flag: overwrite ? "w" : "wx" });
@@ -200,7 +200,7 @@ export class ConfigurationClient {
     form.append("categoryId", categoryId);
 
     const url = `${this.http.baseUrl}${path}`;
-    console.error(`[vro-client] POST ${path}`);
+    console.error(`[vro-client] ${this.http.requestLabel(`POST ${path}`)}`);
 
     const res = await this.http.authenticatedFetch(
       url,
@@ -208,7 +208,7 @@ export class ConfigurationClient {
       { timeout: 60_000 },
     );
     if (!res.ok) {
-      throw await this.http.apiError(res, "import configuration");
+      throw await this.http.apiError(res, this.http.requestLabel("import configuration"));
     }
   }
 
