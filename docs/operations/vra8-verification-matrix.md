@@ -152,3 +152,12 @@ containing the word "undefined" and validation errors from deliberately malforme
 `import-configuration-file` and the catalog/deployment item shapes and writes need an environment this lab
 cannot provide — a 9.x environment that can export a `.vsoconf`, and a vRA 8 environment with released
 catalog content and a live deployment. See [VCFO-074](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/170).
+
+VCFO-074 has since narrowed two of these against a VCFA 9.1 lab, without changing any row above:
+
+- **The catalog item shape is confirmed on 9.1**, where a released item renders correctly, but not on vRA 8.
+  No deployment exists on either lab, so the deployment item shape is still assumed. Both renderers now
+  fall back to `(unnamed)`, so a mismatch would be visible rather than silent.
+- **A 9.x `.vsoconf` export is not the way out after all.** A standalone vRO 9.1 answers the artifact
+  request with `406` exactly as vRA 8 does — every artifact `Accept` refused, `*/*` returning JSON — so
+  `import-configuration-file` still has no genuine container to be fed, from either platform.

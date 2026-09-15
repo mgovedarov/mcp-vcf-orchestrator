@@ -287,3 +287,25 @@ test("run-deployment-action verifies expected deployment and action metadata", a
     inputs: undefined,
   });
 });
+
+test("deployment tools render a nameless deployment without leaking undefined", async () => {
+  // VCFO-074: no deployment has ever been observed on either verification lab,
+  // so the item shape is assumed. Guard it the way VCFO-070 guarded subscriptions.
+  const handlers = registeredDeploymentTools({
+    listDeployments: async () => ({
+      totalElements: 1,
+      content: [{ id: "deployment-1", status: "CREATE_INPROGRESS" }],
+    }),
+    getDeployment: async (id) => ({ id, status: "CREATE_INPROGRESS" }),
+  });
+
+  const list = await handlers.get("list-deployments")({});
+  assert.match(list.content[0].text, /• \(unnamed\) \(id: deployment-1\)/);
+  assert.doesNotMatch(list.content[0].text, /undefined/);
+  assert.ok(!list.isError);
+
+  const detail = await handlers.get("get-deployment")({ id: "deployment-1" });
+  assert.match(detail.content[0].text, /^Deployment: \(unnamed\)\nID: deployment-1\n/);
+  assert.doesNotMatch(detail.content[0].text, /undefined/);
+  assert.ok(!detail.isError);
+});

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   mkdtemp,
   readFile,
+  readdir,
   realpath,
   rm,
   symlink,
@@ -4607,6 +4608,46 @@ test("configuration import sends multipart file and category id", async () => {
     const body = calls[1].init.body;
     assert.equal(body.get("categoryId"), "category-1");
     assert.equal(body.get("file").name, "payload.vsoconf");
+  } finally {
+    await rm(configurationDir, { recursive: true, force: true });
+  }
+});
+
+test("a 406 on a configuration export becomes the actionable refusal", async () => {
+  // VCFO-074: a standalone vRO 9.1 refuses every artifact Accept for a
+  // configuration element with 406 and an HTML body carrying no diagnostic
+  // detail, exactly as vRA 8 does. On a non-vra8 platform no pre-emptive guard
+  // fires, so the status itself has to produce the guidance.
+  const configurationDir = await mkdtemp(
+    join(tmpdir(), "vcfa-configurations-"),
+  );
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return new Response("<html><body>406</body></html>", {
+      status: 406,
+      headers: { "content-type": "text/html;charset=utf-8" },
+    });
+  };
+
+  try {
+    const client = new VroClient(config({ configurationDir }));
+    await assert.rejects(
+      () => client.exportConfigurationFile("configuration-1", "probe.vsoconf"),
+      (error) => {
+        assert.match(error.message, /406 Not Acceptable/);
+        assert.match(error.message, /add-configuration-to-project-package/);
+        // The opaque HTML body must not be what the operator is handed.
+        assert.doesNotMatch(error.message, /<html>/);
+        return true;
+      },
+    );
+    assert.equal(
+      await readdir(configurationDir).then((f) => f.length),
+      0,
+      "a refused export must leave no partial file behind",
+    );
   } finally {
     await rm(configurationDir, { recursive: true, force: true });
   }

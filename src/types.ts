@@ -420,9 +420,21 @@ export interface CatalogItemType {
 
 export interface CatalogItem {
   id: string;
-  name: string;
+  /**
+   * Optional for the same reason `Subscription.name` is (VCFO-070): a renderer
+   * must not interpolate it unguarded. A released blueprint-backed item on
+   * VCFA 9.1 does carry one, but the vRA 8 shape has never been observed --
+   * both labs that verified `vra8` mode had an empty catalog (VCFO-074).
+   */
+  name?: string;
   description?: string;
   type?: CatalogItemType;
+  /**
+   * Neither field is served for a blueprint-backed item on VCFA 9.1, which
+   * identifies its origin through `type.id` (`com.vmw.blueprint`) and a
+   * `sourceProjectId` this interface does not model. They are kept because a
+   * content-source-backed item may still carry them (VCFO-074).
+   */
   sourceType?: string;
   sourceName?: string;
   sourceId?: string;
@@ -448,7 +460,12 @@ export interface CatalogItemList {
 
 export interface Deployment {
   id: string;
-  name: string;
+  /**
+   * Optional, like `CatalogItem.name`: no deployment has ever been observed on
+   * either verification lab, so the shape is assumed rather than known and the
+   * renderers must not interpolate it unguarded (VCFO-074).
+   */
+  name?: string;
   description?: string;
   status?: string; // e.g. "CREATE_SUCCESSFUL" | "DELETE_IN_PROGRESS" | "UPDATE_FAILED" etc.
   projectId?: string;

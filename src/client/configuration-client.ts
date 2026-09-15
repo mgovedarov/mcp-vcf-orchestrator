@@ -10,6 +10,7 @@ import {
 } from "./artifact-preflight.js";
 import {
   createUploadForm,
+  CONFIGURATION_EXPORT_NOT_ACCEPTABLE,
   UNSUPPORTED_VRA8_CONFIGURATION_EXPORT,
   type VroHttpClient,
 } from "./core.js";
@@ -172,6 +173,12 @@ export class ConfigurationClient {
       { timeout: 60_000 },
     );
     if (!res.ok) {
+      // 406 is this server declining to serve the element as an artifact at
+      // all, not a transient failure, so it becomes the actionable message
+      // rather than an HTML body with no diagnostic detail (VCFO-074).
+      if (res.status === 406) {
+        throw new Error(CONFIGURATION_EXPORT_NOT_ACCEPTABLE);
+      }
       throw await this.http.apiError(res, this.http.requestLabel("export configuration"));
     }
     const buffer = Buffer.from(await res.arrayBuffer());

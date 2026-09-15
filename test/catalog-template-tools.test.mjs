@@ -215,3 +215,26 @@ test("delete-template verifies expected metadata before deletion", async () => {
   });
   assert.equal(deletedId, "template-1");
 });
+
+test("catalog tools render a nameless item without leaking undefined", async () => {
+  // VCFO-074: both verification labs had an empty catalog, so the item shape is
+  // assumed rather than known. An item served without a name must not render
+  // "• undefined (id: …)" — the defect VCFO-070 found in list-subscriptions.
+  const handlers = registeredTools(registerCatalogTools, {
+    listCatalogItems: async () => ({
+      totalElements: 1,
+      content: [{ id: "catalog-1", type: { name: "VCF Automation Templates" } }],
+    }),
+    getCatalogItem: async (id) => ({ id }),
+  });
+
+  const list = await handlers.get("list-catalog-items")({});
+  assert.match(list.content[0].text, /• \(unnamed\) \(id: catalog-1\)/);
+  assert.doesNotMatch(list.content[0].text, /undefined/);
+  assert.ok(!list.isError);
+
+  const detail = await handlers.get("get-catalog-item")({ id: "catalog-1" });
+  assert.match(detail.content[0].text, /^Catalog Item: \(unnamed\)\nID: catalog-1\n/);
+  assert.doesNotMatch(detail.content[0].text, /undefined/);
+  assert.ok(!detail.isError);
+});

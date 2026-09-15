@@ -51,6 +51,17 @@ const UNSUPPORTED_AUTOMATION_WRITE_UNKNOWN =
 export const UNSUPPORTED_VRA8_CONFIGURATION_EXPORT =
   "Exporting a single configuration element as a .vsoconf artifact is not supported in VCFA_TARGET_PLATFORM=vra8 mode: vRA 8 serves configuration elements as JSON only and rejects the artifact request with 406. Use get-configuration to read it, or add it to the project package with add-configuration-to-project-package and export that package instead.";
 
+// The same refusal is not confined to vRA 8: a standalone vRO 9.1 answers 406
+// to every artifact Accept for a configuration element — application/zip,
+// application/vcoobject+zip and application/octet-stream alike — while `*/*`
+// returns the element as JSON (verified live, VCFO-074). The vra8 guard above
+// stays a pre-emptive fast path; this message is what a 406 from any other
+// platform is turned into, so the operator gets the same actionable route
+// instead of an opaque HTML error body. It is deliberately not a platform
+// claim: it reports what the server answered.
+export const CONFIGURATION_EXPORT_NOT_ACCEPTABLE =
+  "This vRO server does not serve a single configuration element as a .vsoconf artifact: it answered the export request with 406 Not Acceptable. Observed on vRA 8 and on vRO 9.1 alike, so it may be true of every vRO rather than of one platform. Use get-configuration to read the element, or add it to the project package with add-configuration-to-project-package and export that package instead.";
+
 // Appended to vRA 8 login failures. The CSP login answers wrong credentials
 // and unknown domains with 400 (not 401), so the hint covers both.
 const VRA8_LOGIN_HINT =
