@@ -246,9 +246,11 @@ delete-workflow(id: "<workflow-id>", confirm: true)
 delete-configuration(id: "<configuration-id>", confirm: true)
 ```
 
-An element that was added to a package which was then deleted with `deleteContents: false` is
-reported by vRO as in use and answers `409 Conflict`. The refusal names the remedy: re-run the
-delete with `force: true`, which sends vRO's own `?force=true` (VCFO-087).
+Deleting an element immediately after the package that contained it can answer `409 Conflict`
+reporting it as in use. On 9.1 this is transient — vRO releases package members asynchronously and
+the state clears in about two seconds — so **retry the plain delete first**. `force: true` sends
+vRO's own `?force=true` and is for an element that is genuinely referenced; it skips the reference
+check, so do not reach for it to get past a refusal that a retry would clear (VCFO-087).
 
 ```text
 delete-workflow(id: "<workflow-id>", force: true, confirm: true)

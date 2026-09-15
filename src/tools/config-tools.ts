@@ -248,7 +248,7 @@ export function registerConfigTools(
     {
       title: "Delete Configuration Element",
       description:
-        "Delete a configuration element from VCF Automation Orchestrator. This action is irreversible. Set confirm to true to proceed. Set force to true to delete an element vRO reports as in use.",
+        "Delete a configuration element from VCF Automation Orchestrator. This action is irreversible. Set confirm to true to proceed. A 409 reporting the element as in use right after delete-package is usually transient; retry first, and set force to true only if it persists.",
       inputSchema: z.object({
         id: z.string().describe("The configuration element ID to delete"),
         expectedName: z
@@ -261,7 +261,7 @@ export function registerConfigTools(
           .boolean()
           .optional()
           .describe(
-            "Delete even if vRO reports the element as in use, for example after delete-package left it orphaned (default: false)",
+            "Delete even if vRO reports the element as in use, skipping vRO's reference check (default: false). A 409 straight after delete-package is usually transient — retry the plain delete first.",
           ),
         confirm: z
           .boolean()

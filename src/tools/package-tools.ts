@@ -969,7 +969,7 @@ export function registerPackageTools(
           .boolean()
           .optional()
           .describe(
-            "Also delete all elements (workflows, actions, configs) inside the package (default: false). Leaving contents behind can orphan members on 9.x, which vRO then reports as in use and which need force set to true to delete individually.",
+            "Also delete all elements (workflows, actions, configs) inside the package (default: false). On 9.x vRO releases the members asynchronously, so for a second or two afterwards deleting one of them can be refused with 409 in use; retrying clears it.",
           ),
         confirm: z
           .boolean()

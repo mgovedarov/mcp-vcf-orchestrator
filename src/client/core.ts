@@ -69,16 +69,24 @@ export const CONFIGURATION_EXPORT_NOT_ACCEPTABLE =
 // Appended to a 409 on a workflow, action or configuration delete. vRO names
 // the remedy itself — "Specify '?force=true' parameter to delete it" — but an
 // MCP caller cannot send a query parameter, so the hint re-spells it as the
-// `force` argument the delete tools now take. vRO's own sentence is kept: it
-// names the element and is the most informative part of the body, unlike the
-// opaque HTML behind the 406 above. The likely cause is named because it was
-// isolated to one sequence on VCF Automation 9.1: create an element, add it
-// to a package, rebuild, then delete the package with deleteContents false.
-// Deleting the same element while the package still exists, or after running
-// it, both succeed — only orphaning it by the package delete trips the 409
-// (VCFO-087).
+// `force` argument the delete tools take.
+//
+// The retry comes first because the 409 measured on VCF Automation 9.1 is
+// transient, which is the opposite of what VCFO-087 was filed as. Deleting a
+// package releases its members asynchronously: for roughly two seconds after
+// `delete-package` the element is still reported as in use. Measured on the
+// appliance-embedded vRO 9.1, provider session — 4 of 8 immediate deletes
+// answered 409 at zero delay, none of 4 did after a 5s pause, and in 3 of 3
+// timed samples a plain retry succeeded 2.2-2.3s after the first refusal. An
+// element in a package that still exists never tripped it (0 of 4), nor did
+// one never packaged. So the element is not orphaned or undeletable; it is
+// briefly still attached.
+//
+// force is kept as the second step, not the first, because it skips vRO's
+// reference check rather than establishing that nothing references the
+// element — on a genuinely referenced element it breaks the referrer.
 export function inUseForceHint(tool: string): string {
-  return `\nHint: vRO reports this element as in use. The usual cause is delete-package with deleteContents false, which leaves members behind as orphans on 9.x. Re-run ${tool} with force set to true to delete it anyway, once nothing that matters still references it.`;
+  return `\nHint: this is usually transient. A delete issued immediately after delete-package can still see the element as in use for a second or two while vRO releases it; retry the same call first. If the refusal persists, the element is genuinely referenced — re-run ${tool} with force set to true to delete it regardless, which skips vRO's reference check and leaves whatever referenced it broken.`;
 }
 
 // Appended to vRA 8 login failures. The CSP login answers wrong credentials

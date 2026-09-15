@@ -4893,7 +4893,10 @@ test("deleteWorkflow includes force query only when requested", async () => {
 test("a 409 on deleteWorkflow names the force flag", async () => {
   // vRO's own sentence names the element and the remedy, and `message` is a
   // safe body key, so it survives sanitizing. What it cannot say is how an MCP
-  // caller sends ?force=true — that is what the appended hint supplies.
+  // caller sends ?force=true — that is what the appended hint supplies. The
+  // hint leads with a retry because the refusal measured on 9.1 is transient
+  // (VCFO-087): forcing past one a retry would clear skips a live reference
+  // check, so the ordering is asserted here, not just the presence of `force`.
   const body = JSON.stringify({
     message:
       "Workflow 'Probe' is in use. Specify '?force=true' parameter to delete it.",
@@ -4914,7 +4917,13 @@ test("a 409 on deleteWorkflow names the force flag", async () => {
       // vRO's diagnosis is kept rather than replaced: it is the informative
       // part of this body, unlike the opaque HTML behind the 406 refusal.
       assert.match(error.message, /is in use/);
+      assert.match(error.message, /retry the same call first/);
       assert.match(error.message, /force set to true/);
+      // Retry advice must come before the force advice, not after it.
+      assert.ok(
+        error.message.indexOf("retry the same call first") <
+          error.message.indexOf("force set to true"),
+      );
       assert.match(error.message, /delete-workflow/);
       assert.equal(error.status, 409);
       return true;
@@ -4970,7 +4979,10 @@ test("deleteAction includes force query only when requested", async () => {
 test("a 409 on deleteAction names the force flag", async () => {
   // vRO's own sentence names the element and the remedy, and `message` is a
   // safe body key, so it survives sanitizing. What it cannot say is how an MCP
-  // caller sends ?force=true — that is what the appended hint supplies.
+  // caller sends ?force=true — that is what the appended hint supplies. The
+  // hint leads with a retry because the refusal measured on 9.1 is transient
+  // (VCFO-087): forcing past one a retry would clear skips a live reference
+  // check, so the ordering is asserted here, not just the presence of `force`.
   const body = JSON.stringify({
     message:
       "Action 'Probe' is in use. Specify '?force=true' parameter to delete it.",
@@ -4991,7 +5003,13 @@ test("a 409 on deleteAction names the force flag", async () => {
       // vRO's diagnosis is kept rather than replaced: it is the informative
       // part of this body, unlike the opaque HTML behind the 406 refusal.
       assert.match(error.message, /is in use/);
+      assert.match(error.message, /retry the same call first/);
       assert.match(error.message, /force set to true/);
+      // Retry advice must come before the force advice, not after it.
+      assert.ok(
+        error.message.indexOf("retry the same call first") <
+          error.message.indexOf("force set to true"),
+      );
       assert.match(error.message, /delete-action/);
       assert.equal(error.status, 409);
       return true;
@@ -5047,7 +5065,10 @@ test("deleteConfiguration includes force query only when requested", async () =>
 test("a 409 on deleteConfiguration names the force flag", async () => {
   // vRO's own sentence names the element and the remedy, and `message` is a
   // safe body key, so it survives sanitizing. What it cannot say is how an MCP
-  // caller sends ?force=true — that is what the appended hint supplies.
+  // caller sends ?force=true — that is what the appended hint supplies. The
+  // hint leads with a retry because the refusal measured on 9.1 is transient
+  // (VCFO-087): forcing past one a retry would clear skips a live reference
+  // check, so the ordering is asserted here, not just the presence of `force`.
   const body = JSON.stringify({
     message:
       "Configuration element 'Probe' is in use. Specify '?force=true' parameter to delete it.",
@@ -5068,7 +5089,13 @@ test("a 409 on deleteConfiguration names the force flag", async () => {
       // vRO's diagnosis is kept rather than replaced: it is the informative
       // part of this body, unlike the opaque HTML behind the 406 refusal.
       assert.match(error.message, /is in use/);
+      assert.match(error.message, /retry the same call first/);
       assert.match(error.message, /force set to true/);
+      // Retry advice must come before the force advice, not after it.
+      assert.ok(
+        error.message.indexOf("retry the same call first") <
+          error.message.indexOf("force set to true"),
+      );
       assert.match(error.message, /delete-configuration/);
       assert.equal(error.status, 409);
       return true;
