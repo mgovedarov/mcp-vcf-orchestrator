@@ -237,7 +237,7 @@ export class PackageClient {
     const query = packageExportQuery(options);
     const path = `/content/packages/${encodeURIComponent(name)}${query}`;
     const url = `${this.http.baseUrl}${path}`;
-    console.error(`[vro-client] GET ${path}`);
+    console.error(`[vro-client] ${this.http.requestLabel(`GET ${path}`)}`);
 
     const res = await this.http.authenticatedFetch(
       url,
@@ -245,7 +245,7 @@ export class PackageClient {
       { timeout: 60_000 },
     );
     if (!res.ok) {
-      throw await this.http.apiError(res, "export package");
+      throw await this.http.apiError(res, this.http.requestLabel("export package"));
     }
     const buffer = Buffer.from(await res.arrayBuffer());
     await writeFile(destPath, buffer, { flag: overwrite ? "w" : "wx" });
@@ -276,7 +276,7 @@ export class PackageClient {
     const buffer = await readFile(srcPath);
     const form = createUploadForm(buffer, fileName);
     const url = `${this.http.baseUrl}${path}`;
-    console.error(`[vro-client] POST ${path}`);
+    console.error(`[vro-client] ${this.http.requestLabel(`POST ${path}`)}`);
 
     const res = await this.http.authenticatedFetch(
       url,
@@ -284,7 +284,7 @@ export class PackageClient {
       { timeout: 60_000 },
     );
     if (!res.ok) {
-      throw await this.http.apiError(res, "import package");
+      throw await this.http.apiError(res, this.http.requestLabel("import package"));
     }
   }
 
@@ -304,7 +304,7 @@ export class PackageClient {
     const buffer = await readFile(srcPath);
     const form = createUploadForm(buffer, fileName);
     const url = `${this.http.baseUrl}${path}`;
-    console.error(`[vro-client] POST ${path}`);
+    console.error(`[vro-client] ${this.http.requestLabel(`POST ${path}`)}`);
 
     const res = await this.http.authenticatedFetch(
       url,
@@ -312,7 +312,7 @@ export class PackageClient {
       { timeout: 60_000 },
     );
     if (!res.ok) {
-      throw await this.http.apiError(res, "package import details");
+      throw await this.http.apiError(res, this.http.requestLabel("package import details"));
     }
     return (await res.json()) as PackageImportDetails;
   }

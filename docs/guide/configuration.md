@@ -56,7 +56,7 @@ Everything else stays on `VCFA_HOST`: the session endpoints above, the `GET /api
 
 An external vRO cannot stand in as `VCFA_HOST`: it answers the session endpoint and `/api/versions` with a redirect to its own UI, so the login fails. Conversely, leaving `VCFA_VRO_HOST` unset in such an environment sends `/vco/api` to the Automation appliance's embedded orchestrator, which refuses a tenant with a `403` and an HTML page rather than a vRO JSON error — that error carries a hint pointing at this variable.
 
-While the two hosts differ, every request log line and every `vRO API error` names the host it went to (`GET /workflows on vro.example.com`), a transport failure names it too (`Request to vro.example.com failed: ENOTFOUND`), and a redirect answer is surfaced rather than followed, naming its target. Unset, blank, or equal to `VCFA_HOST`, the variable changes nothing. The value must be a hostname or `host:port`; a scheme or a path is rejected at startup.
+While the two hosts differ, every request log line and every `vRO API error` names the host it went to (`GET /workflows on vro.example.com`, `export workflow on vro.example.com`), a transport failure names it too (`Request to vro.example.com failed: ENOTFOUND`), and a redirect answer to a JSON API request is surfaced rather than followed, naming its target. Unset, blank, or equal to `VCFA_HOST`, the variable changes nothing. The value must be a hostname or `host:port`: a scheme, a path, or anything that cannot serve as the host of a URL is rejected at startup.
 
 ## Optional Variables
 

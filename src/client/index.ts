@@ -107,6 +107,16 @@ export class VroClient {
     this.projects = new ProjectClient(http);
   }
 
+  /**
+   * The external vRO host actually in effect, or undefined when /vco/api is
+   * served by the Automation appliance. The client owns the rule that an
+   * override equal to the Automation host is no split at all, so callers
+   * report this rather than re-deriving it (VCFO-081).
+   */
+  get externalVroHost(): string | undefined {
+    return this.http.externalVroHost;
+  }
+
   /** Release network resources (e.g. the TLS-relaxed dispatcher). */
   close(): Promise<void> {
     return this.http.close();

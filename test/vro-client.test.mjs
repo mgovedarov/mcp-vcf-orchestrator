@@ -5925,7 +5925,7 @@ test("vra8 with vroHost keeps the CSP and IaaS logins on host and sends /vco/api
   assert.ok(!calls.some((c) => c.url.includes("/cloudapi/")), "no Cloud API session in vra8");
 });
 
-test("binary export path follows vroHost and does not follow redirects", async () => {
+test("binary export path follows vroHost and keeps fetch's redirect default", async () => {
   const calls = [];
   globalThis.fetch = async (url, init) => {
     calls.push({ url: String(url), init });
@@ -5945,7 +5945,31 @@ test("binary export path follows vroHost and does not follow redirects", async (
     "https://vro.example.test/vco/api/content/workflows/wf-1",
   );
   assert.equal(exportCall.init.headers.Accept, "application/zip");
-  assert.equal(exportCall.init.redirect, "manual");
+  // Only the JSON path opts out of following redirects; a same-origin 302 the
+  // binary path relied on before VCFO-081 is still followed.
+  assert.equal(exportCall.init.redirect, "follow");
+});
+
+test("a failing binary export names the appliance that answered", async () => {
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/cloudapi/1.0.0/sessions")) return authResponse();
+    return new Response(JSON.stringify({ message: "nope" }), {
+      status: 404,
+      statusText: "Not Found",
+    });
+  };
+
+  const client = new VroClient(config({ vroHost: VRO_HOST }));
+  await assert.rejects(
+    () => client.exportWorkflowBuffer("wf-1"),
+    (e) => {
+      assert.equal(
+        e.message.split("\n")[0],
+        "vRO API error: 404 Not Found — export workflow on vro.example.test",
+      );
+      return true;
+    },
+  );
 });
 
 test("401 from the external vRO re-logins at host and retries at the vRO host", async () => {
@@ -6168,7 +6192,33 @@ test("a vcfa HTML 403 with no vroHost hints at an external vRO appliance", async
       return true;
     },
   );
-  assert.equal(authCount, 2, "the bounded vcfa 403 retry is unchanged");
+  assert.equal(
+    authCount,
+    1,
+    "an HTML 403 is the appliance refusing the tenant, so no re-login is spent",
+  );
+});
+
+test("an HTML 403 from an Automation service does not blame VCFA_VRO_HOST", async () => {
+  // VCFA_VRO_HOST moves only /vco/api, so it cannot explain a project-service
+  // refusal — and the documented signature is vRO failing while these work.
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/cloudapi/1.0.0/sessions")) return authResponse();
+    return new Response(EMBEDDED_ORCHESTRATOR_403, {
+      status: 403,
+      statusText: "Forbidden",
+      headers: { "Content-Type": "text/html" },
+    });
+  };
+
+  await assert.rejects(
+    () => new VroClient(config()).listProjects(),
+    (e) => {
+      assert.match(e.message, /vRO API error: 403 Forbidden — GET \/projects/);
+      assert.ok(!e.message.includes("VCFA_VRO_HOST"), e.message);
+      return true;
+    },
+  );
 });
 
 test("the external-vRO hint is not shown once vroHost is set, nor on vra8", async () => {

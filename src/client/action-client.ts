@@ -286,7 +286,7 @@ export class ActionClient {
       : actionId;
     const path = `/actions/${encodeURIComponent(id)}`;
     const url = `${this.http.baseUrl}${path}`;
-    console.error(`[vro-client] GET ${path}`);
+    console.error(`[vro-client] ${this.http.requestLabel(`GET ${path}`)}`);
 
     const res = await this.http.authenticatedFetch(
       url,
@@ -294,7 +294,7 @@ export class ActionClient {
       { timeout: 60_000 },
     );
     if (!res.ok) {
-      throw await this.http.apiError(res, "export action");
+      throw await this.http.apiError(res, this.http.requestLabel("export action"));
     }
     return Buffer.from(await res.arrayBuffer());
   }
@@ -350,7 +350,7 @@ export class ActionClient {
     form.append("categoryName", categoryName);
 
     const url = `${this.http.baseUrl}${path}`;
-    console.error(`[vro-client] POST ${path}`);
+    console.error(`[vro-client] ${this.http.requestLabel(`POST ${path}`)}`);
 
     const res = await this.http.authenticatedFetch(
       url,
@@ -358,7 +358,7 @@ export class ActionClient {
       { timeout: 60_000 },
     );
     if (!res.ok) {
-      throw await this.http.apiError(res, "import action");
+      throw await this.http.apiError(res, this.http.requestLabel("import action"));
     }
   }
 
