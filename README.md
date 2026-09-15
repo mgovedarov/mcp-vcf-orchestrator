@@ -70,7 +70,7 @@ Required environment variables:
 | --- | --- |
 | `VCFA_HOST` | VCF Automation hostname or `host:port`, for example `vcfa.example.com`. A value carrying a URL scheme is rejected at startup. |
 | `VCFA_USERNAME` | Username without organization, for example `admin`. |
-| `VCFA_ORGANIZATION` | Organization name (the tenant URL slug, not the display name), or `system` for provider/system administrator logins, which are routed to `/cloudapi/1.0.0/sessions/provider`. In `vra8` mode this is the vIDM domain shown on the Workspace ONE login page, for example `System Domain` for local users. |
+| `VCFA_ORGANIZATION` | Organization name (the tenant URL slug, not the display name), or `system` for provider/system administrator logins, which are routed to `/cloudapi/1.0.0/sessions/provider`. A provider session cannot read the tenant-scoped Automation services; use a tenant organization for the catalog, deployment, template, subscription, and project tools. In `vra8` mode this is the vIDM domain shown on the Workspace ONE login page, for example `System Domain` for local users. |
 | `VCFA_PASSWORD` | Password for the VCF Cloud API session, or the vIDM password used for the vRA 8 login when `VCFA_TARGET_PLATFORM=vra8`. |
 
 Useful optional variables:

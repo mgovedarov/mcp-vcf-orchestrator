@@ -19,6 +19,8 @@ The session request sends Basic auth as `{VCFA_USERNAME}@{VCFA_ORGANIZATION}`. I
 - Provider/system administrator accounts must set `VCFA_ORGANIZATION=system`. That routes the login to `/cloudapi/1.0.0/sessions/provider`; the tenant `/sessions` endpoint rejects provider accounts with 401 regardless of password.
 - The server auto-negotiates the VCF Cloud API version (`9.1.0` on VCF Automation 9.1, `9.0.0` otherwise) via `GET /api/versions`. If negotiation misbehaves against an unusual target, pin it with `VCFA_TARGET_PLATFORM=vcfa9.1` or `vcfa9.0`.
 
+A `403` on the default `vcfa` platform is never a login problem either: a revoked or invalid session answers `401`, so a `403` is a denial and is reported directly rather than costing a re-login and a retry. Its `WWW-Authenticate` challenge is deliberately not consulted — project-service sends one on a `403` that is a genuine denial.
+
 For `VCFA_TARGET_PLATFORM=vra8` the login is the vRA 8 bearer-token flow, a vIDM CSP login followed by a refresh-token exchange at `/iaas/api/login`, rather than the Cloud API session. If it fails:
 
 - A `400` or `401` from `/csp/gateway/am/api/login` means the vIDM credentials or domain are wrong. `VCFA_USERNAME` and `VCFA_PASSWORD` are the Workspace ONE Access credentials, and `VCFA_ORGANIZATION` must be the domain shown on that login page, for example `System Domain` for local users. A VCF organization name or `system` is rejected there.
@@ -26,6 +28,15 @@ For `VCFA_TARGET_PLATFORM=vra8` the login is the vRA 8 bearer-token flow, a vIDM
 - A `401` from `/vco/api` after a successful login is treated as an expired token: the server renews it (exchanging the cached refresh token, or repeating the CSP login if that is rejected) and retries once before surfacing the error.
 - A `403` from `/vco/api` is not a login problem. Unless it carries a `WWW-Authenticate` challenge, it is reported directly as an authorization result: the vIDM user has no permission for that vRO object or operation.
 - A redirect on either login endpoint is reported as a login failure naming the host it points at, and is deliberately not followed — the request body carries the credentials. Point `VCFA_HOST` at the appliance's API endpoint rather than at an SSO portal or a redirecting load balancer.
+
+## Provider Session Cannot Read The Automation Services
+
+`VCFA_ORGANIZATION=system` authenticates a provider/system administrator, and vRO works normally — but the VCF Automation services are tenant-scoped and a provider identity has no auth-context in that stack. Two signatures, both fixed the same way:
+
+- **`403 Forbidden — GET /projects` with an empty body, carrying a hint that names `VCFA_ORGANIZATION`.** `list-projects` and `get-project` are the tools that reach project-service.
+- **`500 Internal Server Error` from the catalog, deployment, template, or subscription tools.** Those services turn the refusal into a server error rather than passing the `403` through; on VCF Automation 9.1 the blueprint-service body names the cause outright, a refused `GET .../rbac-service/api/auth-context`. The same hint is attached whenever the session is a provider one.
+
+Set `VCFA_ORGANIZATION` to the tenant organization's name (its URL slug) and restart the server. vRO (`/vco/api`) works on either session, so a configuration that only drives workflows, actions, configuration elements, resources, and packages can stay on the provider account.
 
 ## TLS Errors In Lab Environments
 
