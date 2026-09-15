@@ -76,6 +76,8 @@ Run preflight for a local workflow, action, configuration, or package artifact; 
 
 A backup that cannot be taken is reported as a `Backup skipped:` line and the rest of the report is still returned. That covers a missing live target ID and, in `vra8` mode, a configuration artifact: vRA 8 serves a configuration element as JSON only, so the note points at `get-configuration` and the project package instead.
 
+Only the `vra8` skip is pre-emptive. On any other platform a configuration backup attempts the export, and vRO 9.1 refuses it with the same `406` — so the backup **fails** rather than being skipped. The rest of the report is still returned. Use `get-configuration` or the project package to capture the element before a replacement there too; see `export-configuration-file` for the detail.
+
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
@@ -194,6 +196,8 @@ Validate inputs against the workflow definition, then execute the workflow with 
 
 Validate inputs, execute a workflow, poll until completion, failure, or timeout, and return outputs or useful failure diagnostics.
 
+Output parameters render as values rather than as vRO's value envelope — `result (string): "ok"` rather than `result (string): {"string":{"value":"ok"}}` — using the same unwrap as `get-configuration`. This replaced a narrower helper that leaked the raw envelope for array outputs.
+
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
@@ -230,6 +234,8 @@ List past and current executions for a specific workflow. Use this to find an ex
 ### `get-workflow-execution`
 
 Check the status and outputs of a workflow execution.
+
+Output parameters render as values rather than as vRO's value envelope, using the same unwrap as `run-workflow-and-wait` and `get-configuration`. Array outputs previously leaked the raw envelope here.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |

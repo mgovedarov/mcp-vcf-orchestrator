@@ -51,8 +51,11 @@ Follow this sequence unless the user explicitly asks for a narrower read-only re
 
 1. Discover the live target and dependencies with `list-*` / `get-*` tools.
 2. Export or snapshot existing live state when replacing content
-   (`export-workflow-file`, `export-action-file`, `export-configuration-file`,
-   `export-resource-element`, `export-package`).
+   (`export-workflow-file`, `export-action-file`, `export-resource-element`,
+   `export-package`). No vRO tested serves a single configuration element as a
+   `.vsoconf`, so `export-configuration-file` answers `406` on every platform:
+   capture one with `get-configuration`, or through
+   `add-configuration-to-project-package` and `export-project-package`.
 3. Author or modify the local artifact (`scaffold-workflow-file`,
    `create-workflow`, `create-action`, `create-configuration`).
 4. Validate with the matching preflight tool (`preflight-workflow-file`,
@@ -79,6 +82,16 @@ not create random, timestamped, or task-specific packages.
 
 Use direct `import-*-file` tools only for narrow validation or an explicitly
 requested one-off test.
+
+## Deleting elements
+
+`delete-workflow`, `delete-action`, and `delete-configuration` need `confirm:
+true` and the matching `expected*` guard, like every other live mutation. A `409`
+reporting the element as in use right after `delete-package` is usually a
+transient release race, not a real reference: retry the plain delete first. Pass
+`force: true` only if the conflict persists — it skips vRO's reference check
+rather than proving the element is unreferenced, so confirm that impact with the
+user first.
 
 ## Authoring detail lives in the server resources
 

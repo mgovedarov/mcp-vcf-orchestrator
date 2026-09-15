@@ -13,7 +13,7 @@ These operations should be performed only after explicit user confirmation:
 - creating or updating live workflows, actions, configurations, templates, subscriptions, deployments, or packages
 - running workflows, because workflow execution may change the target environment
 - importing workflows, actions, configurations, packages, or resource elements
-- deleting workflows, actions, configurations, resource elements, packages, templates, deployments, or subscriptions
+- deleting workflows, actions, configurations, resource elements, packages, templates, deployments, or subscriptions — and separately, passing `force: true` to a delete, which skips vRO's own reference check rather than establishing that nothing references the element
 - running deployment day-2 actions
 
 ## Two-Phase Target Confirmation
@@ -22,7 +22,7 @@ For high-risk live mutations, prefer a two-phase flow:
 
 1. Discover the live target with the matching list/get tool or prepare the artifact with `prepare-artifact-promotion`.
 2. Confirm the exact target and impact with the user.
-3. Pass `confirm: true` plus supported expected target fields such as `expectedName`, `expectedWorkflowName`, `expectedInputNames`, `expectedCategoryId`, `expectedCategoryName`, `expectedPackageName`, `expectedDeploymentName`, `expectedActionName`, `expectedEventTopicId`, or `expectedRunnableId`.
+3. Pass `confirm: true` plus supported expected target fields such as `expectedName`, `expectedWorkflowName`, `expectedInputNames`, `expectedCategoryId`, `expectedCategoryName`, `expectedPackageName`, `expectedDeploymentName`, `expectedActionName`, `expectedCatalogItemName`, `expectedProjectName`, `expectedEventTopicId`, or `expectedRunnableId`.
 4. Verify with a read-only get/list call after mutation.
 
 Expected fields are optional for backward compatibility. When provided, the handler fetches current live metadata before the mutation and refuses if any expected value does not match. Direct imports remain available for narrow validation and one-off tests, but package-first promotion with preflight, diff, backup, expected fields, and post-change verification is safer for reusable content.
@@ -65,6 +65,11 @@ Before deletion, confirm:
 - display name
 - project/category/package context
 - expected impact
+- whether `force: true` is being passed, and why
+
+`create-deployment` belongs in this list even though it creates rather than removes: it is the one tool in the surface that provisions real infrastructure, it is annotated destructive for that reason, and both of its required arguments are opaque UUIDs that nothing else in the call identifies. Pass `expectedCatalogItemName` and `expectedProjectName` so the handler verifies the target against live metadata before submitting the request.
+
+`force` on `delete-workflow`, `delete-action`, and `delete-configuration` sends vRO's own `?force=true`, which skips the reference check instead of proving the element is unreferenced — so it is a second step, not a first. A `409` reporting an element as in use right after `delete-package` is usually a transient release race that clears in a couple of seconds: retry the plain delete first, and reach for `force` only if the conflict persists and the references are understood. Confirm the impact with the user before setting it, since the unconfirmed prompt states it for exactly that reason.
 
 For subscriptions, disabling is often safer than deleting during testing.
 

@@ -27,6 +27,11 @@ them.
   `create-template`, `delete-template`, `create-subscription`,
   `update-subscription`, `delete-subscription` — require a `confirm: true`
   argument plus real user confirmation of the exact target and expected impact.
+- `create-deployment` provisions real infrastructure and is annotated
+  destructive for that reason — the one additive `create-` tool that is. Both of
+  its required arguments are opaque UUIDs that nothing else in the call
+  identifies, so pass `expectedCatalogItemName` and `expectedProjectName` and let
+  the handler verify the target against live metadata before it submits.
 - Running a workflow or a deployment day-2 action changes the live environment.
   Treat it like a production operation: confirm target, inputs, and blast radius.
 
@@ -49,7 +54,8 @@ them.
 - Execution: `run-workflow`, `run-workflow-and-wait`, `get-workflow-execution`,
   `get-workflow-execution-logs`, `list-workflow-executions`.
 - Deployments: `list-deployments`, `get-deployment`, `list-deployment-actions`,
-  `run-deployment-action`, `create-deployment`, `delete-deployment`.
+  `run-deployment-action`, `create-deployment` (provisions infrastructure;
+  annotated destructive), `delete-deployment`.
 - Projects: `list-projects`, `get-project` (resolve `projectId` before
   project-scoped calls).
 - Catalog: `list-catalog-items`, `get-catalog-item`.
@@ -74,7 +80,9 @@ creating or deleting a template, and creating, updating, or deleting a
 subscription. Deployment **writes** are unsupported in that mode: creating a
 deployment, deleting one, and running a day-2 action each return an
 unsupported-mode message naming what verifying that service would take.
-`export-configuration-file` is unsupported there too;
-route a configuration element through the project package instead, and expect
-`prepare-artifact-promotion` to report a configuration backup as skipped while
-still returning its report.
+`export-configuration-file` is unsupported on every platform, not only there:
+no vRO tested serves a single configuration element as a `.vsoconf`, so the
+request answers `406`. Route a configuration element through the project package
+instead. In `vra8` mode `prepare-artifact-promotion` reports a configuration
+backup as skipped while still returning its report; elsewhere that backup
+attempts the export and surfaces the refusal.
