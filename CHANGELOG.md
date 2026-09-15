@@ -1,6 +1,18 @@
 # Changelog
 
-## Unreleased
+## 3.2.0 - 2026-09-15
+
+The first release since 3.1.0. The default `vcfa` platform now has the per-tool verification record that
+only the non-default `vra8` mode had: all 78 registered tools driven against VCF Automation 9.1 in a single
+204-call sweep that returned the environment to its exact starting counts, recorded in
+`docs/operations/vcfa-verification-matrix.md`. Measuring rather than inheriting corrected three things the
+server had been getting wrong — a `403` there is a denial rather than a stale session, so it no longer costs
+a pointless re-login and now names the likely cause; a `409` on an element delete is a transient release race
+that a plain retry clears, not the undeletable element it had been characterized as; and the
+configuration-export `406` is not a vRA 8 trait but what every vRO tested answers. Alongside those: external
+vRO appliances via `VCFA_VRO_HOST`, target guards on `create-deployment` — the one tool in the surface that
+provisions infrastructure — `force` on the three vRO element deletes, and an end to redirect-following on
+JSON requests. No tools were added; the surface stays at 78.
 
 ### Added
 
