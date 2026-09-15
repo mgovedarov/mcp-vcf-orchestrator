@@ -2997,21 +2997,69 @@ test("project client fallback keeps the truncation flag of the unfiltered walk",
   }
 });
 
-test("project client surfaces a non-400 $filter failure instead of falling back", async () => {
+test("project client falls back when the service rejects $filter with 500", async () => {
+  // Both labs answer 500, not 400, for an element of the filter expression the
+  // service does not know, so a platform rejecting `substringof` or `tolower`
+  // that way must reach the client-side match rather than surface as an error.
+  const calls = [];
+  const errors = [];
+  const originalError = console.error;
+  console.error = (...args) => errors.push(args.join(" "));
+  try {
+    globalThis.fetch = async (url) => {
+      calls.push(String(url));
+      if (calls.length === 1) return authResponse();
+      if (new URL(String(url)).searchParams.has("$filter")) {
+        return Response.json(
+          { message: "Unknown function 'tolower'" },
+          { status: 500, statusText: "Internal Server Error" },
+        );
+      }
+      return Response.json({
+        totalElements: 2,
+        content: [
+          { id: "p-1", name: "Dev Sandbox" },
+          { id: "p-2", name: "QA" },
+        ],
+      });
+    };
+
+    const client = new VroClient(config());
+    const dev = await client.listProjects("dev");
+
+    assert.deepEqual(
+      dev.content.map((project) => project.id),
+      ["p-1"],
+    );
+    assert.equal(calls.length, 3);
+    assert.ok(
+      errors.some((line) =>
+        /project-service rejected the \$filter search with 500/.test(line),
+      ),
+      "the fallback logs the status that triggered it",
+    );
+  } finally {
+    console.error = originalError;
+  }
+});
+
+test("project client surfaces a $filter failure that is not 400 or 500", async () => {
+  // Only the two statuses a filter the service cannot satisfy actually earns
+  // trigger the fallback. Anything else surfaces: a 404 is the wrong path, not
+  // a filter it could not parse, and no unfiltered walk could improve on it.
+  // (401 and, on vcfa, a JSON 403 never reach this branch at all — they go to
+  // the re-authenticate-and-retry path in core.ts first.)
   const calls = [];
   globalThis.fetch = async (url) => {
     calls.push(String(url));
     if (calls.length === 1) return authResponse();
-    return Response.json(
-      { message: "boom" },
-      { status: 500, statusText: "Internal Server Error" },
-    );
+    return Response.json({ message: "no such path" }, { status: 404, statusText: "Not Found" });
   };
 
   const client = new VroClient(config());
   await assert.rejects(
     client.listProjects("dev"),
-    /vRO API error: 500 Internal Server Error — GET \/projects\?/,
+    /vRO API error: 404 Not Found — GET \/projects\?/,
   );
   // No retry without the filter.
   assert.equal(calls.length, 2);

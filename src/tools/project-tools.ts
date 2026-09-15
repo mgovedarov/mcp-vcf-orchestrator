@@ -17,6 +17,36 @@ const PLACEMENT_POLICY_KEY = "__projectPlacementPolicy";
 const SENSITIVE_PROPERTY_KEY =
   /(password|passwd|secret|token|credential|private[-_]?key|api[-_]?key)/i;
 
+/** A role array key this renderer knows by name. */
+type RoleKey =
+  | "administrators"
+  | "members"
+  | "viewers"
+  | "supervisors"
+  | "advancedUsers"
+  | "users"
+  | "auditors";
+
+/**
+ * The role arrays both platforms are known to serve, label first, in render
+ * order. Only `administrators` is common to the two: vRA 8 serves `members`/
+ * `viewers`/`supervisors`, VCF Automation 9.x serves `advancedUsers`/`users`/
+ * `auditors` (VCFO-065). The order is fixed here rather than taken from the
+ * response, so a platform's output does not change with the key order the
+ * service happens to serve.
+ */
+const ROLE_ARRAYS: ReadonlyArray<readonly [string, RoleKey]> = [
+  ["Administrators", "administrators"],
+  ["Members", "members"],
+  ["Viewers", "viewers"],
+  ["Supervisors", "supervisors"],
+  ["Advanced users", "advancedUsers"],
+  ["Users", "users"],
+  ["Auditors", "auditors"],
+];
+
+const KNOWN_ROLE_KEYS = new Set<string>(ROLE_ARRAYS.map(([, key]) => key));
+
 function formatPrincipals(
   label: string,
   principals: ProjectPrincipal[] | undefined,
@@ -24,10 +54,60 @@ function formatPrincipals(
   if (!Array.isArray(principals)) return "";
   if (principals.length === 0) return `${label}: none\n`;
   const names = principals.map((principal) => {
-    const who = principal.email ?? "(unnamed)";
+    // Truthiness, not `??`: a principal carrying an empty email must render as
+    // "(unnamed)" rather than as a blank name.
+    const who = principal.email || "(unnamed)";
     return principal.type ? `${who} (${principal.type})` : who;
   });
   return `${label}: ${principals.length} — ${names.join(", ")}\n`;
+}
+
+/**
+ * True for a non-empty array whose every entry is a principal-shaped object.
+ * An empty array carries nothing to check, so it does not qualify.
+ */
+function isPrincipalArray(value: unknown): value is ProjectPrincipal[] {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every(
+      (entry) =>
+        typeof entry === "object" &&
+        entry !== null &&
+        !Array.isArray(entry) &&
+        ("email" in entry || "type" in entry),
+    )
+  );
+}
+
+/** `advancedUsers` -> `Advanced users`, for a role array we do not know. */
+function humanizeRoleKey(key: string): string {
+  const spaced = key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase();
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/**
+ * Render the role arrays: the known ones first in their fixed order, then any
+ * further array of principal-shaped entries under a humanized form of its own
+ * key. The second pass is what keeps a role array a future platform adds from
+ * being dropped in silence, the way the 9.x arrays were before VCFO-065 — a
+ * fixed list of names cannot print what it does not already name.
+ *
+ * The shape check is what keeps a non-role array out of the output, and it
+ * needs an entry to look at, so an *unknown* array arriving empty is skipped —
+ * which is how every role array on the one 9.1 project arrived. That costs at
+ * most a `<label>: none` line for a role nobody holds, never a populated one.
+ */
+function formatRoleArrays(project: Project): string {
+  let text = "";
+  for (const [label, key] of ROLE_ARRAYS) {
+    text += formatPrincipals(label, project[key]);
+  }
+  for (const [key, value] of Object.entries(project)) {
+    if (KNOWN_ROLE_KEYS.has(key) || !isPrincipalArray(value)) continue;
+    text += formatPrincipals(humanizeRoleKey(key), value);
+  }
+  return text;
 }
 
 function formatConstraints(constraints: Project["constraints"]): string {
@@ -73,7 +153,7 @@ function formatProperties(properties: Project["properties"]): string {
  * serves a narrower object.
  */
 export function formatProjectDetails(project: Project): string {
-  let text = `Project: ${project.name}\nID: ${project.id}\n`;
+  let text = `Project: ${project.name || "(unnamed)"}\nID: ${project.id}\n`;
   if (project.description) text += `Description: ${project.description}\n`;
   if (project.orgId) text += `Organization ID: ${project.orgId}\n`;
   if (typeof project.sharedResources === "boolean")
@@ -81,10 +161,7 @@ export function formatProjectDetails(project: Project): string {
   if (typeof project.operationTimeout === "number")
     text += `Operation timeout: ${project.operationTimeout}s\n`;
   text += formatProperties(project.properties);
-  text += formatPrincipals("Administrators", project.administrators);
-  text += formatPrincipals("Members", project.members);
-  text += formatPrincipals("Viewers", project.viewers);
-  text += formatPrincipals("Supervisors", project.supervisors);
+  text += formatRoleArrays(project);
   text += formatConstraints(project.constraints);
   return text;
 }
@@ -125,7 +202,7 @@ export function registerProjectTools(
           return { content: [{ type: "text", text: `${text}${note}` }] };
         }
         const lines = items.map((project) => {
-          let line = `• ${project.name} (id: ${project.id})`;
+          let line = `• ${project.name || "(unnamed)"} (id: ${project.id})`;
           if (project.description) line += ` — ${project.description}`;
           return line;
         });
@@ -157,7 +234,7 @@ export function registerProjectTools(
     {
       title: "Get Project",
       description:
-        "Get details for a specific VCF Automation project by its ID: name, description, organization, shared-resources flag, operation timeout, machine naming template, placement policy, custom properties, role assignments (administrators, members, viewers, supervisors), and placement constraint counts. Cloud zones are not part of this view. Use list-projects to discover project IDs.",
+        "Get details for a specific VCF Automation project by its ID: name, description, organization, shared-resources flag, operation timeout, machine naming template, placement policy, custom properties, role assignments, and placement constraint counts. The two platforms serve different role arrays — administrators, members, viewers and supervisors on vRA 8, administrators, advanced users, users and auditors on VCF Automation 9.x — and only the arrays the response carries are printed, so a section the response omits is absent rather than empty. Cloud zones are not part of this view. Use list-projects to discover project IDs.",
       inputSchema: z.object({
         id: z.string().describe("The project ID"),
       }),

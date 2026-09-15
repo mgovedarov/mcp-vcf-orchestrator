@@ -180,6 +180,48 @@ test("get-project renders the project-service fields verified on vRA 8.18", asyn
   assert.doesNotMatch(result.content[0].text, /must-not-print/);
 });
 
+test("get-project renders the project-service fields verified on VCF Automation 9.1", async () => {
+  // Shape observed on a VCF Automation 9.1 lab under VCFO-065, tenant session:
+  // exactly id, name, description, orgId and the four role arrays. None of
+  // constraints, properties, operationTimeout or sharedResources is served, and
+  // the role arrays are named differently from the vRA 8 ones. The lab returned
+  // every array empty; two are populated here to cover the rendering as well.
+  const handlers = registeredTools(registerProjectTools, {
+    getProject: async (id) => ({
+      id,
+      name: "default-project",
+      description: "This first project was created by VCF Automation.",
+      orgId: "org-9",
+      administrators: [],
+      advancedUsers: [{ email: "power@example.test", type: "user" }],
+      users: [],
+      auditors: [{ email: "audit@example.test", type: "group" }],
+    }),
+  });
+
+  const result = await handlers.get("get-project")({ id: "p-9" });
+  assert.equal(result.isError, undefined);
+  assert.equal(
+    result.content[0].text,
+    [
+      "Project: default-project",
+      "ID: p-9",
+      "Description: This first project was created by VCF Automation.",
+      "Organization ID: org-9",
+      "Administrators: none",
+      "Advanced users: 1 — power@example.test (user)",
+      "Users: none",
+      "Auditors: 1 — audit@example.test (group)",
+      "",
+    ].join("\n"),
+  );
+  // The vRA 8 role labels must not appear for a 9.x response that omits them.
+  assert.doesNotMatch(result.content[0].text, /Members|Viewers|Supervisors/);
+  // 9.x serves no constraints object, so the "Constraints: none" line that the
+  // vRA 8 shape earns must not be invented here.
+  assert.doesNotMatch(result.content[0].text, /Constraints/);
+});
+
 test("get-project omits sections the response does not carry", async () => {
   const handlers = registeredTools(registerProjectTools, {
     getProject: async (id) => ({
@@ -215,4 +257,82 @@ test("project tools return isError text when the client fails", async () => {
   const detail = await handlers.get("get-project")({ id: "p-1" });
   assert.equal(detail.isError, true);
   assert.match(detail.content[0].text, /Failed to get project: missing/);
+});
+
+test("project tools render a row served without a name as (unnamed)", async () => {
+  // No project has been observed without a name on either lab; the guard
+  // matches the one CatalogItem/Deployment/Subscription rows carry (VCFO-074),
+  // so a nameless row cannot reach the output as "undefined".
+  const handlers = registeredTools(registerProjectTools, {
+    listProjects: async () => ({
+      totalElements: 2,
+      content: [{ id: "p-1" }, { id: "p-2", name: "" }],
+    }),
+    getProject: async (id) => ({ id }),
+  });
+
+  const list = await handlers.get("list-projects")({});
+  assert.match(list.content[0].text, /• \(unnamed\) \(id: p-1\)/);
+  assert.match(list.content[0].text, /• \(unnamed\) \(id: p-2\)/);
+  assert.doesNotMatch(list.content[0].text, /undefined/);
+
+  const detail = await handlers.get("get-project")({ id: "p-1" });
+  assert.equal(detail.content[0].text, "Project: (unnamed)\nID: p-1\n");
+});
+
+test("get-project renders a principal carrying no usable email as (unnamed)", async () => {
+  const handlers = registeredTools(registerProjectTools, {
+    getProject: async (id) => ({
+      id,
+      name: "Empty principals",
+      // An empty string is not nullish, so this is the case `??` would have
+      // rendered as a blank name.
+      administrators: [{ email: "", type: "group" }, { type: "user" }],
+    }),
+  });
+
+  const result = await handlers.get("get-project")({ id: "p-1" });
+  assert.equal(
+    result.content[0].text,
+    [
+      "Project: Empty principals",
+      "ID: p-1",
+      "Administrators: 2 — (unnamed) (group), (unnamed) (user)",
+      "",
+    ].join("\n"),
+  );
+});
+
+test("get-project prints a role array it does not know about", async () => {
+  // The failure VCFO-065 fixed was a fixed list of names silently dropping the
+  // arrays 9.x serves. A role array a future platform adds must not repeat it,
+  // so any further array of principal-shaped entries is rendered under a
+  // humanized form of its own key, after the known ones.
+  const handlers = registeredTools(registerProjectTools, {
+    getProject: async (id) => ({
+      id,
+      name: "Future",
+      administrators: [{ email: "admin@example.test", type: "user" }],
+      costOperators: [{ email: "cost@example.test", type: "group" }],
+      // Not principals: a shape check is what keeps a non-role array out of
+      // the output, whatever it is named.
+      zones: [{ zoneId: "z-1", priority: 1 }],
+      tags: ["a", "b"],
+      // Empty, so there is nothing to shape-check; skipped rather than guessed
+      // at, which costs at most a "none" line for a role nobody holds.
+      auxiliaryAuditors: [],
+    }),
+  });
+
+  const result = await handlers.get("get-project")({ id: "p-1" });
+  assert.equal(
+    result.content[0].text,
+    [
+      "Project: Future",
+      "ID: p-1",
+      "Administrators: 1 — admin@example.test (user)",
+      "Cost operators: 1 — cost@example.test (group)",
+      "",
+    ].join("\n"),
+  );
 });

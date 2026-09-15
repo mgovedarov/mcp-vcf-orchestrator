@@ -577,15 +577,12 @@ export interface TemplateList {
 // --- Projects (project-service) ---
 
 /**
- * VCF Automation project as returned by the project-service API. Only the
- * fields the tools render are declared; extend after live verification.
- */
-/**
- * A user or group granted a role on a project. The `administrators`,
- * `members`, `viewers`, and `supervisors` arrays of the project-service
- * response hold these; the vRA 8.18 lab returned them empty, so the entry
- * shape follows the public Project Service API (`email`, `type` of `user` or
- * `group`) and the renderer tolerates entries without either field.
+ * A user or group granted a role on a project. The role arrays of the
+ * project-service response hold these, and the two platforms name those
+ * arrays differently — see `Project`. Both labs returned every array empty,
+ * so the entry shape follows the public Project Service API (`email`, `type`
+ * of `user` or `group`) and the renderer tolerates entries without either
+ * field.
  */
 export interface ProjectPrincipal {
   email?: string;
@@ -593,21 +590,48 @@ export interface ProjectPrincipal {
 }
 
 /**
- * Project as served by `GET /project-service/api/projects[/{id}]`. The field
- * set beyond `id`/`name`/`description` was verified against a vRA 8.18 lab
- * (VCFO-065). Cloud zones are not part of this view: they live on the IaaS
- * `/iaas/api/projects` resource.
+ * Project as served by `GET /project-service/api/projects[/{id}]`. Cloud zones
+ * are not part of this view: they live on the IaaS `/iaas/api/projects`
+ * resource.
+ *
+ * The two platforms serve different field sets, so this is a union and every
+ * field beyond `id`/`name` is optional. Observed live under VCFO-065:
+ *
+ * - vRA 8.18 served `orgId`, `administrators`/`members`/`viewers`/
+ *   `supervisors`, `constraints`, `properties`, `operationTimeout` and
+ *   `sharedResources`.
+ * - VCF Automation 9.1 served exactly `orgId` and a different set of role
+ *   arrays — `administrators`/`advancedUsers`/`users`/`auditors`.
+ *
+ * Only `administrators` is common to the two, which is why the renderer prints
+ * the known arrays that arrive and then any further array of principal-shaped
+ * entries, rather than a fixed list of names. The 9.1 observation is one
+ * project, auto-created and with every role array empty, so the absence of
+ * `constraints`, `properties`, `operationTimeout` and `sharedResources` there
+ * is what that response carried — not evidence that 9.x never serves them on a
+ * project that sets them. Declaring the union costs nothing either way.
  */
 export interface Project {
   id: string;
-  name: string;
+  /**
+   * Optional for the same reason `CatalogItem.name` is (VCFO-074): a renderer
+   * must not interpolate it unguarded. Every project on both labs carried one,
+   * so this follows the convention rather than an observed gap.
+   */
+  name?: string;
   description?: string;
   /** Owning organization. */
   orgId?: string;
+  /** Served by both platforms. */
   administrators?: ProjectPrincipal[];
+  /** vRA 8 role arrays. */
   members?: ProjectPrincipal[];
   viewers?: ProjectPrincipal[];
   supervisors?: ProjectPrincipal[];
+  /** VCF Automation 9.x role arrays. */
+  advancedUsers?: ProjectPrincipal[];
+  users?: ProjectPrincipal[];
+  auditors?: ProjectPrincipal[];
   /** Placement constraints keyed by kind (network, storage, extensibility). */
   constraints?: Record<string, unknown>;
   /**

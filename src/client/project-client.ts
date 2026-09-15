@@ -21,13 +21,28 @@ export class ProjectClient {
   /**
    * List projects from the project-service API. The optional search is sent
    * server-side as an OData `$filter` (case-insensitive substring match on
-   * name and description; verified on vRA 8.18 under VCFO-065/072), so
-   * `totalElements` and the truncation flag describe the matches and a
-   * narrower search reaches projects beyond the page-request cap.
+   * name and description), so `totalElements` and the truncation flag describe
+   * the matches and a narrower search reaches projects beyond the page-request
+   * cap.
    *
-   * VCFA 9.x has not yet been probed for `$filter` support. If the service
-   * rejects the filter with a 400, the search falls back to the previous
-   * behavior: walk the unfiltered list and match client-side.
+   * Both platforms accept the filter *and apply it*, verified under VCFO-065
+   * by asking for a needle that matches nothing and getting an empty page
+   * rather than the full inventory: vRA 8.18 under VCFO-072, VCF Automation
+   * 9.1 on a tenant session. Description matching is confirmed on 9.1, where a
+   * project carries a non-empty description.
+   *
+   * The fallback remains for a platform that supports neither `substringof`
+   * nor `tolower`. Neither lab is that platform, so the trigger is both of the
+   * statuses a filter the service cannot satisfy earns on the ones we have:
+   * the 400 a malformed filter earns on either, and the 500 both answer for an
+   * element of the filter expression they do not know — an unknown field,
+   * which is the nearest observable stand-in for an unknown operator. It stays
+   * those two: a 401 — and, on `vcfa`, a JSON 403 — has to reach the
+   * re-authenticate-and-retry path in `core.ts` first, and an authorization
+   * denial is not something a second, unfiltered walk could improve on.
+   * The status is logged because a transient 500 now costs a full-inventory
+   * walk instead of surfacing — and if the service is genuinely down, that
+   * walk fails too and reports it.
    */
   async listProjects(search?: string, options?: ListOptions): Promise<ProjectList> {
     const needle = normalizeFilter(search);
@@ -44,9 +59,10 @@ export class ProjectClient {
         { maxItems: options?.limit },
       );
     } catch (error) {
-      if (apiErrorStatus(error) !== 400) throw error;
+      const status = apiErrorStatus(error);
+      if (status !== 400 && status !== 500) throw error;
       console.error(
-        "[vro-client] project-service rejected the $filter search with 400; matching name and description client-side instead",
+        `[vro-client] project-service rejected the $filter search with ${status}; matching name and description client-side instead`,
       );
     }
 
