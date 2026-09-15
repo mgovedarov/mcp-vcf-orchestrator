@@ -202,13 +202,100 @@ Check the API version the client settles on, which is logged once per authentica
 
 `VCFA_TARGET_PLATFORM=vcfa9.1` and `vcfa9.0` pin the version and skip that probe.
 
+### Deployment lifecycle (9.x, tenant session)
+
+This is the only sequence in this document that **provisions and destroys real infrastructure**.
+It needs a tenant session — a provider session cannot reach the catalog or deployment service at
+all — disposable assets, and explicit user confirmation of the catalog item, project, inputs and
+expected cost before any `confirm: true`. `delete-deployment` is the only removal path and is
+itself a destructive day-2 operation rather than an undo.
+
+Rendered tool output cannot settle a shape question: a missing key renders `(unnamed)`, which says
+nothing about the real key, and both arms of the `DeploymentActionList` union render an identical
+`Found N deployment action(s)`. So this sequence is driven through the MCP tools **and** mirrored
+by raw authenticated `GET`s that record the wire keys. Dump keys only, never bodies.
+
+Discovery first, which is also the go/no-go gate:
+
+```text
+list-projects()
+get-project(id: "<project-id>")
+list-catalog-items()
+get-catalog-item(id: "<catalog-item-id>")
+list-deployments()
+list-deployments(projectId: "<project-id>")
+```
+
+If the catalog holds nothing released to the project, **stop before any write** — that is a blocked
+run, not a settled one. Record the starting counts; the run must return to them. Deployment
+`inputs` come from the catalog item's schema or the blueprint, never guessed.
+
+Refusals and target guards next, none of which mutates anything:
+
+```text
+create-deployment(..., confirm: false)
+delete-deployment(id: "<deployment-id>", confirm: false)
+run-deployment-action(..., confirm: false)
+create-deployment(..., expectedCatalogItemName: "zz-wrong", confirm: true)
+create-deployment(..., expectedProjectName: "zz-wrong", confirm: true)
+```
+
+The three `confirm: false` calls must refuse before any HTTP request. The two mismatches *do*
+reach the network, for the guard's own non-mutating read — a distinction worth recording, because
+the "refuses before any HTTP" claim in the verification matrix is about the first class only.
+
+Then the provision, the reads, and teardown:
+
+```text
+create-deployment(catalogItemId: "...", deploymentName: "zz-smoke-<date>", projectId: "...",
+                  inputs: {...}, expectedCatalogItemName: "...", expectedProjectName: "...",
+                  confirm: true)
+get-deployment(id: "<deployment-id>")            # poll to a terminal status
+list-deployments(projectId: "<project-id>")
+list-deployment-actions(deploymentId: "<deployment-id>")
+delete-deployment(id: "<deployment-id>", expectedName: "zz-smoke-<date>", confirm: true)
+```
+
+Points that decide whether the run proves anything:
+
+- **Capture the create response.** The client types it as a single deployment object. If the route
+  answers with a list of request objects instead, the tool prints no identifiers and the ID has to
+  be recovered from `list-deployments` — record which happened.
+- **Record the full status vocabulary observed.** `Deployment.status` is a loose string and the
+  declared examples are informed guesses.
+- **Mirror `get-deployment` and `list-deployment-actions` with raw `GET`s.** These two are what
+  settle the item shape and which arm of the action-list union the service serves.
+- **The delete's success message is not evidence of removal.** The client discards the response
+  body, so it reports only a 2xx on an asynchronous route. Confirm by polling `get-deployment` to a
+  404 *and* by the project-scoped list no longer showing it.
+- **Omit `expectedStatus` from the teardown delete** if any day-2 action was submitted: the
+  deployment moves through transient states and a spurious refusal during teardown is the worst
+  time to discover that.
+- `CREATE_FAILED` is **not** a reason to skip teardown — the record exists and may hold allocated
+  resources.
+
+Grep every capture for `undefined`, `[object Object]`, `NaN`, `(id: )` and for leaked secrets, and
+add **`(unnamed)`** for this run specifically: here a hit is not noise, it is the key-mismatch
+finding itself.
+
+If teardown does not reach absence, say so explicitly with the deployment ID, name, project and
+last status, and record that live infrastructure is still allocated. Never write that an
+environment returned to its starting counts when it did not.
+
 ### Cleanup trap
 
-`delete-package` with `deleteContents: false` leaves its former members in a state vRO reports as
-*in use*, and the server exposes no `force` option, so those elements cannot then be deleted at
-all ([#192](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/192)). Until that is fixed,
-delete disposable elements **before** the package that contains them, or delete the package with
-`deleteContents: true`.
+`delete-package` releases its members asynchronously, and for roughly two seconds afterwards vRO
+still reports them as *in use* and answers a delete with `409`. Re-measured under VCFO-087, that
+refusal is transient rather than permanent: a plain retry cleared it in every timed sample, and
+nothing was ever permanently stuck — which is the opposite of what
+[#192](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/192) reported.
+
+So **retry the delete first**. `delete-workflow`, `delete-action` and `delete-configuration` also
+take `force`, which sends vRO's own `?force=true`, but that skips a reference check that is doing
+real work — reach for it only for an element that is genuinely referenced, never to clear a
+refusal a retry would have cleared. Deleting disposable elements **before** the package that
+contains them, or deleting the package with `deleteContents: true`, still avoids the race
+entirely.
 
 ## vRA/vRO 8 Compatibility Mode
 
