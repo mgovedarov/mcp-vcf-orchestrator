@@ -6,6 +6,10 @@ Run live smoke tests only where it is acceptable to create, run, package, import
 
 ## Environment Setup
 
+Unless a section says otherwise, this checklist targets the default
+`VCFA_TARGET_PLATFORM=vcfa` platform (VCF Automation 9.x). The `vRA/vRO 8 Compatibility Mode`
+section below covers `vra8`.
+
 Configure the required connection variables:
 
 ```bash
@@ -13,6 +17,23 @@ VCFA_HOST=...
 VCFA_USERNAME=...
 VCFA_ORGANIZATION=...
 VCFA_PASSWORD=...
+```
+
+Two dimensions change what a run actually covers, so record both alongside the results:
+
+- **Identity.** `VCFA_ORGANIZATION=system` is a provider session. It reads vRO normally but
+  cannot reach the tenant-scoped Automation services — project-service answers `403` and the
+  catalog, deployment, blueprint, event-broker and subscription services answer `500` (VCFO-085).
+  The catalog, deployment, template, subscription, event-topic and project tools therefore need a
+  tenant organization.
+- **vRO topology.** With `VCFA_VRO_HOST` set, only `/vco/api` goes to the external appliance while
+  the login, `GET /api/versions` and the Automation services stay on `VCFA_HOST` (VCFO-081). Unset,
+  everything runs against the appliance-embedded orchestrator. A vRO result is only evidence for
+  the topology it ran under.
+
+```bash
+# Optional: point the vRO half at an external appliance
+VCFA_VRO_HOST=...
 ```
 
 Use clearly scoped artifact directories for the smoke run:
@@ -149,6 +170,45 @@ prepare-artifact-promotion(
 ```
 
 Confirm that the summary names the intended target, reports no blocking preflight issues, includes the expected diff, and recommends the correct import call.
+
+## VCF Automation 9.x Notes
+
+Behaviour measured on 9.1 under VCFO-086; see the
+[VCF Automation Verification Matrix](./vcfa-verification-matrix.md) for the per-tool record.
+
+List semantics differ from vRA 8 and change what a `filter` result proves:
+
+- `/workflows` applies `conditions` **server-side** and case-insensitively, and honors
+  `maxResult`, but **ignores `startIndex`** and rejects `queryCount=true` with a `400`. An
+  unfiltered `list-workflows` therefore trips the repeated-page guard and falls back to a
+  category traversal of roughly 137 requests — that is the normal path on this platform, not a
+  fault. A filtered listing is cheap.
+- `/actions`, `/packages`, `/configurations` and `/resources` ignore `conditions` and `maxResult`
+  entirely and return the full inventory, so the VCFO-073 client-side post-filter is what makes
+  `filter` work there.
+
+Two mutating tools perform one non-mutating read **before** the `confirm` gate, by design, so the
+prompt can name the target: `update-configuration` and `ensure-project-package`. Every other
+mutating tool refuses without reaching the network.
+
+`export-configuration-file` answers `406` on 9.1 exactly as on vRA 8; route the element through
+`add-configuration-to-project-package` and `export-project-package` instead.
+
+Check the API version the client settles on, which is logged once per authentication:
+
+```text
+[vro-client] Negotiated VCF Cloud API version 9.1.0 via GET /api/versions
+```
+
+`VCFA_TARGET_PLATFORM=vcfa9.1` and `vcfa9.0` pin the version and skip that probe.
+
+### Cleanup trap
+
+`delete-package` with `deleteContents: false` leaves its former members in a state vRO reports as
+*in use*, and the server exposes no `force` option, so those elements cannot then be deleted at
+all ([#192](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/192)). Until that is fixed,
+delete disposable elements **before** the package that contains them, or delete the package with
+`deleteContents: true`.
 
 ## vRA/vRO 8 Compatibility Mode
 
