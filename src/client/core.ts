@@ -1275,7 +1275,8 @@ export class VroHttpClient {
         return PROVIDER_SESSION_AUTOMATION_HINT;
       }
       if (res.status === 403) return AUTOMATION_AUTHORIZATION_HINT;
-      return "";
+      // No bare return here: anything else falls through to the tail, which
+      // cannot double-answer an Automation 403 because both arms above did.
     }
     if (res.status === 403 && !this.shouldReauthenticate(res)) {
       return this.targetPlatform === "vra8"

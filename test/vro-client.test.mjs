@@ -6629,3 +6629,27 @@ test("a vRO 403 carries the vRO hint, not the Automation one", async () => {
     },
   );
 });
+
+test("a redirect from an Automation service still gets the redirect hint", async () => {
+  // The 3xx branch runs before the Automation one, so a misconfigured host is
+  // still diagnosed as a redirect rather than as a tenant-scoping refusal.
+  globalThis.fetch = automationStub(
+    () =>
+      new Response("", {
+        status: 302,
+        statusText: "Found",
+        headers: { location: "https://sso.example.test/login?ticket=secret" },
+      }),
+  );
+
+  await assert.rejects(
+    () => new VroClient(providerConfig()).listProjects(),
+    (e) => {
+      assert.match(e.message, /vRO API error: 302 Found/);
+      assert.ok(e.message.includes("answered with a redirect"), e.message);
+      assert.ok(!e.message.includes("tenant-scoped"), e.message);
+      assert.ok(!e.message.includes("ticket=secret"), "must not echo the query");
+      return true;
+    },
+  );
+});
