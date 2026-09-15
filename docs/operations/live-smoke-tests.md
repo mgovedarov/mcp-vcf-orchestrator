@@ -246,6 +246,16 @@ delete-workflow(id: "<workflow-id>", confirm: true)
 delete-configuration(id: "<configuration-id>", confirm: true)
 ```
 
+Deleting an element immediately after the package that contained it can answer `409 Conflict`
+reporting it as in use. On 9.1 this is transient — vRO releases package members asynchronously and
+the state clears in about two seconds — so **retry the plain delete first**. `force: true` sends
+vRO's own `?force=true` and is for an element that is genuinely referenced; it skips the reference
+check, so do not reach for it to get past a refusal that a retry would clear (VCFO-087).
+
+```text
+delete-workflow(id: "<workflow-id>", force: true, confirm: true)
+```
+
 Configuration writes send the plural `attributes` key on every platform since VCFO-074, so this mode no longer has an attribute-key difference to check; `PUT /configurations/{id}` still has to carry the element name.
 
 Template and subscription writes are supported in this mode (VCFO-070). They mutate a live environment, so use disposable objects and clean up. Create the subscription **disabled** and **non-blocking**, on a non-blockable topic, so it cannot stall provisioning:

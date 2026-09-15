@@ -1621,7 +1621,7 @@ export function registerWorkflowTools(
     {
       title: "Delete Workflow",
       description:
-        "Delete a workflow from VCF Automation Orchestrator. This action is irreversible. Set confirm to true to proceed.",
+        "Delete a workflow from VCF Automation Orchestrator. This action is irreversible. Set confirm to true to proceed. A 409 reporting the element as in use right after delete-package is usually transient; retry first, and set force to true only if it persists.",
       inputSchema: z.object({
         id: z.string().describe("The workflow ID to delete"),
         expectedName: z
@@ -1629,6 +1629,12 @@ export function registerWorkflowTools(
           .optional()
           .describe(
             "Optional expected workflow name verified against the live workflow before deletion",
+          ),
+        force: z
+          .boolean()
+          .optional()
+          .describe(
+            "Delete even if vRO reports the element as in use, skipping vRO's reference check (default: false). A 409 straight after delete-package is usually transient — retry the plain delete first.",
           ),
         confirm: z
           .boolean()
@@ -1638,13 +1644,13 @@ export function registerWorkflowTools(
       }),
       annotations: DESTRUCTIVE_LIVE_WRITE,
     },
-    async ({ id, expectedName, confirm }): Promise<CallToolResult> => {
+    async ({ id, expectedName, force, confirm }): Promise<CallToolResult> => {
       if (!confirm) {
         return {
           content: [
             {
               type: "text",
-              text: `Confirm deletion of workflow ${id} by setting confirm to true. This action is irreversible.`,
+              text: `Confirm deletion of workflow ${id} by setting confirm to true. This action is irreversible${force ? " and will delete the workflow even though other content may still reference it" : ""}.`,
             },
           ],
         };
@@ -1662,12 +1668,12 @@ export function registerWorkflowTools(
           if (guard) return guard;
         }
 
-        await client.deleteWorkflow(id);
+        await client.deleteWorkflow(id, force ?? false);
         return {
           content: [
             {
               type: "text",
-              text: `Workflow ${id} deleted successfully.`,
+              text: `Workflow ${id} deleted successfully${force ? " with force" : ""}.`,
             },
           ],
         };

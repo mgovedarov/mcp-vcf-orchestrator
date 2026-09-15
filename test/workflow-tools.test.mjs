@@ -492,6 +492,43 @@ test("delete-workflow verifies expected name when provided", async () => {
   assert.equal(deletedId, "workflow-1");
 });
 
+// VCFO-087: vRO refuses to delete an element it reports as in use, which is
+// what delete-package with deleteContents false leaves behind. The flag is the
+// only route to `?force=true`, so it has to reach the client, and the
+// unconfirmed prompt has to state the impact before it does.
+test("delete-workflow passes force through and states the impact first", async () => {
+  let deleted;
+  const handlers = registeredWorkflowTools({
+    getWorkflow: async (id) => ({ id, name: "Cleanup VM" }),
+    deleteWorkflow: async (id, force) => {
+      deleted = { id, force };
+    },
+  });
+
+  const refused = await handlers.get("delete-workflow")({
+    id: "workflow-1",
+    force: true,
+    confirm: false,
+  });
+  assert.equal(deleted, undefined);
+  assert.match(refused.content[0].text, /may still reference it/);
+
+  const plain = await handlers.get("delete-workflow")({
+    id: "workflow-1",
+    confirm: true,
+  });
+  assert.deepEqual(deleted, { id: "workflow-1", force: false });
+  assert.doesNotMatch(plain.content[0].text, /with force/);
+
+  const forced = await handlers.get("delete-workflow")({
+    id: "workflow-1",
+    force: true,
+    confirm: true,
+  });
+  assert.deepEqual(deleted, { id: "workflow-1", force: true });
+  assert.match(forced.content[0].text, /deleted successfully with force/);
+});
+
 test("run-workflow-and-wait reports failure diagnostics and log excerpts", async () => {
   const handlers = registeredWorkflowTools({
     getWorkflow: async () => ({

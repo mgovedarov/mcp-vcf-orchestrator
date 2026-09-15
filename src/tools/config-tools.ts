@@ -248,7 +248,7 @@ export function registerConfigTools(
     {
       title: "Delete Configuration Element",
       description:
-        "Delete a configuration element from VCF Automation Orchestrator. This action is irreversible. Set confirm to true to proceed.",
+        "Delete a configuration element from VCF Automation Orchestrator. This action is irreversible. Set confirm to true to proceed. A 409 reporting the element as in use right after delete-package is usually transient; retry first, and set force to true only if it persists.",
       inputSchema: z.object({
         id: z.string().describe("The configuration element ID to delete"),
         expectedName: z
@@ -256,6 +256,12 @@ export function registerConfigTools(
           .optional()
           .describe(
             "Optional expected configuration element name verified before deletion",
+          ),
+        force: z
+          .boolean()
+          .optional()
+          .describe(
+            "Delete even if vRO reports the element as in use, skipping vRO's reference check (default: false). A 409 straight after delete-package is usually transient — retry the plain delete first.",
           ),
         confirm: z
           .boolean()
@@ -265,13 +271,13 @@ export function registerConfigTools(
       }),
       annotations: DESTRUCTIVE_LIVE_WRITE,
     },
-    async ({ id, expectedName, confirm }): Promise<CallToolResult> => {
+    async ({ id, expectedName, force, confirm }): Promise<CallToolResult> => {
       if (!confirm) {
         return {
           content: [
             {
               type: "text",
-              text: `Confirm deletion of configuration element ${id} by setting confirm to true. This action is irreversible.`,
+              text: `Confirm deletion of configuration element ${id} by setting confirm to true. This action is irreversible${force ? " and will delete the element even though other content may still reference it" : ""}.`,
             },
           ],
         };
@@ -289,12 +295,12 @@ export function registerConfigTools(
           if (guard) return guard;
         }
 
-        await client.deleteConfiguration(id);
+        await client.deleteConfiguration(id, force ?? false);
         return {
           content: [
             {
               type: "text",
-              text: `Configuration element ${id} deleted successfully.`,
+              text: `Configuration element ${id} deleted successfully${force ? " with force" : ""}.`,
             },
           ],
         };

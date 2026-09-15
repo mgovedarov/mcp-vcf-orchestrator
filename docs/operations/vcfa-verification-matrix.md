@@ -81,7 +81,7 @@ Consequences:
 | `preflight-workflow-file` | Verified | Passes live exports and scaffolds. Warns that the end item lacks an `<in-binding/>` on a live export. |
 | `diff-workflow-file` | Verified | All three modes: file/file, live/file, live/live. The discriminator key is `source`; the live variant takes `workflowId`. |
 | `import-workflow-file` | Verified | **A scaffolded container imports, opens and runs on vRO 9.1.0** — see VCFO-060 below. An `expectedCategoryName` mismatch refuses before importing. Note it reports that `overwrite` defaulted to true when the flag is omitted. |
-| `delete-workflow` | **Defect** | Guard mismatch refuses and a clean workflow deletes, but an element orphaned by `delete-package` with `deleteContents: false` cannot be deleted at all — see [#192](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/192). |
+| `delete-workflow` | Verified | Guard mismatch refuses; a clean workflow deletes. The `409 Conflict` reported in [#192](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/192) reproduces but is **transient, not terminal** — see [The 409 on delete](#the-409-on-delete-vcfo-087) below. `force: true` sends `?force=true` and deletes such an element immediately. |
 
 ## Actions
 
@@ -95,7 +95,7 @@ Consequences:
 | `preflight-action-file` | Verified | Passes live exports. |
 | `diff-action-file` | Verified | live/file and file/file; the live variant takes `actionId`. |
 | `import-action-file` | Unverifiable here | Only the `confirm: false` refusal was exercised; the module-creation behaviour VCFO-079 measured on 8.18.1 was not re-tested on 9.1. |
-| `delete-action` | **Defect** | Deletes cleanly in isolation; same orphaning defect as `delete-workflow` ([#192](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/192)). |
+| `delete-action` | Verified | Deletes cleanly, including straight after `delete-package` with `deleteContents: false` (the sequence [#192](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/192) reports) — the 409 was never observed on `/actions` here. `force` is wired identically to `delete-workflow`; the flag's effect on this route is therefore untested. |
 
 ## Configuration elements
 
@@ -108,7 +108,7 @@ Consequences:
 | `export-configuration-file` | Expected refusal | **406**, reported as the actionable refusal naming the project-package route — VCFO-074 confirmed on 9.1, identical to vRA 8. |
 | `preflight-configuration-file` | Verified (local) | Validates ZIP/XML safety without contacting the server. It accepted a package zip merely renamed to `.vsoconf`, so **a local pass does not imply live import would accept the container** — the same caveat as on vRA 8. No genuine `.vsoconf` exists to feed it, because the export is refused. |
 | `import-configuration-file` | Unverifiable here | Same root cause as on vRA 8: no vRO tested serves a `.vsoconf` for a single element, and a package stores elements as `elements/<id>/data`. Only the `confirm: false` refusal was exercised. |
-| `delete-configuration` | Verified | Guard mismatch refuses; correct guard deletes. |
+| `delete-configuration` | Verified | Guard mismatch refuses; correct guard deletes, including straight after `delete-package` with `deleteContents: false` — the 409 was not observed on `/configurations` here either. `force` is wired identically; its effect on this route is untested. |
 
 ## Resource elements
 
@@ -208,3 +208,42 @@ None was driven with `confirm: true`.
 - **One defect found:** [#192](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/192)
   (VCFO-087) — elements orphaned by `delete-package` with `deleteContents: false` are undeletable
   through the server, which exposes no `force` option.
+
+## The 409 on delete (VCFO-087)
+
+[#192](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/192) reported that an element left
+behind by `delete-package` with `deleteContents: false` becomes undeletable: vRO answers
+
+```
+409 Conflict — DELETE /workflows/<id>
+{"message":"Workflow '<name>' is in use. Specify '?force=true' parameter to delete it."}
+```
+
+A dedicated re-run on 2026-09-15 (same environment as the sweep above: VCF Automation 9.1,
+appliance-embedded vRO 9.1.0, provider session) reproduces the 409 but **contradicts both of the
+issue's characterizations**. It is neither deterministic nor permanent.
+
+| Measurement | Result |
+| --- | --- |
+| Plain delete immediately after `delete-package` (`deleteContents: false`) | `409` in **4 of 8** runs |
+| The same, after a 5-second pause | `409` in **0 of 4** runs |
+| Plain retry after a `409`, timed to clearance | Succeeded at **2.3s, 2.2s, 2.3s** (3 of 3) |
+| Plain retry within roughly a second of a `409` | Still `409` |
+| Element in a package that **still exists** (added, rebuilt), zero delay | `409` in **0 of 4** runs |
+| Element never added to any package (control) | Deleted cleanly |
+| `force: true` after a `409` | Deleted immediately |
+
+The mechanism is that vRO releases a package's members asynchronously: for roughly two seconds after
+the package is deleted the element is still reported as in use. Membership in a package that still
+exists does not trip it, and no element was ever permanently stuck. `delete-action` and
+`delete-configuration` ran the identical sequence and never produced a `409` at all, so the
+`force` flag is untested on those two routes.
+
+**Consequence for operators:** retry the plain delete before reaching for `force`. `force` skips
+vRO's reference check rather than establishing that nothing references the element, so using it to
+get past a refusal that a retry would have cleared can silently break a real reference. The flag
+remains correct for an element that is genuinely referenced — a case this environment did not
+produce.
+
+The environment was returned to its exact starting counts (548 workflows, 598 actions, 25 packages,
+2 configuration elements).

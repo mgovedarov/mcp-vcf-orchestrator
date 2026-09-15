@@ -583,7 +583,7 @@ export function registerActionTools(
     {
       title: "Delete Action",
       description:
-        "Delete an action (scriptable task) from VCF Automation Orchestrator. This action is irreversible. Set confirm to true to proceed.",
+        "Delete an action (scriptable task) from VCF Automation Orchestrator. This action is irreversible. Set confirm to true to proceed. A 409 reporting the element as in use right after delete-package is usually transient; retry first, and set force to true only if it persists.",
       inputSchema: z.object({
         id: z.string().describe("The action ID to delete"),
         expectedName: z
@@ -598,6 +598,12 @@ export function registerActionTools(
           .describe(
             "Optional expected action module verified against the live action before deletion",
           ),
+        force: z
+          .boolean()
+          .optional()
+          .describe(
+            "Delete even if vRO reports the element as in use, skipping vRO's reference check (default: false). A 409 straight after delete-package is usually transient — retry the plain delete first.",
+          ),
         confirm: z
           .boolean()
           .describe(
@@ -610,6 +616,7 @@ export function registerActionTools(
       id,
       expectedName,
       expectedModule,
+      force,
       confirm,
     }): Promise<CallToolResult> => {
       if (!confirm) {
@@ -617,7 +624,7 @@ export function registerActionTools(
           content: [
             {
               type: "text",
-              text: `Confirm deletion of action ${id} by setting confirm to true. This action is irreversible.`,
+              text: `Confirm deletion of action ${id} by setting confirm to true. This action is irreversible${force ? " and will delete the action even though other content may still reference it" : ""}.`,
             },
           ],
         };
@@ -640,12 +647,12 @@ export function registerActionTools(
           if (guard) return guard;
         }
 
-        await client.deleteAction(id);
+        await client.deleteAction(id, force ?? false);
         return {
           content: [
             {
               type: "text",
-              text: `Action ${id} deleted successfully.`,
+              text: `Action ${id} deleted successfully${force ? " with force" : ""}.`,
             },
           ],
         };

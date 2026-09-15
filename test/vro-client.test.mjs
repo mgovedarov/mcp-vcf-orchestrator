@@ -4863,6 +4863,268 @@ test("deleteResource includes force query only when requested", async () => {
   assert.equal(calls[1].init.method, "DELETE");
 });
 
+// VCFO-087: an element orphaned by delete-package with deleteContents false is
+// reported by vRO 9.1 as in use, and only ?force=true removes it. The query is
+// appended solely when asked for, so an ordinary delete keeps its bare path.
+test("deleteWorkflow includes force query only when requested", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return new Response(null, { status: 204 });
+  };
+
+  const client = new VroClient(config());
+  await client.deleteWorkflow("workflow-1");
+  await client.deleteWorkflow("workflow-1", true);
+
+  assert.equal(
+    calls[1].url,
+    "https://vcfa.example.test/vco/api/workflows/workflow-1",
+  );
+  assert.equal(calls[1].init.method, "DELETE");
+  assert.equal(
+    calls[2].url,
+    "https://vcfa.example.test/vco/api/workflows/workflow-1?force=true",
+  );
+  assert.equal(calls[2].init.method, "DELETE");
+});
+
+test("a 409 on deleteWorkflow names the force flag", async () => {
+  // vRO's own sentence names the element and the remedy, and `message` is a
+  // safe body key, so it survives sanitizing. What it cannot say is how an MCP
+  // caller sends ?force=true — that is what the appended hint supplies. The
+  // hint leads with a retry because the refusal measured on 9.1 is transient
+  // (VCFO-087): forcing past one a retry would clear skips a live reference
+  // check, so the ordering is asserted here, not just the presence of `force`.
+  const body = JSON.stringify({
+    message:
+      "Workflow 'Probe' is in use. Specify '?force=true' parameter to delete it.",
+  });
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/sessions")) return authResponse();
+    return new Response(body, {
+      status: 409,
+      headers: { "content-type": "application/json" },
+    });
+  };
+
+  const client = new VroClient(config());
+  await assert.rejects(
+    () => client.deleteWorkflow("workflow-1"),
+    (error) => {
+      assert.match(error.message, /409 Conflict/);
+      // vRO's diagnosis is kept rather than replaced: it is the informative
+      // part of this body, unlike the opaque HTML behind the 406 refusal.
+      assert.match(error.message, /is in use/);
+      assert.match(error.message, /retry the same call first/);
+      assert.match(error.message, /force set to true/);
+      // Retry advice must come before the force advice, not after it.
+      assert.ok(
+        error.message.indexOf("retry the same call first") <
+          error.message.indexOf("force set to true"),
+      );
+      assert.match(error.message, /delete-workflow/);
+      assert.equal(error.status, 409);
+      return true;
+    },
+  );
+});
+
+test("a 409 on deleteWorkflow with force already set adds no hint", async () => {
+  // Telling an operator who already passed force to pass force is a loop.
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/sessions")) return authResponse();
+    return new Response(JSON.stringify({ message: "still in use" }), {
+      status: 409,
+      headers: { "content-type": "application/json" },
+    });
+  };
+
+  const client = new VroClient(config());
+  await assert.rejects(
+    () => client.deleteWorkflow("workflow-1", true),
+    (error) => {
+      assert.match(error.message, /409 Conflict/);
+      assert.doesNotMatch(error.message, /force set to true/);
+      return true;
+    },
+  );
+});
+
+test("deleteAction includes force query only when requested", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return new Response(null, { status: 204 });
+  };
+
+  const client = new VroClient(config());
+  await client.deleteAction("action-1");
+  await client.deleteAction("action-1", true);
+
+  assert.equal(
+    calls[1].url,
+    "https://vcfa.example.test/vco/api/actions/action-1",
+  );
+  assert.equal(calls[1].init.method, "DELETE");
+  assert.equal(
+    calls[2].url,
+    "https://vcfa.example.test/vco/api/actions/action-1?force=true",
+  );
+  assert.equal(calls[2].init.method, "DELETE");
+});
+
+test("a 409 on deleteAction names the force flag", async () => {
+  // vRO's own sentence names the element and the remedy, and `message` is a
+  // safe body key, so it survives sanitizing. What it cannot say is how an MCP
+  // caller sends ?force=true — that is what the appended hint supplies. The
+  // hint leads with a retry because the refusal measured on 9.1 is transient
+  // (VCFO-087): forcing past one a retry would clear skips a live reference
+  // check, so the ordering is asserted here, not just the presence of `force`.
+  const body = JSON.stringify({
+    message:
+      "Action 'Probe' is in use. Specify '?force=true' parameter to delete it.",
+  });
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/sessions")) return authResponse();
+    return new Response(body, {
+      status: 409,
+      headers: { "content-type": "application/json" },
+    });
+  };
+
+  const client = new VroClient(config());
+  await assert.rejects(
+    () => client.deleteAction("action-1"),
+    (error) => {
+      assert.match(error.message, /409 Conflict/);
+      // vRO's diagnosis is kept rather than replaced: it is the informative
+      // part of this body, unlike the opaque HTML behind the 406 refusal.
+      assert.match(error.message, /is in use/);
+      assert.match(error.message, /retry the same call first/);
+      assert.match(error.message, /force set to true/);
+      // Retry advice must come before the force advice, not after it.
+      assert.ok(
+        error.message.indexOf("retry the same call first") <
+          error.message.indexOf("force set to true"),
+      );
+      assert.match(error.message, /delete-action/);
+      assert.equal(error.status, 409);
+      return true;
+    },
+  );
+});
+
+test("a 409 on deleteAction with force already set adds no hint", async () => {
+  // Telling an operator who already passed force to pass force is a loop.
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/sessions")) return authResponse();
+    return new Response(JSON.stringify({ message: "still in use" }), {
+      status: 409,
+      headers: { "content-type": "application/json" },
+    });
+  };
+
+  const client = new VroClient(config());
+  await assert.rejects(
+    () => client.deleteAction("action-1", true),
+    (error) => {
+      assert.match(error.message, /409 Conflict/);
+      assert.doesNotMatch(error.message, /force set to true/);
+      return true;
+    },
+  );
+});
+
+test("deleteConfiguration includes force query only when requested", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return new Response(null, { status: 204 });
+  };
+
+  const client = new VroClient(config());
+  await client.deleteConfiguration("configuration-1");
+  await client.deleteConfiguration("configuration-1", true);
+
+  assert.equal(
+    calls[1].url,
+    "https://vcfa.example.test/vco/api/configurations/configuration-1",
+  );
+  assert.equal(calls[1].init.method, "DELETE");
+  assert.equal(
+    calls[2].url,
+    "https://vcfa.example.test/vco/api/configurations/configuration-1?force=true",
+  );
+  assert.equal(calls[2].init.method, "DELETE");
+});
+
+test("a 409 on deleteConfiguration names the force flag", async () => {
+  // vRO's own sentence names the element and the remedy, and `message` is a
+  // safe body key, so it survives sanitizing. What it cannot say is how an MCP
+  // caller sends ?force=true — that is what the appended hint supplies. The
+  // hint leads with a retry because the refusal measured on 9.1 is transient
+  // (VCFO-087): forcing past one a retry would clear skips a live reference
+  // check, so the ordering is asserted here, not just the presence of `force`.
+  const body = JSON.stringify({
+    message:
+      "Configuration element 'Probe' is in use. Specify '?force=true' parameter to delete it.",
+  });
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/sessions")) return authResponse();
+    return new Response(body, {
+      status: 409,
+      headers: { "content-type": "application/json" },
+    });
+  };
+
+  const client = new VroClient(config());
+  await assert.rejects(
+    () => client.deleteConfiguration("configuration-1"),
+    (error) => {
+      assert.match(error.message, /409 Conflict/);
+      // vRO's diagnosis is kept rather than replaced: it is the informative
+      // part of this body, unlike the opaque HTML behind the 406 refusal.
+      assert.match(error.message, /is in use/);
+      assert.match(error.message, /retry the same call first/);
+      assert.match(error.message, /force set to true/);
+      // Retry advice must come before the force advice, not after it.
+      assert.ok(
+        error.message.indexOf("retry the same call first") <
+          error.message.indexOf("force set to true"),
+      );
+      assert.match(error.message, /delete-configuration/);
+      assert.equal(error.status, 409);
+      return true;
+    },
+  );
+});
+
+test("a 409 on deleteConfiguration with force already set adds no hint", async () => {
+  // Telling an operator who already passed force to pass force is a loop.
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/sessions")) return authResponse();
+    return new Response(JSON.stringify({ message: "still in use" }), {
+      status: 409,
+      headers: { "content-type": "application/json" },
+    });
+  };
+
+  const client = new VroClient(config());
+  await assert.rejects(
+    () => client.deleteConfiguration("configuration-1", true),
+    (error) => {
+      assert.match(error.message, /409 Conflict/);
+      assert.doesNotMatch(error.message, /force set to true/);
+      return true;
+    },
+  );
+});
+
+
 test("listWorkflowExecutions ignores non-execution relation links", async () => {
   const calls = [];
   globalThis.fetch = async (url, init) => {

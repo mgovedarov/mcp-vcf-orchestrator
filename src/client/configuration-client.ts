@@ -9,7 +9,9 @@ import {
   type ArtifactPreflightReport,
 } from "./artifact-preflight.js";
 import {
+  apiErrorStatus,
   createUploadForm,
+  inUseForceHint,
   CONFIGURATION_EXPORT_NOT_ACCEPTABLE,
   UNSUPPORTED_VRA8_CONFIGURATION_EXPORT,
   type VroHttpClient,
@@ -258,8 +260,26 @@ export class ConfigurationClient {
     return this.http.post<ConfigElement>("/configurations", body);
   }
 
-  async deleteConfiguration(id: string): Promise<void> {
-    await this.http.del<unknown>(`/configurations/${encodeURIComponent(id)}`);
+  /**
+   * Delete a configuration element. `force` adds vRO's own `?force=true`, which is the only
+   * way to remove an element vRO reports as in use — including one orphaned by
+   * a package delete that left its contents behind. Without it, a 409 is
+   * re-thrown carrying the hint that names the flag (VCFO-087).
+   */
+  async deleteConfiguration(id: string, force = false): Promise<void> {
+    const path = `/configurations/${encodeURIComponent(id)}${force ? "?force=true" : ""}`;
+    try {
+      await this.http.del<unknown>(path);
+    } catch (error) {
+      if (!force && apiErrorStatus(error) === 409) {
+        const message = (error as Error).message;
+        throw Object.assign(
+          new Error(`${message}${inUseForceHint("delete-configuration")}`),
+          { status: 409 },
+        );
+      }
+      throw error;
+    }
   }
 
   /**
