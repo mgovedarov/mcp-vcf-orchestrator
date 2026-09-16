@@ -166,9 +166,9 @@ None was driven with `confirm: true`.
 | Tool | Status | Evidence |
 | --- | --- | --- |
 | `list-projects` / `get-project` | Verified under VCFO-065 | `$filter` accepted and applied on a 9.1 tenant session; 9.x role arrays rendered. Blocked by identity in this sweep — `403` confirmed. |
-| `list-catalog-items` / `get-catalog-item` | Verified under VCFO-074 | A released catalog item was read on a 9.1 lab and renders correctly. Blocked by identity here — `500` confirmed. |
-| `list-deployments` / `get-deployment` / `list-deployment-actions` | Blocked by identity | `500` confirmed. **No deployment has ever been observed on any lab, on either platform**, so the deployment item shape remains assumed; the `(unnamed)` fallback means a mismatch would degrade visibly. |
-| `create-deployment` / `delete-deployment` / `run-deployment-action` | Not exercised | These provision or destroy real infrastructure ([VCFO-084](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/188)). Deliberately excluded from this sweep; only the `confirm: false` refusals were driven. `create-deployment` has since gained `expectedCatalogItemName` / `expectedProjectName` and the destructive annotation (VCFO-084); those are covered by unit tests and **still await live exercise**, which needs a tenant session. |
+| `list-catalog-items` / `get-catalog-item` | Verified under VCFO-074 | A released catalog item was read on a 9.1 tenant session and renders correctly; see the tenant-session section below. Blocked by identity here — `500` confirmed. |
+| `list-deployments` / `get-deployment` / `list-deployment-actions` | Blocked by identity | `500` confirmed on this identity. The item and action shapes were settled separately on a **tenant** session — see the tenant-session section below (VCFO-074). |
+| `create-deployment` / `delete-deployment` / `run-deployment-action` | Not exercised **in this sweep** | These provision or destroy real infrastructure ([VCFO-084](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/188)), so only the `confirm: false` refusals were driven here. All three, and the VCFO-084 target guards, were exercised live on a **tenant** session — see the tenant-session section below (VCFO-074). |
 | `list-templates` / `get-template` | Blocked by identity | `500` confirmed. |
 | `create-template` / `delete-template` | Blocked by identity | `500` confirmed; writes keep their vRA 8 verification under VCFO-070. |
 | `list-event-topics` | Blocked by identity | `500` confirmed. |

@@ -297,6 +297,78 @@ refusal a retry would have cleared. Deleting disposable elements **before** the 
 contains them, or deleting the package with `deleteContents: true`, still avoids the race
 entirely.
 
+## Provisioning A Deployment (VCFO-074)
+
+This round provisions and destroys **real infrastructure**, and `delete-deployment` is itself a
+destructive day-2 operation rather than an undo. It needs disposable assets and explicit
+confirmation per [safety](./safety.md). It also needs a **tenant** session: a provider
+(`VCFA_ORGANIZATION=system`) session cannot reach the catalog or deployment services at all, which
+answer `500` (VCFO-085). The identity, not the credentials, is the gate.
+
+Build first. The rig spawns `dist/index.js`, and a stale build silently tests the previous
+signature — the likeliest way this round produces a wrong answer.
+
+### Go/no-go gate
+
+Run the reads first and record the starting counts:
+
+```text
+list-projects()
+list-catalog-items()
+get-catalog-item(id: "<catalog-item-id>")
+list-deployments()
+list-deployments(projectId: "<project-id>")
+```
+
+- A `403`/`500` here means the session is still provider-shaped. The round never started.
+- **Zero released catalog items ⇒ stop before any write.** Record it as a blocked round.
+- `get-catalog-item` supplies both the exact name the guards will be given **and** the request
+  schema the deployment `inputs` must satisfy. Never guess inputs.
+- Pin `version` explicitly. A catalog item's input schema changes between released versions, so
+  taking the "latest" default can deploy a different contract than the one you recorded.
+
+### Ordered calls
+
+Free calls first, so a late failure still leaves the cheap findings recorded.
+
+1. `create-deployment`, `delete-deployment`, `run-deployment-action` at `confirm: false` — each
+   must refuse **before any HTTP**.
+2. `create-deployment` with a wrong `expectedCatalogItemName`, then a wrong `expectedProjectName`.
+   Unlike the `confirm: false` cases these *do* reach the network for the guard's non-mutating read.
+3. **The provision**, with matching expected values and a name marking it disposable.
+4. `get-deployment` polled to a terminal status; record the full status vocabulary.
+5. `list-deployments` bare and project-scoped with the deployment present.
+6. `list-deployment-actions`.
+7. `run-deployment-action` guard paths (wrong `expectedActionName`, wrong `expectedStatus`).
+   **Submission is a separate decision:** only a benign reversible action the user names
+   explicitly, only after all reads are captured, and never `Deployment.Delete` — teardown must go
+   through `delete-deployment`, the tool under test.
+
+Rendered output cannot settle a wire shape: a `(unnamed)` fallback says nothing about the real key,
+and both arms of the `DeploymentActionList` union render identically. A shape question needs a
+raw-HTTP key dump alongside the tool calls. Dump **keys only**, never the token or a response body.
+
+### Teardown
+
+Rehearse the guard with a wrong `expectedName` (free), then delete with matching values.
+
+**The success string is not evidence.** `deleteDeployment` discards the response body, so
+"deleted successfully" means only "a 2xx on an asynchronous route". Confirm by polling
+`get-deployment` to a `404` **and** by `list-deployments(projectId)` no longer listing it.
+
+`CREATE_FAILED` is not an excuse to skip teardown — the record exists and may hold allocated
+resources. **If teardown fails**, say so immediately with the deployment id, name, project and last
+status, and file it. Never write "returned to its exact starting counts" when it did not.
+
+### Captures
+
+Keep every result text, the server stderr, the key dumps, before/after counts and timings. Grep them
+for `undefined`, `[object Object]`, `NaN`, `(id: )` and for secrets (count only, never the value).
+**Add `(unnamed)` to that grep**: here a hit is not noise, it *is* a key-mismatch finding.
+
+The 2026-09-16 results are recorded in the
+[VCF Automation Verification Matrix](./vcfa-verification-matrix.md).
+
 ## vRA/vRO 8 Compatibility Mode
 
 For vRA/vRO 8.12+ bearer-token validation, set the platform and use the vIDM domain shown on the Workspace ONE login page as the organization:
@@ -321,7 +393,7 @@ run-workflow-and-wait(id: "<workflow-id>", inputs: [], timeoutSeconds: 60, confi
 get-workflow-execution-logs(workflowId: "<workflow-id>", executionId: "<execution-id>", level: "info")
 ```
 
-The Automation-service list tools return the same shapes as on VCFA 9.x. Note that `list-catalog-items` and `list-deployments` were both empty in the environment VCFO-068 and VCFO-070 verified, so their item shapes are still unconfirmed on vRA 8 — an environment with released catalog content is the one worth re-running them against, and the same environment is what the catalog-service and deployment-service write checks need. VCFO-074 read a released catalog item on a VCFA 9.1 lab, which confirms the catalog item shape on that platform only; no deployment has been observed on either platform, so the deployment item shape remains assumed. Both renderers now fall back to `(unnamed)` for a row served without a name, so an unexpected shape degrades visibly instead of printing `undefined`.
+The Automation-service list tools return the same shapes as on VCFA 9.x. Note that `list-catalog-items` and `list-deployments` were both empty in the environment VCFO-068 and VCFO-070 verified, so their item shapes are still unconfirmed on vRA 8 — an environment with released catalog content is the one worth re-running them against, and the same environment is what the catalog-service and deployment-service write checks need. VCFO-074 read a released catalog item and provisioned, inspected and destroyed deployments on a VCFA 9.1 **tenant** session, which confirms the catalog item, deployment and deployment-action shapes on that platform only — vRA 8 has never had released catalog content, so both shapes remain unconfirmed there. Both renderers now fall back to `(unnamed)` for a row served without a name, so an unexpected shape degrades visibly instead of printing `undefined`.
 
 The vRO write surface is verified on vRA 8 but still mutates a live environment, so run it only against a disposable category and disposable content, and clean up afterwards:
 
