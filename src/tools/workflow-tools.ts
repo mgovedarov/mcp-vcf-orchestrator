@@ -27,7 +27,7 @@ import {
 import type { VroClient } from "../vro-client.js";
 import { truncationNote } from "./truncation.js";
 import { listLimitSchema, limitNote } from "./list-limit.js";
-import { formatVroValue } from "./parameter-values.js";
+import { formatVroValueRedacted } from "./parameter-values.js";
 
 const DEFAULT_WORKFLOW_WAIT_TIMEOUT_SECONDS = 300;
 const DEFAULT_WORKFLOW_POLL_INTERVAL_SECONDS = 2;
@@ -320,7 +320,8 @@ function formatOutputParameters(execution: WorkflowExecution): string {
   }
 
   const lines = outputs.map(
-    (p) => `  • ${p.name} (${p.type}): ${formatVroValue(p.value, p.type)}`,
+    (p) =>
+      `  • ${p.name} (${p.type}): ${formatVroValueRedacted(p.value, p.type)}`,
   );
   return `Output Parameters:\n${lines.join("\n")}`;
 }
@@ -774,7 +775,7 @@ export function registerWorkflowTools(
     {
       title: "Run Workflow and Wait",
       description:
-        "Validate inputs, execute a workflow, poll until completion/failure/timeout, and return outputs or useful failure diagnostics.",
+        "Validate inputs, execute a workflow, poll until completion/failure/timeout, and return outputs or useful failure diagnostics. An output parameter whose declared type or value envelope reads secure or encrypted is withheld as [redacted]; that signal is a declared type, so a secret inside an untyped composite value, or one a script wrote to the log or threw, is still printed.",
       inputSchema: z.object({
         id: z.string().describe("The workflow ID to execute"),
         inputs: z
@@ -974,7 +975,8 @@ export function registerWorkflowTools(
     "get-workflow-execution",
     {
       title: "Get Workflow Execution",
-      description: "Check the status and outputs of a workflow execution.",
+      description:
+        "Check the status and outputs of a workflow execution. An output parameter whose declared type or value envelope reads secure or encrypted is withheld as [redacted]; that signal is a declared type, so a secret inside an untyped composite value, or one a script threw as an exception, is still printed.",
       inputSchema: z.object({
         workflowId: z.string().describe("The workflow ID"),
         executionId: z.string().describe("The execution ID"),
@@ -997,7 +999,8 @@ export function registerWorkflowTools(
         if (outputs.length > 0) {
           text += `\nOutput Parameters:\n`;
           for (const p of outputs) {
-            text += `  • ${p.name} (${p.type}): ${formatVroValue(p.value, p.type)}\n`;
+            text +=
+              `  • ${p.name} (${p.type}): ${formatVroValueRedacted(p.value, p.type)}\n`;
           }
         }
         return { content: [{ type: "text", text }] };
@@ -1020,7 +1023,7 @@ export function registerWorkflowTools(
     {
       title: "Get Workflow Execution Logs",
       description:
-        "Retrieve workflow execution system/event logs, including System.log, System.debug, System.warn, and System.error output. Use after run-workflow or list-workflow-executions when detailed execution logs are needed.",
+        "Retrieve workflow execution system/event logs, including System.log, System.debug, System.warn, and System.error output. Use after run-workflow or list-workflow-executions when detailed execution logs are needed. Log bodies are served verbatim and carry no declared type, so unlike an output parameter a secret a script logged is not withheld.",
       inputSchema: z.object({
         workflowId: z.string().describe("The workflow ID"),
         executionId: z.string().describe("The execution ID"),

@@ -6,6 +6,7 @@ import {
   getWorkflowOutputParameters,
   registerWorkflowTools,
 } from "../dist/tools/workflow-tools.js";
+import { registerConfigTools } from "../dist/tools/config-tools.js";
 
 function registeredWorkflowTools(client) {
   const handlers = new Map();
@@ -690,6 +691,136 @@ test("get-workflow-execution unwraps array and empty-string output values", asyn
   assert.match(result.content[0].text, /names \(Array\/string\): \["one"\]/);
   assert.match(result.content[0].text, /empty \(string\): ""/);
   assert.doesNotMatch(result.content[0].text, /"elements"/);
+});
+
+test("get-workflow-execution withholds a secure-typed output parameter", async () => {
+  const handlers = registeredWorkflowTools({
+    getWorkflowExecution: async (workflowId, executionId) => ({
+      id: executionId,
+      state: "completed",
+      "output-parameters": [
+        // The declared-type arm.
+        {
+          name: "password",
+          type: "SecureString",
+          value: { string: { value: "must-not-render" } },
+        },
+        // The envelope arm: a permissive declared type carrying a value vRO
+        // wrapped as secure anyway.
+        {
+          name: "sneaky",
+          type: "Any",
+          value: { "secure-string": { value: "must-not-render" } },
+        },
+        // Withholding is targeted; a plain output on the same execution is
+        // still the reason to read it.
+        { name: "result", type: "string", value: { string: { value: "ok" } } },
+      ],
+    }),
+  });
+
+  const result = await handlers.get("get-workflow-execution")({
+    workflowId: "workflow-1",
+    executionId: "execution-1",
+  });
+
+  assert.equal(result.isError, undefined);
+  assert.doesNotMatch(result.content[0].text, /must-not-render/);
+  assert.match(result.content[0].text, /password \(SecureString\): \[redacted\]/);
+  assert.match(result.content[0].text, /sneaky \(Any\): \[redacted\]/);
+  assert.match(result.content[0].text, /result \(string\): "ok"/);
+});
+
+test("run-workflow-and-wait withholds a secure-typed output parameter", async () => {
+  let polls = 0;
+  const handlers = registeredWorkflowTools({
+    getWorkflow: async () => ({
+      id: "workflow-1",
+      name: "Workflow",
+      inputParameters: [{ name: "name", type: "string" }],
+    }),
+    runWorkflow: async () => ({ id: "execution-1", state: "running" }),
+    getWorkflowExecution: async () => {
+      polls += 1;
+      if (polls === 1) {
+        return { id: "execution-1", state: "running" };
+      }
+      return {
+        id: "execution-1",
+        state: "COMPLETED",
+        outputParameters: [
+          {
+            name: "apiKey",
+            type: "SecureString",
+            value: { string: { value: "must-not-render" } },
+          },
+          { name: "result", type: "string", value: { string: { value: "ok" } } },
+        ],
+      };
+    },
+  });
+
+  const result = await handlers.get("run-workflow-and-wait")({
+    id: "workflow-1",
+    inputs: [{ name: "name", value: "web-server-01" }],
+    timeoutSeconds: 1,
+    pollIntervalSeconds: 0,
+    confirm: true,
+  });
+
+  assert.equal(result.isError, undefined);
+  // The value the engine just produced is the one case where this guard is
+  // load-bearing rather than defensive: unlike a configuration attribute, vRO
+  // does return this one.
+  assert.doesNotMatch(result.content[0].text, /must-not-render/);
+  assert.match(result.content[0].text, /apiKey \(SecureString\): \[redacted\]/);
+  assert.match(result.content[0].text, /result \(string\): "ok"/);
+});
+
+test("get-workflow-execution and get-configuration withhold the same declared type", async () => {
+  // The two surfaces render `name (type): value` from the same shape through
+  // the same helper, and for a long time only one of them checked the type
+  // first (VCFO-093). Driving both off one client with one secret is what
+  // stops them drifting apart again.
+  const secret = "must-not-render";
+  const client = {
+    getWorkflowExecution: async (workflowId, executionId) => ({
+      id: executionId,
+      state: "completed",
+      "output-parameters": [
+        { name: "password", type: "SecureString", value: { string: { value: secret } } },
+      ],
+    }),
+    getConfiguration: async (id) => ({
+      id,
+      name: "Credentials",
+      attributes: [
+        { name: "password", type: "SecureString", value: { string: { value: secret } } },
+      ],
+    }),
+  };
+
+  const workflowHandlers = registeredWorkflowTools(client);
+  const configHandlers = new Map();
+  registerConfigTools(
+    { registerTool: (name, _config, handler) => configHandlers.set(name, handler) },
+    client,
+  );
+
+  const fromExecution = (
+    await workflowHandlers.get("get-workflow-execution")({
+      workflowId: "workflow-1",
+      executionId: "execution-1",
+    })
+  ).content[0].text;
+  const fromConfiguration = (
+    await configHandlers.get("get-configuration")({ id: "config-1" })
+  ).content[0].text;
+
+  for (const text of [fromExecution, fromConfiguration]) {
+    assert.doesNotMatch(text, new RegExp(secret));
+    assert.match(text, /password \(SecureString\): \[redacted\]/);
+  }
 });
 
 test("get-workflow-execution-logs formats execution log entries", async () => {
