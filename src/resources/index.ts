@@ -11,6 +11,8 @@ import { basename, extname } from "node:path";
 import { resolveEffectiveContextDirectory } from "../context-directory.js";
 import { getExistingFile, rejectSymlink, resolveFileInDirectory } from "../client/files.js";
 import type { VroClient } from "../vro-client.js";
+import type { Deployment } from "../types.js";
+import { redactSensitiveValues } from "../redaction.js";
 
 const README_URL = new URL("../../README.md", import.meta.url);
 const ARTIFACT_AUTHORING_URL = new URL(
@@ -265,6 +267,24 @@ function textResource(
   };
 }
 
+/**
+ * Withhold credential-looking deployment inputs before the record is serialized.
+ *
+ * A deployment's `inputs` carries the values it was requested with, and this
+ * resource would otherwise serve them verbatim -- which would contradict
+ * `get-deployment`, whose renderer withholds exactly these (VCFO-091). The
+ * marker stays the same `[redacted]` string the tool prints, so a consumer sees
+ * one token across both surfaces, even though it turns a redacted number into a
+ * string in otherwise faithful JSON.
+ */
+function redactDeploymentInputs(deployment: Deployment): Deployment {
+  if (!deployment.inputs) return deployment;
+  return {
+    ...deployment,
+    inputs: redactSensitiveValues(deployment.inputs) as Record<string, unknown>,
+  };
+}
+
 function jsonResource(uri: string, value: unknown): ReadResourceResult {
   return textResource(uri, "application/json", JSON.stringify(value, null, 2));
 }
@@ -472,7 +492,9 @@ export function registerVcfaResources(
     async (uri, variables) =>
       jsonResource(
         uri.href,
-        await client.getDeployment(singleVariable(variables, "id")),
+        redactDeploymentInputs(
+          await client.getDeployment(singleVariable(variables, "id")),
+        ),
       ),
   );
 

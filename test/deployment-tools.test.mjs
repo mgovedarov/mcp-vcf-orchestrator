@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { registerDeploymentTools } from "../dist/tools/deployment-tools.js";
+import {
+  formatDeploymentInputs,
+  registerDeploymentTools,
+} from "../dist/tools/deployment-tools.js";
 
 function registeredDeploymentTools(client) {
   const handlers = new Map();
@@ -715,4 +718,175 @@ test("list-deployment-actions handles the bare-array arm 9.1 actually serves", a
 
   assert.match(result.content[0].text, /Found 2 deployment action\(s\)/);
   assert.match(result.content[0].text, /PowerOff \(id: Deployment\.PowerOff\)/);
+});
+
+// --- get-deployment: the inputs a deployment was requested with (VCFO-091) ---
+
+function deploymentDetailTools(deployment, overrides = {}) {
+  return registeredDeploymentTools({
+    getDeployment: async (id) => ({ id, name: "alpine1", ...deployment }),
+    ...overrides,
+  });
+}
+
+test("get-deployment renders the inputs the deployment was requested with", async () => {
+  const handlers = deploymentDetailTools({
+    inputs: { hostname: "alpine1", vmClass: "small", storageClass: "gold" },
+  });
+
+  const result = await handlers.get("get-deployment")({ id: "deployment-1" });
+  const text = result.content[0].text;
+
+  assert.equal(result.isError, undefined);
+  assert.match(text, /Inputs \(as requested\):/);
+  assert.match(text, /• hostname: "alpine1"/);
+  assert.match(text, /• vmClass: "small"/);
+  assert.match(text, /• storageClass: "gold"/);
+  // Nothing was withheld here, so the caller must not be told to resupply.
+  assert.doesNotMatch(text, /supplied fresh/);
+});
+
+test("get-deployment never prints an input value whose name reads as a credential", async () => {
+  const handlers = deploymentDetailTools({
+    inputs: {
+      hostname: "alpine1",
+      adminPassword: "hunter2-should-never-render",
+      apiToken: "token-should-never-render",
+      sshPrivateKey: "key-should-never-render",
+    },
+  });
+
+  const result = await handlers.get("get-deployment")({ id: "deployment-1" });
+  const text = result.content[0].text;
+
+  // The deployment record carries no encrypted marker, so the key's name is the
+  // only signal there is. The input is still listed, so the caller knows it was
+  // set and must supply it again to reproduce the deployment...
+  assert.match(text, /• adminPassword: \[redacted\]/);
+  assert.match(text, /• apiToken: \[redacted\]/);
+  assert.match(text, /• sshPrivateKey: \[redacted\]/);
+  assert.match(text, /\[redacted\] values must be supplied fresh/);
+  // ...but the value itself is never printed.
+  assert.doesNotMatch(text, /hunter2/);
+  assert.doesNotMatch(text, /token-should-never-render/);
+  assert.doesNotMatch(text, /key-should-never-render/);
+  // The redaction is targeted, not blanket.
+  assert.match(text, /• hostname: "alpine1"/);
+});
+
+test("get-deployment redacts a sensitive key nested inside an input value", async () => {
+  const handlers = deploymentDetailTools({
+    inputs: {
+      sshConfig: { user: "root", privateKey: "nested-must-never-render" },
+      disks: [{ size: 20, encryptionSecret: "array-must-never-render" }],
+    },
+  });
+
+  const result = await handlers.get("get-deployment")({ id: "deployment-1" });
+  const text = result.content[0].text;
+
+  // A blueprint input can be an object or an array, so nesting must not be a
+  // way around the guard -- a top-level-key check alone would print both of
+  // these verbatim inside the JSON blob.
+  assert.doesNotMatch(text, /nested-must-never-render/);
+  assert.doesNotMatch(text, /array-must-never-render/);
+  assert.match(text, /"privateKey":"\[redacted\]"/);
+  assert.match(text, /"encryptionSecret":"\[redacted\]"/);
+  // The rest of the structure survives.
+  assert.match(text, /"user":"root"/);
+  assert.match(text, /"size":20/);
+  assert.match(text, /\[redacted\] values must be supplied fresh/);
+});
+
+test("get-deployment omits the inputs block when the platform serves none", async () => {
+  for (const inputs of [undefined, {}]) {
+    const handlers = deploymentDetailTools({ inputs });
+    const result = await handlers.get("get-deployment")({ id: "deployment-1" });
+    // A platform that does not serve the field must not look like one that
+    // served an empty object.
+    assert.doesNotMatch(result.content[0].text, /Inputs/);
+    assert.equal(result.isError, undefined);
+  }
+});
+
+test("formatDeploymentInputs renders values as JSON so they can be replayed", () => {
+  assert.equal(formatDeploymentInputs(undefined), "");
+  assert.equal(formatDeploymentInputs({}), "");
+
+  const text = formatDeploymentInputs({
+    count: 2,
+    enabled: true,
+    tags: ["a", "b"],
+    placement: { zone: "az1" },
+    notes: "",
+    missing: undefined,
+  });
+
+  // JSON, unlike the configuration-attribute rendering, is exactly what
+  // create-deployment's inputs object takes, so these round-trip.
+  assert.match(text, /• count: 2/);
+  assert.match(text, /• enabled: true/);
+  assert.match(text, /• tags: \["a","b"\]/);
+  assert.match(text, /• placement: \{"zone":"az1"\}/);
+  // An empty string reads as "" rather than as blank space.
+  assert.match(text, /• notes: ""/);
+  // JSON.stringify(undefined) is undefined, not a string; never print the word.
+  assert.match(text, /• missing: \(no value\)/);
+  assert.doesNotMatch(text, /undefined/);
+});
+
+test("get-deployment resolves the project name the wire does not serve", async () => {
+  let asked;
+  const handlers = deploymentDetailTools(
+    { projectId: "project-1" },
+    { getProject: async (id) => ((asked = id), { id, name: "amer-wld" }) },
+  );
+
+  const result = await handlers.get("get-deployment")({ id: "deployment-1" });
+  const text = result.content[0].text;
+
+  // VCF Automation 9.1 carries projectId but no projectName, so without this
+  // every real deployment rendered an opaque ID (VCFO-091).
+  assert.equal(asked, "project-1");
+  assert.match(text, /Project: amer-wld/);
+  // The ID is what the other deployment tools take as an argument, so both print.
+  assert.match(text, /Project ID: project-1/);
+});
+
+test("get-deployment still describes the deployment when the project read fails", async () => {
+  const handlers = deploymentDetailTools(
+    { projectId: "project-1", status: "CREATE_SUCCESSFUL" },
+    {
+      getProject: async () => {
+        throw new Error("403 Forbidden");
+      },
+    },
+  );
+
+  const result = await handlers.get("get-deployment")({ id: "deployment-1" });
+  const text = result.content[0].text;
+
+  // The project name is an enrichment; losing it must not lose the deployment.
+  assert.equal(result.isError, undefined);
+  assert.match(text, /Status: CREATE_SUCCESSFUL/);
+  assert.match(text, /Project ID: project-1/);
+  assert.doesNotMatch(text, /Project: /);
+  assert.doesNotMatch(text, /undefined/);
+});
+
+test("get-deployment renders the blueprint behind the requested catalog item version", async () => {
+  const handlers = deploymentDetailTools({
+    catalogItemVersion: "2",
+    blueprintId: "blueprint-1",
+    blueprintVersion: "2",
+  });
+
+  const result = await handlers.get("get-deployment")({ id: "deployment-1" });
+  const text = result.content[0].text;
+
+  // Version drift is what makes two deployments of one item carry different
+  // input sets, so the blueprint behind the request is worth naming.
+  assert.match(text, /Catalog Item Version: 2/);
+  assert.match(text, /Blueprint ID: blueprint-1/);
+  assert.match(text, /Blueprint Version: 2/);
 });

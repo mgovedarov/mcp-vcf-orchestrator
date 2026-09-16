@@ -796,6 +796,14 @@ List deployments, optionally filtered by name or keyword and project ID. Use `li
 
 Get detailed information about a specific deployment by its ID. A deployment served without a name renders as `(unnamed)`, the convention described under `list-projects`.
 
+The result renders the **inputs the deployment was requested with**, keyed by input name. Where `get-catalog-item` answers what an item *takes*, this answers what a deployment *was given* — the only record that distinguishes two deployments of the same catalog item, which can carry different input sets when they were requested against different released blueprint versions. `Blueprint ID` and `Blueprint Version` name the blueprint behind the requested `Catalog Item Version`, which is what that drift looks like.
+
+Values render as JSON, so they can be copied straight into `create-deployment`'s `inputs` object. Note this is the opposite of the configuration-attribute rendering described under `update-configuration`, where the quotes are an artifact of the rendering and must **not** be copied.
+
+An input whose name reads as credential material — `password`, `passwd`, `secret`, `token`, `credential`, `private key`, `api key`, in any case and at any depth inside an object or array value — renders as `[redacted]`, and the header then says those values must be supplied fresh. **This check is name-based and is not a guarantee.** Unlike a configuration attribute, which carries a declared type, and unlike a catalog item schema property, which carries an `encrypted` flag, a deployment's `inputs` carries values with no marker saying which were encrypted; the catalog item's schema cannot supply one either, because it can only be read at its current version, which is not necessarily the `catalogItemVersion` the deployment was requested against. Treat a printed value as printed: if a deployment was given a secret under a name this pattern does not match, it is in the output.
+
+The project name is resolved through the project service, since VCF Automation 9.1 serves a deployment's `projectId` but no `projectName`. This makes `get-deployment` a two-request tool; when the project read fails the result still describes the deployment and shows `Project ID` alone. `list-deployments` deliberately does not resolve names, since there it would cost one extra read per row.
+
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |

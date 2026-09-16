@@ -5,17 +5,10 @@ import type { Project, ProjectPrincipal } from "../types.js";
 import type { VroClient } from "../vro-client.js";
 import { truncationNote } from "./truncation.js";
 import { listLimitSchema, limitNote } from "./list-limit.js";
+import { REDACTED, isSensitiveKey } from "../redaction.js";
 
 const NAMING_TEMPLATE_KEY = "__namingTemplate";
 const PLACEMENT_POLICY_KEY = "__projectPlacementPolicy";
-
-/**
- * Custom project properties are free-form key/value metadata. They are not
- * typed as secure the way configuration attributes are, so a value is
- * withheld whenever its key suggests credential material.
- */
-const SENSITIVE_PROPERTY_KEY =
-  /(password|passwd|secret|token|credential|private[-_]?key|api[-_]?key)/i;
 
 /** A role array key this renderer knows by name. */
 type RoleKey =
@@ -137,8 +130,11 @@ function formatProperties(properties: Project["properties"]): string {
   if (custom.length === 0) return text;
   text += "Custom properties:\n";
   for (const [key, value] of custom) {
-    const rendered = SENSITIVE_PROPERTY_KEY.test(key)
-      ? "[redacted]"
+    // Custom project properties are free-form key/value metadata with no
+    // declared type, so the key's own name is the only redaction signal there
+    // is; see src/redaction.ts.
+    const rendered = isSensitiveKey(key)
+      ? REDACTED
       : typeof value === "string"
         ? value
         : JSON.stringify(value);

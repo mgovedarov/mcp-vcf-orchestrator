@@ -126,6 +126,40 @@ test("dynamic resources call client methods and return json", async () => {
   assert.match(pkg.contents[0].text, /com\.example\.package/);
 });
 
+test("the deployment resource withholds credential-looking inputs", async () => {
+  const resources = registeredResources({
+    getDeployment: async (id) => ({
+      id,
+      name: "alpine1",
+      projectId: "project-1",
+      inputs: {
+        hostname: "alpine1",
+        adminPassword: "hunter2-should-never-render",
+        sshConfig: { user: "root", privateKey: "nested-must-never-render" },
+      },
+    }),
+  });
+
+  const deployment = await resources.get("vcfa-deployment").handler(
+    new URL("vcfa://deployments/deployment-1"),
+    { id: "deployment-1" },
+  );
+  const text = deployment.contents[0].text;
+
+  // This resource serializes the deployment record verbatim, so without
+  // redaction it would serve the very values get-deployment withholds
+  // (VCFO-091). The marker matches the tool's, nesting included.
+  assert.doesNotMatch(text, /hunter2/);
+  assert.doesNotMatch(text, /nested-must-never-render/);
+  const parsed = JSON.parse(text);
+  assert.equal(parsed.inputs.adminPassword, "[redacted]");
+  assert.equal(parsed.inputs.sshConfig.privateKey, "[redacted]");
+  // Everything else survives untouched.
+  assert.equal(parsed.inputs.hostname, "alpine1");
+  assert.equal(parsed.inputs.sshConfig.user, "root");
+  assert.equal(parsed.projectId, "project-1");
+});
+
 test("context snapshot resources list and read persisted files", async () => {
   const contextDir = await mkdtemp(join(tmpdir(), "vcfa-context-resources-"));
   try {
