@@ -541,7 +541,7 @@ test("create-deployment reports identifiers from the observed 9.1 request respon
   const handlers = registeredDeploymentTools({
     createDeploymentFromCatalogItem: async () => [
       {
-        deploymentId: "4569b984-4cda-4109-8225-9e7262e9109d",
+        deploymentId: "11111111-2222-4333-8444-555555555555",
         deploymentName: "vcfo074-livetest",
       },
     ],
@@ -555,7 +555,7 @@ test("create-deployment reports identifiers from the observed 9.1 request respon
   });
 
   assert.match(result.content[0].text, /Deployment request submitted\./);
-  assert.match(result.content[0].text, /ID: 4569b984-4cda-4109-8225-9e7262e9109d/);
+  assert.match(result.content[0].text, /ID: 11111111-2222-4333-8444-555555555555/);
   assert.match(result.content[0].text, /Name: vcfo074-livetest/);
   assert.match(result.content[0].text, /poll get-deployment/);
 });
@@ -608,7 +608,7 @@ test("delete-deployment matches expectedProjectName when 9.1 serves no projectNa
       id,
       name: "vcfo074-livetest",
       status: "CREATE_SUCCESSFUL",
-      projectId: "6c2e8b1e-16d4-41a3-84d3-e1920237b18a",
+      projectId: "99999999-8888-4777-8666-555555555555",
     }),
     getProject: async (id) => ({ id, name: "default-project" }),
     deleteDeployment: async (id) => {
