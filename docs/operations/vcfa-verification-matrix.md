@@ -20,6 +20,12 @@ This matrix covers `vcfa` only. For `VCFA_TARGET_PLATFORM=vra8`, see the
 vRA 8.18 / vRO 8.18.1 and must not be read as 9.x evidence, just as this one must not be read as
 vRA 8 evidence.
 
+## Post-sweep additions
+
+| Tool | Status | Evidence |
+| --- | --- | --- |
+| `get-deployment-request` | Pending live verification | Added after the full-surface sweep under VCFO-094. No 9.1 round has submitted a day-2 action or read `GET /deployment/api/requests/{id}`, so the route and response shape remain unverified on this platform. Local client and tool tests cover the expected contract without turning the vRA 8.18 observation into 9.x evidence. |
+
 ## How to read the status column
 
 | Status | Meaning |

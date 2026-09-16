@@ -820,6 +820,20 @@ The project name is resolved through the project service, since VCF Automation 9
 | `id` | string | Yes | - | Deployment ID to inspect. |
 :::
 
+### `get-deployment-request`
+
+Get the current state of an asynchronous deployment request by the request ID returned from `run-deployment-action` or `delete-deployment`. The result renders the request ID and name, action and deployment IDs, requester, status and details, task progress, cancelability, timestamps, and affected resource IDs when the service supplies them. Untyped `inputs`, `outputs`, and expanded `resources` are deliberately not rendered because they can carry sensitive values.
+
+This is the authoritative progress read for a day-2 action: a deployment's own status may remain `CREATE_SUCCESSFUL` throughout an action. On vRA 8.18 the observed route is `GET /deployment/api/requests/{id}`, and requests moved `PENDING` or `INITIALIZATION` → `INPROGRESS` → `SUCCESSFUL`, with `completedTasks` increasing to `totalTasks`. The route and response keys were observed through raw HTTP under VCFO-088; the MCP tool itself is new under VCFO-094. The equivalent VCF Automation 9.1 route remains unverified.
+
+For deletion, a successful request is not by itself proof that every resource is gone. Also confirm that `get-deployment` answers `404` or that `list-deployments` no longer includes the deployment.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `requestId` | string | Yes | - | Deployment request ID returned by `run-deployment-action` or `delete-deployment`. |
+:::
+
 ### `create-deployment`
 
 Create a new deployment from a catalog item. **This provisions real infrastructure**, with the cost and capacity that follow from it, and the only way to remove it afterwards is `delete-deployment`, which is itself a destructive day-2 operation rather than an undo. It is annotated destructive for that reason, the one additive `create-` tool that is (VCFO-084).
@@ -877,7 +891,7 @@ List deployment-level day-2 actions available for a VCF Automation deployment. B
 
 Run a deployment-level day-2 action. Use `list-deployment-actions` first to find the action ID and any required inputs.
 
-On success the tool renders the `DeploymentRequest` the service queued — its ID, name, action ID, deployment ID, status and details — followed by a next step chosen from the action and the request's status. For `Deployment.Delete` the deployment itself reads `DELETE_INPROGRESS` and then `404`, so it says to poll `get-deployment`. For any other action the deployment's own status does **not** track the request — on vRA 8.18 a deployment read `CREATE_SUCCESSFUL` throughout a `Deployment.PowerOff` and a `Deployment.PowerOn`, while the request itself moved `PENDING` (or `INITIALIZATION`) → `INPROGRESS` → `SUCCESSFUL` in about 30 s — so it says to confirm the outcome on the deployment's resources. A request whose status is not a running one is reported as held or finished rather than as something to wait for. Reading a request back by ID is tracked as VCFO-094. The request body and its vocabulary have been observed on vRA 8.18 only. Verified live on vRA 8.18 in `vra8` mode under VCFO-088 — the first day-2 submission on any platform; on VCF Automation 9.1 only the guard arms have been exercised (VCFO-074).
+On success the tool renders the `DeploymentRequest` the service queued and, when it includes an ID, directs the caller to poll `get-deployment-request` until the status leaves `PENDING`, `INITIALIZATION`, or `INPROGRESS`. For `Deployment.Delete`, it additionally says to verify that `get-deployment` answers `404` or `list-deployments` no longer includes the deployment. For any other action, confirm the outcome on the deployment's resources after the request succeeds. A request whose status is already non-running is reported as held or finished rather than as something to wait for. The request body and its vocabulary have been observed on vRA 8.18 only. Verified live on vRA 8.18 in `vra8` mode under VCFO-088 — the first day-2 submission on any platform; on VCF Automation 9.1 only the guard arms have been exercised (VCFO-074).
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |

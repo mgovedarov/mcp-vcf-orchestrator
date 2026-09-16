@@ -215,8 +215,8 @@ export function formatDeploymentInputs(
 const ACTIVE_REQUEST_STATUSES = new Set(["PENDING", "INITIALIZATION", "INPROGRESS"]);
 
 /**
- * The `DeploymentRequest` fields both deployment-service writes render, with
- * one label set, so a field added to the type is considered in one place.
+ * Render operational `DeploymentRequest` metadata shared by submission and
+ * read responses. Untyped inputs, outputs, and expanded resources stay out.
  */
 export function deploymentRequestLines(
   request: DeploymentRequest | undefined,
@@ -227,8 +227,25 @@ export function deploymentRequestLines(
   if (request.name) text += `Name: ${request.name}\n`;
   if (request.actionId) text += `Action ID: ${request.actionId}\n`;
   if (request.deploymentId) text += `Deployment ID: ${request.deploymentId}\n`;
+  if (request.requestedBy) text += `Requested By: ${request.requestedBy}\n`;
   if (request.status) text += `Status: ${request.status}\n`;
   if (request.details) text += `Details: ${request.details}\n`;
+  if (
+    request.completedTasks !== undefined ||
+    request.totalTasks !== undefined
+  ) {
+    text += `Task Progress: ${request.completedTasks ?? "?"}/${request.totalTasks ?? "?"}\n`;
+  }
+  if (request.cancelable !== undefined) {
+    text += `Cancelable: ${request.cancelable ? "Yes" : "No"}\n`;
+  }
+  if (request.createdAt) text += `Created At: ${request.createdAt}\n`;
+  if (request.updatedAt) text += `Updated At: ${request.updatedAt}\n`;
+  if (request.approvedAt) text += `Approved At: ${request.approvedAt}\n`;
+  if (request.completedAt) text += `Completed At: ${request.completedAt}\n`;
+  if (request.resourceIds && request.resourceIds.length > 0) {
+    text += `Resource IDs: ${request.resourceIds.join(", ")}\n`;
+  }
   return text;
 }
 
@@ -240,27 +257,43 @@ export function deploymentRequestLines(
  * read `CREATE_SUCCESSFUL` throughout a PowerOff and a PowerOn on vRA 8.18
  * (VCFO-088). A request that is not in a running state -- held for approval,
  * failed -- is reported as such instead of as something to wait for, since
- * waiting on the deployment would never settle it. Reading a request back by
- * id through this server is tracked as VCFO-094.
+ * waiting on the deployment would never settle it. When the service returns
+ * a request id, `get-deployment-request` is the authoritative progress read
+ * for every action (VCFO-094).
  */
 export function deploymentRequestNextStep(
   actionId: string,
   status: string | undefined,
+  requestId?: string,
 ): string {
   if (status && !ACTIVE_REQUEST_STATUSES.has(status.toUpperCase())) {
-    return `The request reports ${status} rather than a running state, so it is either already finished or held (an approval policy, for example); waiting on the deployment will not settle it. Reading a request back by ID is tracked as VCFO-094.\n`;
+    const reread = requestId
+      ? ` Re-read it with get-deployment-request(requestId: "${requestId}") if you need its latest details.`
+      : "";
+    const verifyDeletion =
+      actionId === "Deployment.Delete" && status.toUpperCase() === "SUCCESSFUL"
+        ? " Verify the deployment is absent with get-deployment (404) or list-deployments before treating its resources as gone."
+        : "";
+    return `The request reports ${status} rather than a running state, so it is either already finished or held (an approval policy, for example); waiting on the deployment will not settle it.${reread}${verifyDeletion}\n`;
+  }
+  if (requestId) {
+    const poll = `Poll get-deployment-request(requestId: "${requestId}") until its status leaves PENDING, INITIALIZATION, or INPROGRESS.`;
+    if (actionId === "Deployment.Delete") {
+      return `${poll} Also poll get-deployment until it answers 404, or list-deployments until the deployment is absent, to confirm its resources are gone.\n`;
+    }
+    return `${poll} After it reports SUCCESSFUL, confirm the outcome on the deployment's resources.\n`;
   }
   if (actionId === "Deployment.Delete") {
     return `Deletion is asynchronous: the deployment reads DELETE_INPROGRESS until it is gone, so poll get-deployment until it answers 404, or list-deployments until the deployment is absent.\n`;
   }
-  return `The action runs asynchronously, and get-deployment's status does not track it (a deployment read CREATE_SUCCESSFUL throughout a power action), so confirm the outcome on the deployment's resources. Reading a request back by ID is tracked as VCFO-094.\n`;
+  return `The action runs asynchronously, but the service returned no request ID, so get-deployment-request cannot poll it. Confirm the outcome on the deployment's resources.\n`;
 }
 
 export function formatDeploymentRequest(
   request: DeploymentRequest,
   actionId: string = request.actionId ?? "",
 ): string {
-  return `Deployment action request submitted.\n${deploymentRequestLines(request)}${deploymentRequestNextStep(actionId, request.status)}`;
+  return `Deployment action request submitted.\n${deploymentRequestLines(request)}${deploymentRequestNextStep(actionId, request.status, request.id)}`;
 }
 
 /**
@@ -616,6 +649,45 @@ export function registerDeploymentTools(
   );
 
   server.registerTool(
+    "get-deployment-request",
+    {
+      title: "Get Deployment Request",
+      description:
+        "Get the current status and task progress of an asynchronous deployment request by its request ID. Use the request ID returned by run-deployment-action or delete-deployment.",
+      inputSchema: z.object({
+        requestId: z.string().describe("The deployment request ID"),
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ requestId }): Promise<CallToolResult> => {
+      try {
+        const request = await client.getDeploymentRequest(requestId);
+        const details = deploymentRequestLines(request);
+        return {
+          content: [
+            {
+              type: "text",
+              text: details
+                ? `Deployment request:\n${details}`
+                : `Deployment request ${requestId} returned no details.`,
+            },
+          ],
+        };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to get deployment request: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  server.registerTool(
     "delete-deployment",
     {
       title: "Delete Deployment",
@@ -718,7 +790,11 @@ export function registerDeploymentTools(
         let text = `Deletion of deployment ${id} requested.\n`;
         const lines = deploymentRequestLines(request);
         if (lines) text += `The service queued this request:\n${lines}`;
-        text += deploymentRequestNextStep("Deployment.Delete", request?.status);
+        text += deploymentRequestNextStep(
+          "Deployment.Delete",
+          request?.status,
+          request?.id,
+        );
         return { content: [{ type: "text", text }] };
       } catch (error) {
         return {

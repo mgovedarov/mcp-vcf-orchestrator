@@ -111,11 +111,12 @@ export function registerVcfaPrompts(server: McpServer): void {
           goalHint ? `Troubleshooting focus: ${goalHint}` : undefined,
           "",
           "Use get-deployment to inspect the deployment state, status, resources, and last operation before proposing remediation.",
+          "When a deployment request ID is known, use get-deployment-request to inspect its status, task progress, timestamps, details, and affected resource IDs.",
           "Use list-catalog-items or get-catalog-item when the deployment origin or catalog source is unclear.",
           "Use list-deployment-actions to identify available day-2 operations and their required inputs.",
           ...discoveryGuardrails(),
           "Irreversible actions such as destroy or delete require extra confirmation including the deployment name, expected data loss, and explicit user acknowledgement before execution.",
-          "Do not run deployment actions until the user confirms the action, inputs, target deployment, and expected impact. Pass expectedDeploymentName and expectedActionName when submitting the confirmed action.",
+          "Do not run deployment actions until the user confirms the action, inputs, target deployment, and expected impact. Pass expectedDeploymentName and expectedActionName when submitting the confirmed action, then poll its returned request ID with get-deployment-request until it reaches a terminal status.",
         ]),
       ),
   );

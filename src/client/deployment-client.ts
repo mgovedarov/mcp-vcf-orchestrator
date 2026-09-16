@@ -56,6 +56,13 @@ export class DeploymentClient {
     );
   }
 
+  getDeploymentRequest(requestId: string): Promise<DeploymentRequest> {
+    return this.http.get<DeploymentRequest>(
+      `/requests/${encodeURIComponent(requestId)}`,
+      this.http.deploymentBaseUrl,
+    );
+  }
+
   /**
    * `DELETE /deployments/{id}` does not delete synchronously: on vRA 8.18 it
    * answers 200 with the `Deployment.Delete` request it queued, `status:

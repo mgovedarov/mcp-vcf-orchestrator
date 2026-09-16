@@ -611,6 +611,10 @@ export class VroClient {
     return this.deployments.getDeployment(id);
   }
 
+  getDeploymentRequest(requestId: string): Promise<DeploymentRequest> {
+    return this.deployments.getDeploymentRequest(requestId);
+  }
+
   deleteDeployment(id: string): Promise<DeploymentRequest> {
     return this.deployments.deleteDeployment(id);
   }

@@ -343,6 +343,9 @@ Free calls first, so a late failure still leaves the cheap findings recorded.
    **Submission is a separate decision:** only a benign reversible action the user names
    explicitly, only after all reads are captured, and never `Deployment.Delete` — teardown must go
    through `delete-deployment`, the tool under test.
+8. When an action is submitted, capture its request ID and poll `get-deployment-request` to a terminal
+  status. Record task progress, timestamps and response keys without printing untyped inputs or
+  outputs.
 
 Rendered output cannot settle a wire shape: a `(unnamed)` fallback says nothing about the real key,
 and both arms of the `DeploymentActionList` union render identically. A shape question needs a
@@ -354,8 +357,9 @@ Rehearse the guard with a wrong `expectedName` (free), then delete with matching
 
 **The success text is not evidence of completion.** `delete-deployment` reports the deletion as
 *requested* and prints the `Deployment.Delete` request the service queued (ID and status) when it
-returns one — a 2xx on this route means queued, not done. Confirm by polling `get-deployment` to a
-`404` **and** by `list-deployments(projectId)` no longer listing it.
+returns one — a 2xx on this route means queued, not done. Poll that ID with
+`get-deployment-request` when it is present, then confirm resource removal independently by polling
+`get-deployment` to a `404` **and** by `list-deployments(projectId)` no longer listing it.
 
 `CREATE_FAILED` is not an excuse to skip teardown — the record exists and may hold allocated
 resources. **If teardown fails**, say so immediately with the deployment id, name, project and last

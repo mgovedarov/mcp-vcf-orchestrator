@@ -15,6 +15,12 @@ This matrix covers `vra8` only. For the default `VCFA_TARGET_PLATFORM=vcfa` plat
 [VCF Automation Verification Matrix](./vcfa-verification-matrix.md). Neither matrix is evidence
 for the other platform.
 
+## Post-sweep additions
+
+| Tool | Status | Evidence |
+| --- | --- | --- |
+| `get-deployment-request` | Route observed; MCP tool pending live verification | Added after the 78-tool sweep under VCFO-094. The underlying `GET /deployment/api/requests/{id}` route was read by raw HTTP during the VCFO-088 round: power and delete requests moved through `PENDING` or `INITIALIZATION`, `INPROGRESS`, and `SUCCESSFUL`, with task progress and timestamps. The new handler and renderer are covered locally, but have not yet been driven through stdio against this lab. |
+
 ## How to read the status column
 
 | Status | Meaning |
@@ -215,7 +221,8 @@ or recorded the delete body, so neither matrix is evidence for the other there.
   its next step from the action and the request's status: a power action is not tracked by
   `get-deployment`, a `Deployment.Delete` is (poll to `404`), and a request that is not in a running
   state is reported as held or finished rather than as something to wait for. Both tools render the
-  request through one shared set of lines. Reading a request back by ID is tracked as VCFO-094.
+  request through one shared set of lines. VCFO-094 subsequently added `get-deployment-request` for
+  that lookup; its post-sweep verification status is recorded above.
 
 ### Not exercised here
 
