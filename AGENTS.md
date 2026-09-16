@@ -100,6 +100,8 @@ Prompts:
 
 Resources:
 
+A live-object resource withholds what its matching `get-*` tool withholds, so a gate cannot be sidestepped by reading the URI instead: an action's script and a subscription's constraints are served as a `{ included: false, sha256, length }` summary, and a secure-typed configuration attribute or a credential-named deployment input as `[redacted]`. Use the named tool and flag for the full content. See `docs/reference/resources-prompts.md`.
+
 - `vcfa://docs/readme`
 - `vcfa://docs/artifact-authoring`
 - `vcfa://schemas/workflow-scaffold`

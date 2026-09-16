@@ -11,8 +11,12 @@ import { basename, extname } from "node:path";
 import { resolveEffectiveContextDirectory } from "../context-directory.js";
 import { getExistingFile, rejectSymlink, resolveFileInDirectory } from "../client/files.js";
 import type { VroClient } from "../vro-client.js";
-import type { Deployment } from "../types.js";
-import { redactSensitiveValues } from "../redaction.js";
+import {
+  actionResourceView,
+  configurationResourceView,
+  deploymentResourceView,
+  subscriptionResourceView,
+} from "../resource-views.js";
 
 const README_URL = new URL("../../README.md", import.meta.url);
 const ARTIFACT_AUTHORING_URL = new URL(
@@ -267,24 +271,6 @@ function textResource(
   };
 }
 
-/**
- * Withhold credential-looking deployment inputs before the record is serialized.
- *
- * A deployment's `inputs` carries the values it was requested with, and this
- * resource would otherwise serve them verbatim -- which would contradict
- * `get-deployment`, whose renderer withholds exactly these (VCFO-091). The
- * marker stays the same `[redacted]` string the tool prints, so a consumer sees
- * one token across both surfaces, even though it turns a redacted number into a
- * string in otherwise faithful JSON.
- */
-function redactDeploymentInputs(deployment: Deployment): Deployment {
-  if (!deployment.inputs) return deployment;
-  return {
-    ...deployment,
-    inputs: redactSensitiveValues(deployment.inputs) as Record<string, unknown>,
-  };
-}
-
 function jsonResource(uri: string, value: unknown): ReadResourceResult {
   return textResource(uri, "application/json", JSON.stringify(value, null, 2));
 }
@@ -456,7 +442,7 @@ export function registerVcfaResources(
     new ResourceTemplate("vcfa://workflows/{id}", { list: undefined }),
     {
       title: "VCFA Workflow",
-      description: "Read a workflow definition by workflow ID.",
+      description: "Read a workflow definition by workflow ID. Nothing is withheld: a workflow record carries no script or content, and parameters are declarations without values.",
       mimeType: "application/json",
     },
     async (uri, variables) =>
@@ -471,13 +457,15 @@ export function registerVcfaResources(
     new ResourceTemplate("vcfa://actions/{id}", { list: undefined }),
     {
       title: "VCFA Action",
-      description: "Read an action definition by action ID or fully qualified name.",
+      description: "Read an action definition by action ID or fully qualified name. The script is summarized as a sha256 and a length rather than served; use get-action with includeScript for the full script.",
       mimeType: "application/json",
     },
     async (uri, variables) =>
       jsonResource(
         uri.href,
-        await client.getAction(singleVariable(variables, "id")),
+        actionResourceView(
+          await client.getAction(singleVariable(variables, "id")),
+        ),
       ),
   );
 
@@ -486,13 +474,13 @@ export function registerVcfaResources(
     new ResourceTemplate("vcfa://deployments/{id}", { list: undefined }),
     {
       title: "VCFA Deployment",
-      description: "Read a deployment by deployment ID.",
+      description: "Read a deployment by deployment ID. An input whose name reads as credential material is withheld; that check is name-based and is not a guarantee.",
       mimeType: "application/json",
     },
     async (uri, variables) =>
       jsonResource(
         uri.href,
-        redactDeploymentInputs(
+        deploymentResourceView(
           await client.getDeployment(singleVariable(variables, "id")),
         ),
       ),
@@ -503,7 +491,7 @@ export function registerVcfaResources(
     new ResourceTemplate("vcfa://packages/{name}", { list: undefined }),
     {
       title: "vRO Package",
-      description: "Read package metadata by fully qualified package name.",
+      description: "Read package metadata by fully qualified package name. Nothing is withheld: the content listings are names and types, which get-package omits for brevity rather than secrecy.",
       mimeType: "application/json",
     },
     async (uri, variables) =>
@@ -518,13 +506,15 @@ export function registerVcfaResources(
     new ResourceTemplate("vcfa://configurations/{id}", { list: undefined }),
     {
       title: "VCFA Configuration Element",
-      description: "Read a configuration element by ID.",
+      description: "Read a configuration element by ID. An attribute the server declares secure has its value withheld, matching get-configuration.",
       mimeType: "application/json",
     },
     async (uri, variables) =>
       jsonResource(
         uri.href,
-        await client.getConfiguration(singleVariable(variables, "id")),
+        configurationResourceView(
+          await client.getConfiguration(singleVariable(variables, "id")),
+        ),
       ),
   );
 
@@ -533,7 +523,7 @@ export function registerVcfaResources(
     new ResourceTemplate("vcfa://resource-elements/{id}", { list: undefined }),
     {
       title: "VCFA Resource Element",
-      description: "Read resource element metadata by ID.",
+      description: "Read resource element metadata by ID. Nothing is withheld: the record is metadata only and the element content is never served here — use export-resource-element for the content.",
       mimeType: "application/json",
     },
     async (uri, variables) =>
@@ -548,13 +538,15 @@ export function registerVcfaResources(
     new ResourceTemplate("vcfa://subscriptions/{id}", { list: undefined }),
     {
       title: "VCFA Subscription",
-      description: "Read an extensibility subscription by ID.",
+      description: "Read an extensibility subscription by ID. Constraints are summarized as a sha256 and a length rather than served; use get-subscription with includeConstraints for the full JSON.",
       mimeType: "application/json",
     },
     async (uri, variables) =>
       jsonResource(
         uri.href,
-        await client.getSubscription(singleVariable(variables, "id")),
+        subscriptionResourceView(
+          await client.getSubscription(singleVariable(variables, "id")),
+        ),
       ),
   );
 

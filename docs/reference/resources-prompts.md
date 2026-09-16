@@ -4,6 +4,10 @@ The server exposes MCP resources for documentation, artifact patterns, and live 
 
 ## Resources
 
+A live-object resource **withholds what its matching `get-*` tool withholds**. Both read the same record, so a value the tool declines to print must not be reachable by reading the URI instead. Bulky content a tool gates behind a flag is served here as a `{ included: false, sha256, length }` summary — the digest matches the one in the tool's own output, so the two can be compared — and a value the server declares secure is served as `[redacted]`. The full content stays available through the tool and flag named in each row below.
+
+This is about withholding, not field-set parity: a resource is otherwise a faithful serialization of the record, and fields a tool merely omits for brevity are still served.
+
 | Resource URI | Purpose |
 | --- | --- |
 | `vcfa://docs/readme` | README content for tool usage and configuration. |
@@ -16,13 +20,13 @@ The server exposes MCP resources for documentation, artifact patterns, and live 
 | `vcfa://patterns/templates/catalog-ready` | Guidance for catalog-facing templates and deployment workflow alignment. |
 | `vcfa://context/latest` | Manifest for the most recent persisted context snapshot pair, including file paths, counts, warnings count, and snapshot resource URIs. |
 | `vcfa://context/snapshots/{fileName}` | Persisted context snapshot file content for a generated `.json` or `.md` snapshot under the effective context directory. |
-| `vcfa://workflows/{id}` | Workflow metadata as JSON. |
-| `vcfa://actions/{id}` | Action metadata and script details as JSON. |
-| `vcfa://deployments/{id}` | Deployment details as JSON. |
-| `vcfa://configurations/{id}` | Configuration element details as JSON. |
-| `vcfa://resource-elements/{id}` | Resource element metadata as JSON. |
-| `vcfa://subscriptions/{id}` | Extensibility subscription details as JSON. |
-| `vcfa://packages/{name}` | vRO package metadata as JSON. |
+| `vcfa://workflows/{id}` | Workflow metadata as JSON. Nothing is withheld: the record carries no script or content, and parameters are declarations without values. |
+| `vcfa://actions/{id}` | Action metadata as JSON. The script is served as a sha256/length summary; use `get-action` with `includeScript` for the full script. |
+| `vcfa://deployments/{id}` | Deployment details as JSON. An input whose name reads as credential material is `[redacted]`; that check is name-based and is not a guarantee. |
+| `vcfa://configurations/{id}` | Configuration element details as JSON. An attribute the server declares secure, by type or by value envelope, has its value `[redacted]`. |
+| `vcfa://resource-elements/{id}` | Resource element metadata as JSON. Nothing is withheld: the record is metadata only, and element content is served by `export-resource-element`. |
+| `vcfa://subscriptions/{id}` | Extensibility subscription details as JSON. Constraints are served as a sha256/length summary; use `get-subscription` with `includeConstraints` for the full JSON. |
+| `vcfa://packages/{name}` | vRO package metadata as JSON. Nothing is withheld: the content listings are names and types, which `get-package` omits for brevity rather than secrecy. |
 | `vcfa://patterns/subscriptions/event-driven` | Discovery-first guidance for creating extensibility subscriptions wired to vRO workflows. |
 
 ## Prompts
