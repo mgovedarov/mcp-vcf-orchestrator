@@ -770,6 +770,8 @@ List available Service Broker catalog items. Optionally search by name or keywor
 
 Get catalog item details including type, source, and project assignments. A catalog item served without a name renders as `(unnamed)`, the convention described under `list-projects`.
 
+When the item carries a request schema, its inputs are rendered as the input contract for `create-deployment` — each input's name, type, whether it is required, its title or description, and its `pattern` or allowed values where present. Read this before composing `create-deployment`'s `inputs` rather than guessing the shape. A property the service marks `encrypted` is listed and flagged as such, but its stored default is never printed, because a default on an encrypted input is a credential. `Requestable: false` means the item cannot currently be requested at all.
+
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
@@ -780,7 +782,7 @@ Get catalog item details including type, source, and project assignments. A cata
 
 ### `list-deployments`
 
-List deployments, optionally filtered by name or keyword and project ID. Use `list-projects` to discover project IDs. A deployment served without a name renders as `(unnamed)`, the convention described under `list-projects`; no deployment has yet been observed on either platform, so that fallback is what makes an unexpected shape degrade visibly rather than print `undefined`.
+List deployments, optionally filtered by name or keyword and project ID. Use `list-projects` to discover project IDs. A deployment served without a name renders as `(unnamed)`, the convention described under `list-projects`. VCF Automation 9.1 does serve a name, verified live under VCFO-074, so the fallback is a guard for an unobserved shape rather than the expected rendering.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
@@ -808,6 +810,10 @@ Use `list-catalog-items` to find the catalog item ID, `list-projects` to find th
 
 When an expected name is supplied but the live record carries none, the call refuses with a "cannot verify" message rather than reporting a mismatch against a missing value: a caller who asked for two-phase verification is never told the target was confirmed when it was not. A verification read that fails outright is reported as such, so it is never mistaken for a failed provision.
 
+On success the tool reports the deployment ID and name the service assigned. Provisioning is asynchronous, so poll `get-deployment` until the status is terminal — VCF Automation 9.1 moves `CREATE_INPROGRESS` → `CREATE_SUCCESSFUL` (note there is no underscore in `INPROGRESS`). If the service returns no identifier at all, the tool says so explicitly and names `list-deployments` with the project ID, rather than leaving the caller unsure whether anything was requested.
+
+Use `get-catalog-item` to read the item's request schema before composing `inputs`; a required input the blueprint declares is rejected by the catalog service if it is missing or fails the schema's `pattern`.
+
 In `VCFA_TARGET_PLATFORM=vra8` mode the catalog-service request is unsupported and refused; any expected-field reads are GETs and are made first, so the refusal arrives after them.
 
 ::: details Parameters
@@ -834,7 +840,7 @@ Delete a deployment by its ID. This is a destructive live operation.
 | `id` | string | Yes | - | Deployment ID to delete. |
 | `expectedName` | string | No | - | Expected deployment name to verify before deletion. |
 | `expectedProjectId` | string | No | - | Expected deployment project ID to verify before deletion. |
-| `expectedProjectName` | string | No | - | Expected deployment project name to verify before deletion. |
+| `expectedProjectName` | string | No | - | Expected deployment project name to verify before deletion. A VCF Automation 9.1 deployment carries no project name of its own, so the name is resolved through the project service from the deployment's `projectId`; a project that reports no name is refused as unverifiable rather than as a mismatch. |
 | `expectedStatus` | string | No | - | Expected deployment status to verify before deletion. |
 | `confirm` | boolean | Yes | - | Must be `true` to confirm deletion. If `false`, deletion is not performed. |
 :::
@@ -862,7 +868,7 @@ Run a deployment-level day-2 action. Use `list-deployment-actions` first to find
 | `inputs` | object | No | `{}` | Day-2 action inputs as a key/value object. Use `list-deployment-actions` to discover required inputs before running. |
 | `expectedDeploymentName` | string | No | - | Expected deployment name to verify before submitting the day-2 action. |
 | `expectedProjectId` | string | No | - | Expected deployment project ID to verify before submitting the day-2 action. |
-| `expectedProjectName` | string | No | - | Expected deployment project name to verify before submitting the day-2 action. |
+| `expectedProjectName` | string | No | - | Expected deployment project name to verify before submitting the day-2 action. Resolved through the project service, as described under `delete-deployment`. |
 | `expectedStatus` | string | No | - | Expected deployment status to verify before submitting the day-2 action. |
 | `expectedActionName` | string | No | - | Expected deployment action name to verify against the current action list before submitting. |
 | `confirm` | boolean | Yes | - | Must be `true` to confirm the day-2 action request. If `false`, the request is not submitted. |

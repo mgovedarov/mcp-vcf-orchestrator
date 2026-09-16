@@ -2,6 +2,9 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import type {
+  CatalogItemRequestEntry,
+  CatalogItemRequestResponse,
+  Deployment,
   DeploymentAction,
   DeploymentActionList,
   DeploymentRequest,
@@ -48,6 +51,10 @@ function getDeploymentActionInputHints(action: DeploymentAction): string[] {
   return [];
 }
 
+/**
+ * VCFA 9.1 serves a **bare array** here, not a Spring page (VCFO-074). Both
+ * arms are kept: one lab is not a contract, and the page arm costs nothing.
+ */
 function normalizeDeploymentActionList(result: DeploymentActionList): {
   actions: DeploymentAction[];
   total: number;
@@ -58,6 +65,42 @@ function normalizeDeploymentActionList(result: DeploymentActionList): {
 
   const actions = result.content ?? [];
   return { actions, total: result.totalElements ?? actions.length };
+}
+
+/**
+ * Pull the requested deployments out of the catalog request response.
+ *
+ * `POST /catalog/api/items/{id}/request` answers a bare array of
+ * `{deploymentId, deploymentName}` on VCFA 9.1 -- no `id`, no `name`, no
+ * `status` (VCFO-074). The client used to type it as a single `Deployment`, so
+ * every identifier read off it was `undefined` and `create-deployment` printed
+ * a bare "Deployment request submitted." with nothing to follow up on. The
+ * caller then had to recover the id from `list-deployments` by name, which is
+ * ambiguous the moment two deployments share one.
+ *
+ * Both the array and the single-object arm are accepted, and both key
+ * spellings, so a platform answering either shape still yields identifiers.
+ */
+export function normalizeCatalogItemRequest(
+  result: CatalogItemRequestResponse | Record<string, unknown> | undefined,
+): { deploymentId?: string; deploymentName?: string; status?: string }[] {
+  if (result === undefined || result === null) return [];
+  const entries: CatalogItemRequestEntry[] = (
+    Array.isArray(result) ? result : [result]
+  ) as CatalogItemRequestEntry[];
+  return entries
+    .filter((entry): entry is CatalogItemRequestEntry => Boolean(entry))
+    .map((entry) => ({
+      deploymentId: entry.deploymentId ?? entry.id,
+      deploymentName: entry.deploymentName ?? entry.name,
+      status: entry.status,
+    }))
+    .filter(
+      (entry) =>
+        entry.deploymentId !== undefined ||
+        entry.deploymentName !== undefined ||
+        entry.status !== undefined,
+    );
 }
 
 export function formatDeploymentActions(
@@ -239,6 +282,91 @@ function unverifiableTarget(
     ],
     isError: true,
   };
+}
+
+/**
+ * Resolve the project name to compare `expectedProjectName` against.
+ *
+ * A deployment on VCFA 9.1 carries `projectId` but **no `projectName`**
+ * (VCFO-074). Comparing the expected value straight against
+ * `deployment.projectName` therefore reports `found (missing)` and refuses
+ * every legitimate call -- the exact defect VCFO-077 fixed for resource
+ * elements, reintroduced here through a field that was assumed rather than
+ * observed.
+ *
+ * So the name is taken from the deployment when a platform does serve it, and
+ * otherwise resolved through the project service using the deployment's own
+ * `projectId`. That keeps the argument meaningful instead of merely failing
+ * politely, and matches how `guardCreateDeploymentTarget` already resolves it.
+ *
+ * Returns `undefined` for the name when neither source has one, which the
+ * caller reports as unverifiable rather than as a mismatch.
+ */
+async function resolveDeploymentProjectName(
+  client: Pick<VroClient, "getProject">,
+  deployment: Deployment,
+): Promise<{ name?: string; error?: unknown }> {
+  if (deployment.projectName) return { name: deployment.projectName };
+  if (!deployment.projectId) return {};
+  try {
+    const project = await client.getProject(deployment.projectId);
+    return { name: project.name };
+  } catch (error) {
+    return { error };
+  }
+}
+
+/**
+ * Compare `expectedProjectName` against the resolved live project name.
+ *
+ * Kept separate from the other expected fields because it is the only one that
+ * may need a second read, and because "cannot verify" must not be reported as
+ * a mismatch.
+ */
+async function guardDeploymentProjectName(
+  client: Pick<VroClient, "getProject">,
+  target: string,
+  deployment: Deployment,
+  expectedProjectName: string | undefined,
+  operation: string,
+): Promise<CallToolResult | undefined> {
+  if (expectedProjectName === undefined) return undefined;
+
+  const { name, error } = await resolveDeploymentProjectName(
+    client,
+    deployment,
+  );
+  if (error !== undefined) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Cannot verify expectedProjectName for ${target}: reading project ${deployment.projectId} failed: ${message}. ${operation}`,
+        },
+      ],
+      isError: true,
+    };
+  }
+  if (!name) {
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Cannot verify expectedProjectName for ${target}: neither the deployment nor its project reports a name, so the value cannot be confirmed either way. ${operation} Omit expectedProjectName and confirm the project with list-projects, or re-run with the other expected fields only.`,
+        },
+      ],
+      isError: true,
+    };
+  }
+
+  return guardExpectedFields(target, [
+    {
+      label: "project name",
+      expected: expectedProjectName,
+      actual: name,
+    },
+  ]);
 }
 
 export function registerDeploymentTools(
@@ -427,17 +555,21 @@ export function registerDeploymentTools(
               actual: deployment.projectId,
             },
             {
-              label: "project name",
-              expected: expectedProjectName,
-              actual: deployment.projectName,
-            },
-            {
               label: "status",
               expected: expectedStatus,
               actual: deployment.status,
             },
           ]);
           if (guard) return guard;
+
+          const projectGuard = await guardDeploymentProjectName(
+            client,
+            `deployment ${id}`,
+            deployment,
+            expectedProjectName,
+            "The deployment was not deleted.",
+          );
+          if (projectGuard) return projectGuard;
         }
 
         await client.deleteDeployment(id);
@@ -548,7 +680,7 @@ export function registerDeploymentTools(
           if (guard) return guard;
         }
 
-        const deployment = await client.createDeploymentFromCatalogItem({
+        const response = await client.createDeploymentFromCatalogItem({
           catalogItemId,
           deploymentName,
           projectId,
@@ -556,10 +688,21 @@ export function registerDeploymentTools(
           reason,
           inputs,
         });
+        const requested = normalizeCatalogItemRequest(response);
         let text = `Deployment request submitted.\n`;
-        if (deployment.id) text += `ID: ${deployment.id}\n`;
-        if (deployment.name) text += `Name: ${deployment.name}\n`;
-        if (deployment.status) text += `Status: ${deployment.status}\n`;
+        if (requested.length === 0) {
+          // The request was accepted but carried nothing identifying. Say so,
+          // rather than leaving the caller to guess whether it was a no-op.
+          text += `The service returned no deployment identifier. Find the deployment with list-deployments (projectId: ${projectId}) and verify it is the one just requested before acting on it.\n`;
+        }
+        for (const entry of requested) {
+          if (entry.deploymentId) text += `ID: ${entry.deploymentId}\n`;
+          if (entry.deploymentName) text += `Name: ${entry.deploymentName}\n`;
+          if (entry.status) text += `Status: ${entry.status}\n`;
+        }
+        if (requested.length > 0) {
+          text += `Provisioning is asynchronous: poll get-deployment until the status is terminal.\n`;
+        }
         return { content: [{ type: "text", text }] };
       } catch (error) {
         return {
@@ -712,17 +855,21 @@ export function registerDeploymentTools(
               actual: deployment.projectId,
             },
             {
-              label: "project name",
-              expected: expectedProjectName,
-              actual: deployment.projectName,
-            },
-            {
               label: "status",
               expected: expectedStatus,
               actual: deployment.status,
             },
           ]);
           if (guard) return guard;
+
+          const projectGuard = await guardDeploymentProjectName(
+            client,
+            `deployment ${deploymentId}`,
+            deployment,
+            expectedProjectName,
+            "No day-2 action was submitted.",
+          );
+          if (projectGuard) return projectGuard;
         }
 
         if (expectedActionName !== undefined) {

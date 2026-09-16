@@ -1,4 +1,9 @@
-import type { CatalogItem, CatalogItemList, Deployment, ListOptions } from "../types.js";
+import type {
+  CatalogItem,
+  CatalogItemList,
+  CatalogItemRequestResponse,
+  ListOptions,
+} from "../types.js";
 import type { VroHttpClient } from "./core.js";
 import { getAllAutomationPages } from "./pagination.js";
 
@@ -33,7 +38,7 @@ export class CatalogClient {
     version?: string;
     reason?: string;
     inputs?: Record<string, unknown>;
-  }): Promise<Deployment> {
+  }): Promise<CatalogItemRequestResponse> {
     const body: Record<string, unknown> = {
       deploymentName: params.deploymentName,
       projectId: params.projectId,
@@ -41,7 +46,7 @@ export class CatalogClient {
     if (params.version !== undefined) body.version = params.version;
     if (params.reason !== undefined) body.reason = params.reason;
     if (params.inputs !== undefined) body.inputs = params.inputs;
-    return this.http.post<Deployment>(
+    return this.http.post<CatalogItemRequestResponse>(
       `/items/${encodeURIComponent(params.catalogItemId)}/request`,
       body,
       this.http.catalogBaseUrl,

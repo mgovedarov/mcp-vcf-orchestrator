@@ -1,4 +1,5 @@
 import type {
+  CatalogItemRequestResponse,
   Action,
   ActionList,
   CatalogItem,
@@ -594,7 +595,7 @@ export class VroClient {
     version?: string;
     reason?: string;
     inputs?: Record<string, unknown>;
-  }): Promise<Deployment> {
+  }): Promise<CatalogItemRequestResponse> {
     return this.catalog.createDeploymentFromCatalogItem(params);
   }
 

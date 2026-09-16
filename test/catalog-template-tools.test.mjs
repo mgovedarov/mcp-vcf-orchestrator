@@ -238,3 +238,78 @@ test("catalog tools render a nameless item without leaking undefined", async () 
   assert.doesNotMatch(detail.content[0].text, /undefined/);
   assert.ok(!detail.isError);
 });
+
+// --- VCFO-074: the request schema is the create-deployment input contract ---
+
+test("get-catalog-item renders the request schema observed on 9.1", async () => {
+  const handlers = registeredTools(registerCatalogTools, {
+    getCatalogItem: async (id) => ({
+      id,
+      name: "Basic Alpine VM",
+      type: { id: "com.vmw.blueprint", name: "VCF Automation Templates" },
+      isRequestable: true,
+      schema: {
+        type: "object",
+        encrypted: false,
+        properties: {
+          hostname: {
+            type: "string",
+            encrypted: false,
+            title: "Hostname",
+            description: "Guest hostname (naming standard applies)",
+            pattern: "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$",
+          },
+        },
+        required: ["hostname"],
+      },
+    }),
+  });
+
+  const result = await handlers.get("get-catalog-item")({ id: "catalog-1" });
+  const text = result.content[0].text;
+
+  assert.match(text, /Request inputs \(pass as create-deployment inputs\)/);
+  assert.match(text, /• hostname \(string\) required — Hostname/);
+  assert.match(text, /pattern: \^\[a-z0-9\]/);
+  assert.match(text, /Requestable: true/);
+});
+
+test("get-catalog-item never prints the default of an encrypted input", async () => {
+  const handlers = registeredTools(registerCatalogTools, {
+    getCatalogItem: async (id) => ({
+      id,
+      name: "Item With Secret",
+      schema: {
+        properties: {
+          adminPassword: {
+            type: "string",
+            encrypted: true,
+            title: "Admin password",
+            default: "hunter2-should-never-render",
+          },
+          hostname: { type: "string", default: "web-01" },
+        },
+        required: ["adminPassword"],
+      },
+    }),
+  });
+
+  const result = await handlers.get("get-catalog-item")({ id: "catalog-1" });
+  const text = result.content[0].text;
+
+  // The input is still listed and flagged, so the caller knows to supply it...
+  assert.match(text, /• adminPassword \(string\) required encrypted — Admin password/);
+  // ...but its stored default is a credential and must never be printed.
+  assert.doesNotMatch(text, /hunter2/);
+  // A non-encrypted default is still useful and is rendered.
+  assert.match(text, /default: "web-01"/);
+});
+
+test("get-catalog-item omits the schema block when the item has no inputs", async () => {
+  const handlers = registeredTools(registerCatalogTools, {
+    getCatalogItem: async (id) => ({ id, name: "No Inputs" }),
+  });
+
+  const result = await handlers.get("get-catalog-item")({ id: "catalog-1" });
+  assert.doesNotMatch(result.content[0].text, /Request inputs/);
+});
