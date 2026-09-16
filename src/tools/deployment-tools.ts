@@ -17,6 +17,12 @@ import {
   guardExpectedFields,
   hasAnyExpectedValue,
 } from "./confirmation-guards.js";
+import {
+  REDACTED,
+  containsSensitiveKey,
+  isSensitiveKey,
+  redactSensitiveValues,
+} from "../redaction.js";
 
 function isInputArray(value: unknown): value is {
   name?: string;
@@ -28,6 +34,20 @@ function isInputArray(value: unknown): value is {
   return Array.isArray(value);
 }
 
+/**
+ * Describe a deployment action's inputs, from whichever of the two keys the
+ * platform used.
+ *
+ * All three arms below -- the array of input descriptors, the bare record, and
+ * the empty fallback -- remain **unobserved against a real service on any
+ * platform**. VCF Automation 9.1 served deployment actions carrying only `id`,
+ * `name`, `displayName`, `description`, `valid` and `actionType`, with neither
+ * `inputParameters` nor `inputs` on any of them, and vRA 8 has never had a
+ * deployment to read actions from at all. See the `DeploymentAction` type in
+ * src/types.ts and docs/operations/vcfa-verification-matrix.md. Treat this as
+ * assumed rather than verified until a lab serves an action that carries
+ * inputs (VCFO-091).
+ */
 function getDeploymentActionInputHints(action: DeploymentAction): string[] {
   const inputSource = action.inputParameters ?? action.inputs;
   if (isInputArray(inputSource)) {
@@ -125,6 +145,63 @@ export function formatDeploymentActions(
   });
 
   return `Found ${total} deployment action(s) for deployment ${deploymentId}:\n\n${lines.join("\n")}`;
+}
+
+/**
+ * Render the inputs a deployment was actually requested with.
+ *
+ * `GET /deployment/api/deployments/{id}` serves `inputs` keyed by input name,
+ * and it is the only record of what a given deployment was given. Two
+ * deployments of one catalog item were observed on VCF Automation 9.1 carrying
+ * different input sets -- `{vmClass, hostname, storageClass}` and `{hostname}`
+ * -- because they were requested against different released blueprint
+ * versions, so this distinguishes two deployments that are otherwise identical
+ * in `list-deployments`. Where `get-catalog-item` renders what an item *takes*,
+ * this renders what a deployment *was given* (VCFO-091).
+ *
+ * **A value here may be a credential, and the deployment record says nothing
+ * about which.** The `encrypted` marker lives on the catalog item's schema, and
+ * cross-referencing it is unsound: the client can only read an item's current
+ * version, while a deployment carries the `catalogItemVersion` it was requested
+ * against, which is precisely the case that produced the differing input sets
+ * above. So values are withheld by key name instead, the way project custom
+ * properties already are -- the same shape of data, an untyped free-form map --
+ * and nesting cannot bypass it. See src/redaction.ts; the heuristic is not a
+ * guarantee, which the tool description and the docs both state.
+ *
+ * Values render as JSON so they can be copied straight back into
+ * `create-deployment`'s `inputs` object, which is itself JSON. Note this is the
+ * opposite of the configuration-attribute rendering, where the quotes are an
+ * artifact of the rendering and must not be copied into `update-configuration`
+ * (VCFO-080).
+ *
+ * Returns `""` when the deployment carries no inputs, so a platform that does
+ * not serve the field at all never looks like one that served an empty object.
+ */
+export function formatDeploymentInputs(
+  inputs: Record<string, unknown> | undefined,
+): string {
+  if (!inputs || Object.keys(inputs).length === 0) return "";
+
+  let withheld = false;
+  const lines = Object.entries(inputs).map(([name, value]) => {
+    if (isSensitiveKey(name)) {
+      withheld = true;
+      return `  • ${name}: ${REDACTED}`;
+    }
+    // Recurse even when the top-level key is innocuous: an object-typed input
+    // can carry a sensitive key of its own, and nesting must not bypass this.
+    if (containsSensitiveKey(value)) withheld = true;
+    const json = JSON.stringify(redactSensitiveValues(value));
+    return `  • ${name}: ${json === undefined ? "(no value)" : json}`;
+  });
+
+  // The suffix is actionable, not decorative: a caller replaying these inputs
+  // through create-deployment would otherwise store the marker as a value.
+  const header = withheld
+    ? `Inputs (as requested; ${REDACTED} values must be supplied fresh):`
+    : "Inputs (as requested):";
+  return `\n${header}\n${lines.join("\n")}\n`;
 }
 
 export function formatDeploymentRequest(request: DeploymentRequest): string {
@@ -438,7 +515,7 @@ export function registerDeploymentTools(
     {
       title: "Get Deployment",
       description:
-        "Get detailed information about a specific deployment by its ID.",
+        "Get detailed information about a specific deployment by its ID, including the inputs it was requested with. An input whose name reads as credential material (password, token, secret, key) is withheld; that check is name-based and is not a guarantee.",
       inputSchema: z.object({
         id: z.string().describe("The deployment ID"),
       }),
@@ -450,16 +527,31 @@ export function registerDeploymentTools(
         let text = `Deployment: ${d.name || "(unnamed)"}\nID: ${d.id}\n`;
         if (d.status) text += `Status: ${d.status}\n`;
         if (d.description) text += `Description: ${d.description}\n`;
-        if (d.projectName) text += `Project: ${d.projectName}\n`;
-        else if (d.projectId) text += `Project ID: ${d.projectId}\n`;
+        // VCF Automation 9.1 serves projectId but no projectName, so the name
+        // has to be resolved through the project service or this tool shows an
+        // opaque ID for every real deployment (VCFO-091). The resolution is
+        // unconditional here, unlike the write guards' -- describing the
+        // deployment is this tool's whole job, where there the read exists only
+        // to serve a guard the caller opted into. Both lines print when both
+        // are known: the ID is what the other deployment tools take.
+        const { name: projectName } = await resolveDeploymentProjectName(
+          client,
+          d,
+        );
+        if (projectName) text += `Project: ${projectName}\n`;
+        if (d.projectId) text += `Project ID: ${d.projectId}\n`;
         if (d.catalogItemId) text += `Catalog Item ID: ${d.catalogItemId}\n`;
         if (d.catalogItemVersion)
           text += `Catalog Item Version: ${d.catalogItemVersion}\n`;
+        if (d.blueprintId) text += `Blueprint ID: ${d.blueprintId}\n`;
+        if (d.blueprintVersion)
+          text += `Blueprint Version: ${d.blueprintVersion}\n`;
         if (d.ownedBy) text += `Owned By: ${d.ownedBy}\n`;
         if (d.createdBy) text += `Created By: ${d.createdBy}\n`;
         if (d.createdAt) text += `Created At: ${d.createdAt}\n`;
         if (d.lastUpdatedBy) text += `Last Updated By: ${d.lastUpdatedBy}\n`;
         if (d.lastUpdatedAt) text += `Last Updated At: ${d.lastUpdatedAt}\n`;
+        text += formatDeploymentInputs(d.inputs);
         return { content: [{ type: "text", text }] };
       } catch (error) {
         return {
