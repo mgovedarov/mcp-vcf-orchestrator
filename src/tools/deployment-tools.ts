@@ -205,14 +205,15 @@ export function formatDeploymentInputs(
 }
 
 /**
- * Request statuses under which a queued deployment request is still moving.
- * Observed on vRA 8.18: `PENDING` or `INITIALIZATION` at submission,
- * `INPROGRESS`, then `SUCCESSFUL` (VCFO-088). Anything else -- a failure, an
- * approval hold -- is not running, and the caller must not be told to wait on
- * the deployment for it. The vocabulary is wider than what was observed, which
- * is why the check is for "known to be running" rather than "known to be done".
+ * Request statuses known to be terminal or held. The service vocabulary is
+ * wider than the values observed on vRA 8.18, so an unknown status must remain
+ * pollable rather than being declared finished by default.
  */
-const ACTIVE_REQUEST_STATUSES = new Set(["PENDING", "INITIALIZATION", "INPROGRESS"]);
+const NON_RUNNING_REQUEST_STATUSES = new Set([
+  "SUCCESSFUL",
+  "FAILED",
+  "APPROVAL_PENDING",
+]);
 
 /**
  * Render operational `DeploymentRequest` metadata shared by submission and
@@ -266,7 +267,7 @@ export function deploymentRequestNextStep(
   status: string | undefined,
   requestId?: string,
 ): string {
-  if (status && !ACTIVE_REQUEST_STATUSES.has(status.toUpperCase())) {
+  if (status && NON_RUNNING_REQUEST_STATUSES.has(status.toUpperCase())) {
     const reread = requestId
       ? ` Re-read it with get-deployment-request(requestId: "${requestId}") if you need its latest details.`
       : "";
@@ -277,7 +278,7 @@ export function deploymentRequestNextStep(
     return `The request reports ${status} rather than a running state, so it is either already finished or held (an approval policy, for example); waiting on the deployment will not settle it.${reread}${verifyDeletion}\n`;
   }
   if (requestId) {
-    const poll = `Poll get-deployment-request(requestId: "${requestId}") until its status leaves PENDING, INITIALIZATION, or INPROGRESS.`;
+    const poll = `Poll get-deployment-request(requestId: "${requestId}") until it reports a confirmed terminal or held status. Observed active statuses are PENDING, INITIALIZATION, and INPROGRESS; treat an unfamiliar status as potentially active.`;
     if (actionId === "Deployment.Delete") {
       return `${poll} Also poll get-deployment until it answers 404, or list-deployments until the deployment is absent, to confirm its resources are gone.\n`;
     }

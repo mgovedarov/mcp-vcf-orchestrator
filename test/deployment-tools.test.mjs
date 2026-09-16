@@ -1029,7 +1029,7 @@ test("run-deployment-action chooses its next step from the action, not a fixed s
     confirm: true,
   });
   assert.match(power.content[0].text, /get-deployment-request\(requestId: "request-4"\)/);
-  assert.match(power.content[0].text, /until its status leaves PENDING/);
+  assert.match(power.content[0].text, /until it reports a confirmed terminal or held status/);
   assert.doesNotMatch(power.content[0].text, /404/);
 
   const del = await handlers.get("run-deployment-action")({
@@ -1073,6 +1073,25 @@ test("deployment writes do not tell the caller to wait on a request that is not 
   assert.match(del.content[0].text, /FAILED rather than a running state/);
   assert.match(del.content[0].text, /Details: policy refused/);
   assert.doesNotMatch(del.content[0].text, /poll get-deployment until it answers 404/);
+});
+
+test("an unfamiliar deployment request status remains pollable", async () => {
+  const handlers = registeredDeploymentTools({
+    runDeploymentAction: async () => ({
+      id: "request-8",
+      status: "RUNNING",
+    }),
+  });
+
+  const result = await handlers.get("run-deployment-action")({
+    deploymentId: "deployment-1",
+    actionId: "Deployment.PowerOff",
+    confirm: true,
+  });
+
+  assert.match(result.content[0].text, /Poll get-deployment-request/);
+  assert.match(result.content[0].text, /treat an unfamiliar status as potentially active/);
+  assert.doesNotMatch(result.content[0].text, /already finished or held/);
 });
 
 test("a successful delete request still requires deployment absence verification", async () => {
