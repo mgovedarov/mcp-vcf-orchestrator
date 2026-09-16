@@ -41,9 +41,12 @@ After a deployment exists, inspect available actions before submitting one:
 1. `list-deployment-actions(deploymentId: "<deployment-id>")`
 2. Review action IDs, names, and input hints.
 3. `run-deployment-action(..., confirm: true)`
+4. Read the request the tool renders — its ID, status and details — and the next step it names.
 
-Day-2 action availability is deployment-specific. Do not guess action IDs or inputs from another deployment.
+The action runs asynchronously. For anything but `Deployment.Delete`, the deployment's own status does not track it — `get-deployment` kept reading `CREATE_SUCCESSFUL` throughout a power action on vRA 8.18 — so confirm the outcome on the deployment's resources; reading a request back by ID is tracked as VCFO-094. Day-2 action availability is deployment-specific. Do not guess action IDs or inputs from another deployment.
 
 ## Delete Deployments
 
 `delete-deployment` is destructive. Use `get-deployment` first to confirm the ID, name, project, and status, then require explicit user confirmation before deletion.
+
+The delete is asynchronous. The tool reports the deletion as *requested*, with the `Deployment.Delete` request the service queued, and the deployment reads `DELETE_INPROGRESS` until it is gone — close to a minute on the vRA 8.18 lab. Confirm it by polling `get-deployment` until it answers `404`, or `list-deployments` until the deployment is absent; do not report the deployment gone on the strength of the success line.

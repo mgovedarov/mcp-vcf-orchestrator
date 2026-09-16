@@ -10,7 +10,7 @@ These examples are current, import-safe patterns for using the MCP tools. They a
 - [Artifact Promotion](./artifact-promotion.md): preflight, diff, optional backup, and import recommendation.
 - [Workflow Execution Logs](./workflow-execution-logs.md): show, filter, and export execution syslogs from workflow runs.
 - [Template, Catalog, And Subscription](./template-catalog-subscription.md): review templates, inspect catalog/deployment behavior, and plan subscriptions.
-- vRA/vRO 8.12+ mode: set `VCFA_TARGET_PLATFORM=vra8`. The full vRO surface works there, including authoring and imports, as do the Automation-service read tools and the template and subscription write tools. Deployment creation, deletion, and day-2 actions are unsupported in that mode. `export-configuration-file` is unsupported on every platform, not only there — no vRO tested serves a single configuration element as a `.vsoconf` — so route one through `add-configuration-to-project-package` and `export-project-package` instead.
+- vRA/vRO 8.12+ mode: set `VCFA_TARGET_PLATFORM=vra8`. The full vRO surface works there, including authoring and imports, as do the Automation-service read tools and the template, subscription and deployment write tools — deployment creation, deletion and day-2 actions were verified on vRA 8.18 under VCFO-088. `export-configuration-file` is unsupported on every platform, not only there — no vRO tested serves a single configuration element as a `.vsoconf` — so route one through `add-configuration-to-project-package` and `export-project-package` instead.
 
 ## Bounded Discovery
 

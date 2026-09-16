@@ -890,3 +890,108 @@ test("get-deployment renders the blueprint behind the requested catalog item ver
   assert.match(text, /Blueprint ID: blueprint-1/);
   assert.match(text, /Blueprint Version: 2/);
 });
+
+test("delete-deployment reports the queued request instead of a finished deletion", async () => {
+  // DELETE /deployments/{id} answers 200 with the Deployment.Delete request it
+  // queued, and the deployment reads DELETE_INPROGRESS for a while before it
+  // answers 404 (VCFO-088). "deleted successfully" overstated that.
+  const handlers = registeredDeploymentTools({
+    deleteDeployment: async () => ({
+      id: "request-9",
+      actionId: "Deployment.Delete",
+      status: "PENDING",
+    }),
+  });
+
+  const result = await handlers.get("delete-deployment")({
+    id: "deployment-1",
+    confirm: true,
+  });
+
+  assert.equal(result.isError, undefined);
+  assert.match(result.content[0].text, /Deletion of deployment deployment-1 requested\./);
+  assert.match(result.content[0].text, /The service queued this request:\nID: request-9\n/);
+  assert.match(result.content[0].text, /Action ID: Deployment\.Delete/);
+  assert.match(result.content[0].text, /Status: PENDING/);
+  assert.match(result.content[0].text, /poll get-deployment until it answers 404/);
+  assert.doesNotMatch(result.content[0].text, /deleted successfully/);
+});
+
+test("delete-deployment still reads as requested when the service answers no body", async () => {
+  const handlers = registeredDeploymentTools({
+    deleteDeployment: async () => undefined,
+  });
+
+  const result = await handlers.get("delete-deployment")({
+    id: "deployment-1",
+    confirm: true,
+  });
+
+  assert.equal(result.isError, undefined);
+  assert.match(result.content[0].text, /Deletion of deployment deployment-1 requested\./);
+  assert.match(result.content[0].text, /poll get-deployment until it answers 404/);
+  assert.doesNotMatch(result.content[0].text, /queued this request/);
+  assert.doesNotMatch(result.content[0].text, /undefined/);
+});
+
+test("run-deployment-action chooses its next step from the action, not a fixed sentence", async () => {
+  // A Deployment.Delete request IS tracked by the deployment's own status
+  // (DELETE_INPROGRESS, then 404); a power action is not (VCFO-088). One
+  // hardcoded trailer was wrong for one of the two.
+  const handlers = registeredDeploymentTools({
+    runDeploymentAction: async ({ actionId }) => ({
+      id: "request-4",
+      actionId,
+      status: "PENDING",
+    }),
+  });
+
+  const power = await handlers.get("run-deployment-action")({
+    deploymentId: "deployment-1",
+    actionId: "Deployment.PowerOff",
+    confirm: true,
+  });
+  assert.match(power.content[0].text, /get-deployment's status does not track it/);
+  assert.doesNotMatch(power.content[0].text, /404/);
+
+  const del = await handlers.get("run-deployment-action")({
+    deploymentId: "deployment-1",
+    actionId: "Deployment.Delete",
+    confirm: true,
+  });
+  assert.match(del.content[0].text, /poll get-deployment until it answers 404/);
+  assert.doesNotMatch(del.content[0].text, /does not track/);
+});
+
+test("deployment writes do not tell the caller to wait on a request that is not running", async () => {
+  // An approval hold or a failure never reaches DELETE_INPROGRESS, so "poll
+  // until 404" would be guidance that can never come true.
+  const handlers = registeredDeploymentTools({
+    runDeploymentAction: async () => ({
+      id: "request-5",
+      status: "APPROVAL_PENDING",
+    }),
+    deleteDeployment: async () => ({
+      id: "request-6",
+      actionId: "Deployment.Delete",
+      status: "FAILED",
+      details: "policy refused",
+    }),
+  });
+
+  const action = await handlers.get("run-deployment-action")({
+    deploymentId: "deployment-1",
+    actionId: "Deployment.PowerOff",
+    confirm: true,
+  });
+  assert.match(action.content[0].text, /APPROVAL_PENDING rather than a running state/);
+  assert.doesNotMatch(action.content[0].text, /does not track|404/);
+
+  const del = await handlers.get("delete-deployment")({
+    id: "deployment-1",
+    confirm: true,
+  });
+  assert.match(del.content[0].text, /FAILED rather than a running state/);
+  assert.match(del.content[0].text, /Details: policy refused/);
+  assert.doesNotMatch(del.content[0].text, /poll get-deployment until it answers 404/);
+});

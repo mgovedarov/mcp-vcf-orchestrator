@@ -42,9 +42,9 @@ function isInputArray(value: unknown): value is {
  * the empty fallback -- remain **unobserved against a real service on any
  * platform**. VCF Automation 9.1 served deployment actions carrying only `id`,
  * `name`, `displayName`, `description`, `valid` and `actionType`, with neither
- * `inputParameters` nor `inputs` on any of them, and vRA 8 has never had a
- * deployment to read actions from at all. See the `DeploymentAction` type in
- * src/types.ts and docs/operations/vcfa-verification-matrix.md. Treat this as
+ * `inputParameters` nor `inputs` on any of them, and vRA 8.18 served the same
+ * six-key objects for ten actions (VCFO-088). See the `DeploymentAction` type
+ * in src/types.ts and both verification matrices under docs/operations/. Treat this as
  * assumed rather than verified until a lab serves an action that carries
  * inputs (VCFO-091).
  */
@@ -204,8 +204,25 @@ export function formatDeploymentInputs(
   return `\n${header}\n${lines.join("\n")}\n`;
 }
 
-export function formatDeploymentRequest(request: DeploymentRequest): string {
-  let text = "Deployment action request submitted.\n";
+/**
+ * Request statuses under which a queued deployment request is still moving.
+ * Observed on vRA 8.18: `PENDING` or `INITIALIZATION` at submission,
+ * `INPROGRESS`, then `SUCCESSFUL` (VCFO-088). Anything else -- a failure, an
+ * approval hold -- is not running, and the caller must not be told to wait on
+ * the deployment for it. The vocabulary is wider than what was observed, which
+ * is why the check is for "known to be running" rather than "known to be done".
+ */
+const ACTIVE_REQUEST_STATUSES = new Set(["PENDING", "INITIALIZATION", "INPROGRESS"]);
+
+/**
+ * The `DeploymentRequest` fields both deployment-service writes render, with
+ * one label set, so a field added to the type is considered in one place.
+ */
+export function deploymentRequestLines(
+  request: DeploymentRequest | undefined,
+): string {
+  if (!request) return "";
+  let text = "";
   if (request.id) text += `ID: ${request.id}\n`;
   if (request.name) text += `Name: ${request.name}\n`;
   if (request.actionId) text += `Action ID: ${request.actionId}\n`;
@@ -213,6 +230,37 @@ export function formatDeploymentRequest(request: DeploymentRequest): string {
   if (request.status) text += `Status: ${request.status}\n`;
   if (request.details) text += `Details: ${request.details}\n`;
   return text;
+}
+
+/**
+ * What the caller can do next with a queued request, chosen from the action
+ * and the request's status rather than fixed, because the truth differs by
+ * action: a `Deployment.Delete` *is* tracked by the deployment's own status
+ * (`DELETE_INPROGRESS`, then 404), while a power action is not -- a deployment
+ * read `CREATE_SUCCESSFUL` throughout a PowerOff and a PowerOn on vRA 8.18
+ * (VCFO-088). A request that is not in a running state -- held for approval,
+ * failed -- is reported as such instead of as something to wait for, since
+ * waiting on the deployment would never settle it. Reading a request back by
+ * id through this server is tracked as VCFO-094.
+ */
+export function deploymentRequestNextStep(
+  actionId: string,
+  status: string | undefined,
+): string {
+  if (status && !ACTIVE_REQUEST_STATUSES.has(status.toUpperCase())) {
+    return `The request reports ${status} rather than a running state, so it is either already finished or held (an approval policy, for example); waiting on the deployment will not settle it. Reading a request back by ID is tracked as VCFO-094.\n`;
+  }
+  if (actionId === "Deployment.Delete") {
+    return `Deletion is asynchronous: the deployment reads DELETE_INPROGRESS until it is gone, so poll get-deployment until it answers 404, or list-deployments until the deployment is absent.\n`;
+  }
+  return `The action runs asynchronously, and get-deployment's status does not track it (a deployment read CREATE_SUCCESSFUL throughout a power action), so confirm the outcome on the deployment's resources. Reading a request back by ID is tracked as VCFO-094.\n`;
+}
+
+export function formatDeploymentRequest(
+  request: DeploymentRequest,
+  actionId: string = request.actionId ?? "",
+): string {
+  return `Deployment action request submitted.\n${deploymentRequestLines(request)}${deploymentRequestNextStep(actionId, request.status)}`;
 }
 
 /**
@@ -572,7 +620,7 @@ export function registerDeploymentTools(
     {
       title: "Delete Deployment",
       description:
-        "Delete a deployment by its ID. Set confirm to true to proceed.",
+        "Delete a deployment by its ID. This destroys the deployment's resources and is asynchronous: the service queues a Deployment.Delete request and the deployment reads DELETE_INPROGRESS until it answers 404, so verify with get-deployment or list-deployments afterwards. Set confirm to true to proceed.",
       inputSchema: z.object({
         id: z.string().describe("The deployment ID to delete"),
         expectedName: z
@@ -664,12 +712,14 @@ export function registerDeploymentTools(
           if (projectGuard) return projectGuard;
         }
 
-        await client.deleteDeployment(id);
-        return {
-          content: [
-            { type: "text", text: `Deployment ${id} deleted successfully.` },
-          ],
-        };
+        const request = await client.deleteDeployment(id);
+        // A 2xx here means the delete was queued, not done: the deployment
+        // reads DELETE_INPROGRESS for a while and then 404 (VCFO-088).
+        let text = `Deletion of deployment ${id} requested.\n`;
+        const lines = deploymentRequestLines(request);
+        if (lines) text += `The service queued this request:\n${lines}`;
+        text += deploymentRequestNextStep("Deployment.Delete", request?.status);
+        return { content: [{ type: "text", text }] };
       } catch (error) {
         return {
           content: [
@@ -689,7 +739,7 @@ export function registerDeploymentTools(
     {
       title: "Create Deployment",
       description:
-        "Create a new deployment from a catalog item. This provisions real infrastructure. Use list-catalog-items to find the catalog item ID, list-projects to find the project ID, and list-deployments to verify afterwards. Both IDs are opaque, so pass expectedCatalogItemName and expectedProjectName to bind the request to the target you discovered: each is verified against live metadata first, and a mismatch refuses before anything is provisioned. In VCFA_TARGET_PLATFORM=vra8 mode the catalog-service request is unsupported and refused, but any expected-field reads are made first, so the refusal arrives after them.",
+        "Create a new deployment from a catalog item. This provisions real infrastructure. Use list-catalog-items to find the catalog item ID, list-projects to find the project ID, and list-deployments to verify afterwards. Both IDs are opaque, so pass expectedCatalogItemName and expectedProjectName to bind the request to the target you discovered: each is verified against live metadata first, and a mismatch refuses before anything is provisioned.",
       inputSchema: z.object({
         catalogItemId: z.string().describe("The catalog item ID to deploy"),
         deploymentName: z.string().describe("Name for the new deployment"),
@@ -989,7 +1039,9 @@ export function registerDeploymentTools(
           inputs,
         });
         return {
-          content: [{ type: "text", text: formatDeploymentRequest(request) }],
+          content: [
+            { type: "text", text: formatDeploymentRequest(request, actionId) },
+          ],
         };
       } catch (error) {
         return {

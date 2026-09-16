@@ -352,9 +352,10 @@ raw-HTTP key dump alongside the tool calls. Dump **keys only**, never the token 
 
 Rehearse the guard with a wrong `expectedName` (free), then delete with matching values.
 
-**The success string is not evidence.** `deleteDeployment` discards the response body, so
-"deleted successfully" means only "a 2xx on an asynchronous route". Confirm by polling
-`get-deployment` to a `404` **and** by `list-deployments(projectId)` no longer listing it.
+**The success text is not evidence of completion.** `delete-deployment` reports the deletion as
+*requested* and prints the `Deployment.Delete` request the service queued (ID and status) when it
+returns one — a 2xx on this route means queued, not done. Confirm by polling `get-deployment` to a
+`404` **and** by `list-deployments(projectId)` no longer listing it.
 
 `CREATE_FAILED` is not an excuse to skip teardown — the record exists and may hold allocated
 resources. **If teardown fails**, say so immediately with the deployment id, name, project and last
@@ -393,7 +394,7 @@ run-workflow-and-wait(id: "<workflow-id>", inputs: [], timeoutSeconds: 60, confi
 get-workflow-execution-logs(workflowId: "<workflow-id>", executionId: "<execution-id>", level: "info")
 ```
 
-The Automation-service list tools return the same shapes as on VCFA 9.x. Note that `list-catalog-items` and `list-deployments` were both empty in the environment VCFO-068 and VCFO-070 verified, so their item shapes are still unconfirmed on vRA 8 — an environment with released catalog content is the one worth re-running them against, and the same environment is what the catalog-service and deployment-service write checks need. VCFO-074 read a released catalog item and provisioned, inspected and destroyed deployments on a VCFA 9.1 **tenant** session, which confirms the catalog item, deployment and deployment-action shapes on that platform only — vRA 8 has never had released catalog content, so both shapes remain unconfirmed there. Both renderers now fall back to `(unnamed)` for a row served without a name, so an unexpected shape degrades visibly instead of printing `undefined`.
+The Automation-service list tools return the same shapes as on VCFA 9.x. `list-catalog-items` and `list-deployments` were both empty in the environment VCFO-068 and VCFO-070 verified; VCFO-088 later read a released catalog item and provisioned, inspected, powered off and on, and destroyed a deployment on vRA 8.18, so the catalog item, deployment and deployment-action shapes are confirmed there as well as on VCFA 9.1 (VCFO-074), and the `DeploymentRequest` shape is confirmed there for the first time on any platform. The deployment round described above under **Provisioning A Deployment** applies to this mode unchanged, except that the identity gate is a 9.x concern — here a vIDM user entitled to the catalog item suffices. Both renderers still fall back to `(unnamed)` for a row served without a name, so an unexpected shape degrades visibly instead of printing `undefined`.
 
 The vRO write surface is verified on vRA 8 but still mutates a live environment, so run it only against a disposable category and disposable content, and clean up afterwards:
 
@@ -440,14 +441,13 @@ delete-subscription(id: "<subscription-id>", expectedName: "zz-smoke", confirm: 
 
 A DRAFT template provisions nothing, but its create and delete do fire `blueprint.configuration`, which the platform's own content-sync subscribers listen on.
 
-Expected unsupported-mode messages in this mode:
+Expected unsupported-mode message in this mode:
 
 ```text
-create-deployment(...)        # and delete-deployment, run-deployment-action
 export-configuration-file(...)
 ```
 
-The catalog-service and deployment-service refusals name what verifying each one would take — released catalog content for the request path, an existing deployment for the delete and day-2 paths; `export-configuration-file` explains that vRA 8 serves a configuration element as JSON only and points at the project-package route. `prepare-artifact-promotion(kind: "configuration", backup: { enabled: true }, ...)` does not fail in this mode: it reports `Backup skipped:` with the same pointer and still returns the preflight report and the import recommendation.
+It explains that vRA 8 serves a configuration element as JSON only and points at the project-package route. `prepare-artifact-promotion(kind: "configuration", backup: { enabled: true }, ...)` does not fail in this mode: it reports `Backup skipped:` with the same pointer and still returns the preflight report and the import recommendation.
 
 With the disposable configuration element from the write checks, verify the `update-configuration` two-phase flow (both platforms):
 

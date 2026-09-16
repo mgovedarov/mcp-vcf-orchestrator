@@ -77,9 +77,10 @@ the whole vRO surface works, reads and writes alike, and the Automation-service
 surfaces — catalog, deployments, templates, projects, subscriptions, and event
 topics — can be read. Template and subscription **writes** work there too:
 creating or deleting a template, and creating, updating, or deleting a
-subscription. Deployment **writes** are unsupported in that mode: creating a
-deployment, deleting one, and running a day-2 action each return an
-unsupported-mode message naming what verifying that service would take.
+subscription. Deployment **writes** work there too — creating a deployment,
+deleting one, and running a day-2 action — verified on vRA 8.18 under
+VCFO-088, behind the same `confirm` gate and `expected*` guards as on VCF
+Automation.
 `export-configuration-file` is unsupported on every platform, not only there:
 no vRO tested serves a single configuration element as a `.vsoconf`, so the
 request answers `406`. Route a configuration element through the project package

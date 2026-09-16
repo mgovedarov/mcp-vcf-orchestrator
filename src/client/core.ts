@@ -10,9 +10,10 @@ import type {
 
 // The Automation services vra8 mode can address. Writes are gated per service:
 // VCFO-070 verified blueprint-service and event-broker against a vRA 8.18 lab,
-// so those two now write; catalog-service and deployment-service stay withheld
-// because that lab had no released catalog content and no deployment to act on,
-// and exercising either one provisions or destroys real infrastructure.
+// and VCFO-088 verified catalog-service and deployment-service against the same
+// lab once it had a released catalog item — a deployment was requested, powered
+// off and on, and deleted, through the real tool handlers. Only project-service
+// stays withheld, because nothing writes to it yet.
 type AutomationService =
   | "blueprint"
   | "catalog"
@@ -31,10 +32,13 @@ const UNSUPPORTED_AUTOMATION_WRITE: Record<AutomationService, string | null> =
     "event-broker": null,
     project:
       "Project-service writes are not supported in VCFA_TARGET_PLATFORM=vra8 mode: no write path has been verified against a vRA 8 environment. Reading projects is supported.",
-    catalog:
-      "Catalog item requests (create-deployment) are not supported in VCFA_TARGET_PLATFORM=vra8 mode pending lab verification: the lab that verified this mode had no released catalog content, so the request path was never exercised. Reading catalog items is supported, as are blueprint and subscription writes and the full vRO /vco/api surface.",
-    deployment:
-      "Deployment deletion and day-2 actions (delete-deployment, run-deployment-action) are not supported in VCFA_TARGET_PLATFORM=vra8 mode pending lab verification: the lab that verified this mode had no deployment to act on, and both paths destroy or alter real infrastructure. Reading deployments and their day-2 action lists is supported, as are blueprint and subscription writes and the full vRO /vco/api surface.",
+    // POST /catalog/api/items/{id}/request answered 200 with the same bare
+    // array of {deploymentId, deploymentName} that VCFA 9.1 serves (VCFO-088).
+    catalog: null,
+    // POST /deployments/{id}/requests (PowerOff, PowerOn) and DELETE
+    // /deployments/{id} each answered 200 with a DeploymentRequest; the
+    // deployment then read DELETE_INPROGRESS and 404 (VCFO-088).
+    deployment: null,
   };
 
 // Fallback for an Automation base URL this guard does not recognize. Both the
@@ -1159,8 +1163,8 @@ export class VroHttpClient {
   /**
    * Gate an operation the active target platform cannot serve.
    *
-   * Only `vra8` restricts anything, and after the VCFO-068 and VCFO-070 lab
-   * verifications the restriction is per service and per method:
+   * Only `vra8` restricts anything, and after the VCFO-068, VCFO-070 and
+   * VCFO-088 lab verifications the restriction is per service and per method:
    *
    * - `/vco/api` (vRO): fully supported, reads and writes alike. Verified
    *   against vRO 8.18.1 — create/update/delete of workflows, actions, and
@@ -1171,9 +1175,11 @@ export class VroHttpClient {
    *   paths return the same Spring `Page` and object shapes the VCFA 9.x
    *   clients parse (verified on vRA 8.18).
    * - Automation writes: blueprint-service and event-broker are verified
-   *   (VCFO-070) and write; catalog-service, deployment-service, and
-   *   project-service are not and throw. project-service has no write path
-   *   today, so its entry only matters if one is added later.
+   *   (VCFO-070), catalog-service and deployment-service are verified
+   *   (VCFO-088: a catalog request, two day-2 actions and a deployment delete
+   *   on vRA 8.18), and all four write. project-service is not verified and
+   *   throws; it has no write path today, so its entry only matters if one is
+   *   added later.
    */
   private assertOperationSupported(
     method: string,
