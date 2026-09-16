@@ -194,7 +194,8 @@ Before authoring or importing workflow artifacts, read `docs/vro-artifact-author
 - When adding or changing a prompt or resource, update `src/prompts/index.ts` or `src/resources/index.ts` and `docs/reference/resources-prompts.md`.
 - Keep checked examples in `examples/README.md` aligned with registered tool and prompt names.
 - For docs pages, update `docs/.vitepress/config.ts` when adding sidebar entries.
-- Never print secrets from configuration values, workflow scripts, action scripts, tokens, passwords, or private keys. Prefer names, IDs, types, descriptions, and redacted summaries.
+- Never print secrets from configuration values, workflow and action scripts, workflow execution output parameters, tokens, passwords, or private keys. Prefer names, IDs, types, descriptions, and redacted summaries.
+- A value carrying a declared type is withheld on that type, not on its name: `isSecureAttributeValue` in `src/redaction.ts` reads both the declared type and the value envelope, and every surface that prints such a value goes through `formatVroValueRedacted` rather than `formatVroValue`. The key-name heuristic in the same module is the weaker fallback, for the untyped free-form maps that carry no type at all. Neither reaches inside an untyped composite, or into log lines and exception text, which are served verbatim — say so wherever the tool description or docs claim withholding.
 
 ## Validation
 

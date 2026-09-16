@@ -46,7 +46,10 @@ Configuration values and workflow/action scripts may contain sensitive informati
 
 - avoid printing passwords, API tokens, and private keys
 - redact sensitive configuration attribute values
+- redact secure-typed workflow execution output parameters, which `run-workflow-and-wait` and `get-workflow-execution` withhold as `[redacted]`
 - prefer names, types, IDs, and descriptions over raw values
+
+Withholding needs a signal. A configuration attribute and a workflow execution output both carry a declared type, so both are withheld on it — and on the type key their value arrives wrapped in, which catches a value a permissive type says nothing about. A secret inside an untyped composite value has neither signal. Neither do execution log lines or the exception text of a failed workflow, which `get-workflow-execution-logs` and the failure diagnostics serve verbatim: keep secrets out of what a workflow logs and throws rather than relying on the server to filter them.
 
 API error messages are sanitized before being surfaced to MCP callers. Only safe diagnostic fields — HTTP status, endpoint, `message`, `statusCode`, `code`, `error`, and `errors` — are included. Raw response bodies are never passed through verbatim, which prevents vRO error responses from echoing sensitive request content such as credentials or tokens.
 

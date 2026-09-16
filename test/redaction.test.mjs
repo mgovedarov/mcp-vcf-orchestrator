@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   REDACTED,
   containsSensitiveKey,
+  isSecureAttributeValue,
   isSensitiveKey,
   redactSensitiveValues,
 } from "../dist/redaction.js";
@@ -72,4 +73,32 @@ test("containsSensitiveKey reports whether anything would be withheld", () => {
   assert.equal(containsSensitiveKey([{ ok: 1 }]), false);
   assert.equal(containsSensitiveKey("password"), false);
   assert.equal(containsSensitiveKey(null), false);
+});
+
+test("isSecureAttributeValue keys off the declared type and the value envelope", () => {
+  // The declared-type arm, via isSecureAttributeType. The `includes` checks
+  // there are deliberately broad against any variant a platform reports.
+  assert.equal(isSecureAttributeValue("SecureString", undefined), true);
+  assert.equal(isSecureAttributeValue("EncryptedString", undefined), true);
+  assert.equal(isSecureAttributeValue("Array/SecureString", undefined), true);
+  assert.equal(isSecureAttributeValue("string", undefined), false);
+  assert.equal(isSecureAttributeValue(undefined, undefined), false);
+
+  // The envelope arm. This is what catches a value a permissive type says
+  // nothing about -- and, since no lab has served a SecureString workflow
+  // execution output, the arm that has to hold whatever shape vRO turns out to
+  // send (VCFO-093).
+  assert.equal(
+    isSecureAttributeValue("Any", { "secure-string": { value: "x" } }),
+    true,
+  );
+  assert.equal(isSecureAttributeValue(undefined, { "secure-string": {} }), true);
+  assert.equal(isSecureAttributeValue("string", { string: { value: "x" } }), false);
+
+  // Only the envelope's own keys are read, so an ordinary value whose contents
+  // happen to mention a secure type is not mistaken for one.
+  assert.equal(
+    isSecureAttributeValue("string", { string: { value: "SecureString" } }),
+    false,
+  );
 });

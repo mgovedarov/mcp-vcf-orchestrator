@@ -5,7 +5,10 @@ import {
   toVroParameterValue,
   vroValueEnvelopeKeys,
 } from "../dist/client/parameters.js";
-import { formatVroValue } from "../dist/tools/parameter-values.js";
+import {
+  formatVroValue,
+  formatVroValueRedacted,
+} from "../dist/tools/parameter-values.js";
 
 // The envelopes below were read back from a live vRO 8.18.1 configuration
 // element (VCFO-080) unless a case says otherwise, so the decoder is pinned to
@@ -146,6 +149,53 @@ test("formatVroValue prints the unwrapped value as JSON", () => {
     '["one"]',
   );
   assert.equal(formatVroValue(undefined, "string"), "undefined");
+});
+
+test("formatVroValueRedacted withholds a value the server declares secure", () => {
+  // The declared-type arm. This is the case VCFO-093 is about: the same type
+  // that reads [redacted] as a configuration attribute printed in cleartext as
+  // a workflow execution output.
+  assert.equal(
+    formatVroValueRedacted({ string: { value: "must-not-render" } }, "SecureString"),
+    "[redacted]",
+  );
+  // Array/SecureString is caught by its declared type too.
+  assert.equal(
+    formatVroValueRedacted(
+      { array: { elements: [{ string: { value: "must-not-render" } }] } },
+      "Array/SecureString",
+    ),
+    "[redacted]",
+  );
+  // The envelope arm, with a permissive declared type that says nothing.
+  assert.equal(
+    formatVroValueRedacted({ "secure-string": { value: "must-not-render" } }, "Any"),
+    "[redacted]",
+  );
+  // The envelope arm in isolation, with no declared type at all. No lab has
+  // served a SecureString execution output, so this arm is the whole safety net
+  // if vRO turns out to omit or weaken the type it reports.
+  assert.equal(
+    formatVroValueRedacted({ "secure-string": { value: "must-not-render" } }),
+    "[redacted]",
+  );
+});
+
+test("formatVroValueRedacted renders an ordinary value exactly as formatVroValue does", () => {
+  // Withholding must be targeted: a plain output is still the point of reading
+  // an execution at all.
+  for (const [value, type] of [
+    [{ string: { value: "probe-2" } }, "string"],
+    [{ string: { value: "" } }, "string"],
+    [{ number: { value: 42 } }, "number"],
+    [{ array: { elements: [{ string: { value: "one" } }] } }, "Array/string"],
+    [undefined, "string"],
+  ]) {
+    assert.equal(
+      formatVroValueRedacted(value, type),
+      formatVroValue(value, type),
+    );
+  }
 });
 
 test("vroValueEnvelopeKeys reports the type keys of an envelope", () => {

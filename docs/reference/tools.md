@@ -198,6 +198,10 @@ Validate inputs, execute a workflow, poll until completion, failure, or timeout,
 
 Output parameters render as values rather than as vRO's value envelope — `result (string): "ok"` rather than `result (string): {"string":{"value":"ok"}}` — using the same unwrap as `get-configuration`. This replaced a narrower helper that leaked the raw envelope for array outputs.
 
+An output parameter the server declares secure is withheld and shown as `[redacted]`, the same marker and the same detection `get-configuration` uses for a secure-typed attribute: a declared type reading secure or encrypted, or a value that arrived wrapped in such an envelope whatever its declared type says. Both signals are read, because no lab has yet served such an output and the shape vRO sends is unobserved. **The signal has to be a declared type or an envelope key.** An `Array/SecureString` is caught by its type, but a secret sitting inside an untyped composite value — a `Properties` output, say — is announced by neither and is printed.
+
+The failure and timeout results print log excerpts and the workflow's own exception text verbatim. Neither carries a declared type, so neither is withheld.
+
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
@@ -237,6 +241,10 @@ Check the status and outputs of a workflow execution.
 
 Output parameters render as values rather than as vRO's value envelope, using the same unwrap as `run-workflow-and-wait` and `get-configuration`. Array outputs previously leaked the raw envelope here.
 
+An output parameter the server declares secure is withheld and shown as `[redacted]`, the same marker and the same detection `get-configuration` uses for a secure-typed attribute: a declared type reading secure or encrypted, or a value that arrived wrapped in such an envelope whatever its declared type says. Both signals are read, because no lab has yet served such an output and the shape vRO sends is unobserved. **The signal has to be a declared type or an envelope key.** An `Array/SecureString` is caught by its type, but a secret sitting inside an untyped composite value — a `Properties` output, say — is announced by neither and is printed.
+
+The `content-exception` text of a failed execution is printed verbatim and is not typed, so a secret a script threw is not withheld.
+
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
@@ -247,6 +255,8 @@ Output parameters render as values rather than as vRO's value envelope, using th
 ### `get-workflow-execution-logs`
 
 Retrieve system/event log entries for a workflow execution, including workflow token messages such as `System.log`, `System.debug`, `System.warn`, and `System.error`. Use this after `run-workflow`, `list-workflow-executions`, or `get-workflow-execution` when detailed execution logs are needed. To save logs instead of returning them inline, provide `fileName`; exports are written under `VCFA_EXECUTION_LOG_DIR` or `VCFA_ARTIFACT_DIR/execution-logs`. The `level` parameter is a minimum severity filter for inline display and export: `debug` includes debug and all higher known severities plus unknown severities, `info` includes info, warning, and error logs, and `error` includes only error logs.
+
+Log bodies are served verbatim. Unlike an output parameter, a log line carries no declared type, so there is no signal to withhold on: a workflow that writes a credential with `System.log` surfaces it here, and the same is true of the exception text a failed execution reports. Keep secrets out of what a workflow logs and throws rather than relying on this tool to filter them.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
