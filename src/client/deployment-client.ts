@@ -9,6 +9,22 @@ import type {
 import type { VroHttpClient } from "./core.js";
 import { getAllAutomationPages } from "./pagination.js";
 
+/**
+ * Both deployment-service writes answer a `DeploymentRequest`. `request<T>`
+ * turns an empty body into `{}`, which is kept as-is: the handlers guard every
+ * field, and "no request came back" then reads the same way from both writes.
+ * A bare array -- the shape the sibling catalog route serves on both platforms,
+ * never observed on these two routes -- is unwrapped to its first element
+ * rather than cast whole, so its fields would still render; any other
+ * non-object body reads as no request (VCFO-088).
+ */
+function asDeploymentRequest(result: unknown): DeploymentRequest {
+  const candidate = Array.isArray(result) ? result[0] : result;
+  return candidate && typeof candidate === "object"
+    ? (candidate as DeploymentRequest)
+    : {};
+}
+
 export class DeploymentClient {
   constructor(private http: VroHttpClient) {}
 
@@ -47,16 +63,14 @@ export class DeploymentClient {
    * it answers 404 (VCFO-088; the 9.1 round saw the same status sequence but
    * did not record the body). That request is handed back so the tool can say
    * deletion was *requested*, with the request id, rather than that it is done.
-   * An empty 2xx body yields `undefined`.
    */
-  async deleteDeployment(id: string): Promise<DeploymentRequest | undefined> {
-    const result = await this.http.del<DeploymentRequest | Record<string, never>>(
-      `/deployments/${encodeURIComponent(id)}`,
-      this.http.deploymentBaseUrl,
+  async deleteDeployment(id: string): Promise<DeploymentRequest> {
+    return asDeploymentRequest(
+      await this.http.del<unknown>(
+        `/deployments/${encodeURIComponent(id)}`,
+        this.http.deploymentBaseUrl,
+      ),
     );
-    return result && typeof result === "object" && Object.keys(result).length > 0
-      ? (result as DeploymentRequest)
-      : undefined;
   }
 
   listDeploymentActions(deploymentId: string): Promise<DeploymentActionList> {
@@ -66,7 +80,7 @@ export class DeploymentClient {
     );
   }
 
-  runDeploymentAction(
+  async runDeploymentAction(
     params: DeploymentActionRequestParams,
   ): Promise<DeploymentRequest> {
     const body: Record<string, unknown> = {
@@ -75,10 +89,12 @@ export class DeploymentClient {
     if (params.reason !== undefined) body.reason = params.reason;
     if (params.inputs !== undefined) body.inputs = params.inputs;
 
-    return this.http.post<DeploymentRequest>(
-      `/deployments/${encodeURIComponent(params.deploymentId)}/requests`,
-      body,
-      this.http.deploymentBaseUrl,
+    return asDeploymentRequest(
+      await this.http.post<unknown>(
+        `/deployments/${encodeURIComponent(params.deploymentId)}/requests`,
+        body,
+        this.http.deploymentBaseUrl,
+      ),
     );
   }
 }

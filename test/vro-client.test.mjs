@@ -1736,16 +1736,26 @@ test("vra8 createSubscription returns the posted element when the read-back fail
 
 // Lifted under VCFO-088 after a live round on vRA 8.18: a catalog request, a
 // PowerOff and a PowerOn, and a deployment delete all answered 200 through the
-// real tool handlers. The stub answers both POSTs with a request-shaped
-// element and the DELETE with an empty 204, so an answered body and an empty
-// one are both covered.
+// real tool handlers. The catalog route answers the bare array both platforms
+// serve, the day-2 POST a request-shaped element, and the DELETE an empty 204,
+// so an answered body and an empty one are both covered.
 test("vra8 platform allows catalog-service and deployment-service writes", async () => {
   const requests = [];
-  globalThis.fetch = vra8AutomationWriteStub(requests, {
+  const writeStub = vra8AutomationWriteStub(requests, {
     id: "request-1",
     actionId: "Deployment.PowerOff",
     status: "PENDING",
   });
+  const catalogRequest = [
+    { deploymentId: "deployment-1", deploymentName: "Deployment" },
+  ];
+  globalThis.fetch = async (url, init = {}) => {
+    if (String(url).includes("/catalog/") && init.method === "POST") {
+      requests.push({ method: "POST", url: String(url), body: JSON.parse(init.body) });
+      return Response.json(catalogRequest);
+    }
+    return writeStub(url, init);
+  };
   const client = new VroClient(vra8Config());
 
   const requested = await client.createDeploymentFromCatalogItem({
@@ -1754,14 +1764,15 @@ test("vra8 platform allows catalog-service and deployment-service writes", async
     projectId: "project-1",
     version: "1",
   });
-  assert.equal(requested.id, "request-1");
+  assert.deepEqual(requested, catalogRequest);
   const action = await client.runDeploymentAction({
     deploymentId: "deployment-1",
     actionId: "Deployment.PowerOff",
   });
   assert.equal(action.status, "PENDING");
-  // An empty 204 must read as "no request came back", not as an empty one.
-  assert.equal(await client.deleteDeployment("deployment-1"), undefined);
+  // An empty 204 reads as an empty request, the same way an empty day-2
+  // answer would, not as a thrown error.
+  assert.deepEqual(await client.deleteDeployment("deployment-1"), {});
 
   assert.ok(
     requests.every((r) => !r.url.includes("/vco/api")),
@@ -1805,6 +1816,53 @@ test("deleteDeployment hands back the request the service answers with", async (
     actionId: "Deployment.Delete",
     status: "PENDING",
   });
+});
+
+// Never observed on these routes, but the sibling catalog route answers a bare
+// array on both platforms, so an array body is unwrapped rather than cast whole
+// and silently rendered as a request with no fields.
+test("deleteDeployment unwraps a bare-array request body", async () => {
+  const login = vra8LoginStub();
+  globalThis.fetch = async (url) => {
+    const fromLogin = login(url);
+    if (fromLogin) return fromLogin;
+    return Response.json([{ id: "request-3", status: "PENDING" }]);
+  };
+  const client = new VroClient(vra8Config());
+
+  assert.deepEqual(await client.deleteDeployment("deployment-1"), {
+    id: "request-3",
+    status: "PENDING",
+  });
+});
+
+// The guard's throwing arm survives the lift: project-service has no verified
+// write path and still refuses, and a base URL the guard does not recognize
+// fails closed. Neither may reach the wire -- the refusal fires before the
+// login, so a request that gets as far as fetch is the failure (VCFO-088).
+test("vra8 platform still refuses a project-service write and an unknown Automation service", async () => {
+  let reached = false;
+  globalThis.fetch = async () => {
+    reached = true;
+    return Response.json({});
+  };
+  const http = new VroHttpClient(vra8Config());
+
+  await assert.rejects(
+    () => http.request("POST", "/projects", { name: "Project" }, http.projectBaseUrl),
+    /Project-service writes are not supported in VCFA_TARGET_PLATFORM=vra8 mode/,
+  );
+  await assert.rejects(
+    () =>
+      http.request(
+        "POST",
+        "/things",
+        {},
+        http.projectBaseUrl.replace("/project-service/api", "/unknown/api"),
+      ),
+    /not been verified against a vRA 8 environment/,
+  );
+  assert.equal(reached, false, "a refused write must not reach the wire");
 });
 
 test("vra8 platform allows vRO writes", async () => {

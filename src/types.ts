@@ -661,7 +661,7 @@ export interface DeploymentActionRequestParams {
  * `completedTasks`, `resourceIds`, `cancelable` while it can still be
  * cancelled, and `approvedAt` once it has started. Status vocabulary observed:
  * `PENDING` or `INITIALIZATION` at submission, `INPROGRESS`, `SUCCESSFUL`.
- * The server exposes no tool that reads a request back by id.
+ * Reading a request back by id through this server is tracked as VCFO-094.
  */
 export interface DeploymentRequest {
   id?: string;

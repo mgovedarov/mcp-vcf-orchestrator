@@ -138,7 +138,7 @@ containing the word "undefined" and validation errors from deliberately malforme
 | `delete-deployment` | Verified under VCFO-088, defect found and fixed | Refused in this sweep by design; lifted after the 2026-09-16 round. The success text overstated completion — see below. |
 | `run-deployment-action` | Verified under VCFO-088 | Refused in this sweep by design; lifted after `PowerOff` and `PowerOn` were submitted through the real handler — the first day-2 action on any platform. |
 
-## Catalog and deployment writes — 2026-09-16 (VCFO-088)
+## Catalog and deployment writes, 2026-09-16 (VCFO-088)
 
 The rows above were measured on a lab with an empty catalog. This section is a separate round on the
 same appliance, same user, once the lab held **one released catalog item** (`ubunutu`, a blueprint-backed
@@ -172,7 +172,9 @@ was confirmed by `get-deployment` answering `404` **and** by `list-deployments` 
 
 ### Observed wire shapes
 
-Every shape matches VCF Automation 9.1 (VCFO-074) unless noted.
+Every shape that VCF Automation 9.1 has also served matches it (VCFO-074) unless noted. The two
+`DeploymentRequest` bullets are **vRA 8.18 observations only**: no 9.1 round has submitted a day-2 action
+or recorded the delete body, so neither matrix is evidence for the other there.
 
 - `GET /catalog/api/items` — Spring page (`content`, `totalElements`, `totalPages`, `last`, `first`,
   `number`, `size`, `numberOfElements`, `pageable`, `sort`, `empty`). **`size` came back `20` for a
@@ -191,7 +193,8 @@ Every shape matches VCF Automation 9.1 (VCFO-074) unless noted.
   read `CREATE_SUCCESSFUL` throughout both power actions.
 - `GET /deployment/api/deployments/{id}/actions` — bare array; elements carry exactly `actionType`
   (`RESOURCE_ACTION`), `description`, `displayName`, `id`, `name`, `valid`.
-- `POST /deployment/api/deployments/{id}/requests` — `200`, a `DeploymentRequest`: `id`, `name` (`Power
+- `POST /deployment/api/deployments/{id}/requests` — **vRA 8.18 only, not yet observed on 9.1.** `200`, a
+  `DeploymentRequest`: `id`, `name` (`Power
   Off` / `Power On`), `actionId`, `deploymentId`, `requestedBy`, `status`, `details`, `createdAt`,
   `updatedAt`, `totalTasks`, `completedTasks`, `resourceIds`, `cancelable`. Read back at
   `GET /deployment/api/requests/{id}`, `approvedAt` appears once started and `cancelable` disappears once
@@ -199,7 +202,8 @@ Every shape matches VCF Automation 9.1 (VCFO-074) unless noted.
   4 tasks, about 30 s.
 - `DELETE /deployment/api/deployments/{id}` — **`200` with a `DeploymentRequest` body** (`actionId:
   Deployment.Delete`, `status: PENDING`, two `resourceIds`), not an empty `204`. The client had discarded
-  it.
+  it. **vRA 8.18 only**: the 9.1 round saw the same `DELETE_INPROGRESS` → `404` sequence but did not
+  record the body.
 
 ### Defect found and fixed in this round
 
@@ -207,8 +211,11 @@ Every shape matches VCF Automation 9.1 (VCFO-074) unless noted.
   service answers with a `PENDING` request and the deployment remains, as `DELETE_INPROGRESS`, for close
   to a minute. `deleteDeployment` now returns that request and the tool reports the deletion as
   *requested*, with the request ID and status, and names `get-deployment` (to `404`) and
-  `list-deployments` (to absence) as the confirmation. `run-deployment-action`'s success text now says the
-  action is asynchronous and that `get-deployment`'s status does not track it.
+  `list-deployments` (to absence) as the confirmation. `run-deployment-action`'s success text now derives
+  its next step from the action and the request's status: a power action is not tracked by
+  `get-deployment`, a `Deployment.Delete` is (poll to `404`), and a request that is not in a running
+  state is reported as held or finished rather than as something to wait for. Both tools render the
+  request through one shared set of lines. Reading a request back by ID is tracked as VCFO-094.
 
 ### Not exercised here
 

@@ -42,9 +42,9 @@ function isInputArray(value: unknown): value is {
  * the empty fallback -- remain **unobserved against a real service on any
  * platform**. VCF Automation 9.1 served deployment actions carrying only `id`,
  * `name`, `displayName`, `description`, `valid` and `actionType`, with neither
- * `inputParameters` nor `inputs` on any of them, and vRA 8 has never had a
- * deployment to read actions from at all. See the `DeploymentAction` type in
- * src/types.ts and docs/operations/vcfa-verification-matrix.md. Treat this as
+ * `inputParameters` nor `inputs` on any of them, and vRA 8.18 served the same
+ * six-key objects for ten actions (VCFO-088). See the `DeploymentAction` type
+ * in src/types.ts and both verification matrices under docs/operations/. Treat this as
  * assumed rather than verified until a lab serves an action that carries
  * inputs (VCFO-091).
  */
@@ -204,20 +204,63 @@ export function formatDeploymentInputs(
   return `\n${header}\n${lines.join("\n")}\n`;
 }
 
-export function formatDeploymentRequest(request: DeploymentRequest): string {
-  let text = "Deployment action request submitted.\n";
+/**
+ * Request statuses under which a queued deployment request is still moving.
+ * Observed on vRA 8.18: `PENDING` or `INITIALIZATION` at submission,
+ * `INPROGRESS`, then `SUCCESSFUL` (VCFO-088). Anything else -- a failure, an
+ * approval hold -- is not running, and the caller must not be told to wait on
+ * the deployment for it. The vocabulary is wider than what was observed, which
+ * is why the check is for "known to be running" rather than "known to be done".
+ */
+const ACTIVE_REQUEST_STATUSES = new Set(["PENDING", "INITIALIZATION", "INPROGRESS"]);
+
+/**
+ * The `DeploymentRequest` fields both deployment-service writes render, with
+ * one label set, so a field added to the type is considered in one place.
+ */
+export function deploymentRequestLines(
+  request: DeploymentRequest | undefined,
+): string {
+  if (!request) return "";
+  let text = "";
   if (request.id) text += `ID: ${request.id}\n`;
   if (request.name) text += `Name: ${request.name}\n`;
   if (request.actionId) text += `Action ID: ${request.actionId}\n`;
   if (request.deploymentId) text += `Deployment ID: ${request.deploymentId}\n`;
   if (request.status) text += `Status: ${request.status}\n`;
   if (request.details) text += `Details: ${request.details}\n`;
-  // The deployment's own status does not track a day-2 action -- it read
-  // CREATE_SUCCESSFUL throughout a PowerOff and a PowerOn on vRA 8.18
-  // (VCFO-088) -- and the server has no tool that reads a request by id, so
-  // say where the outcome can and cannot be observed.
-  text += `The action runs asynchronously, and get-deployment's status does not track it; confirm the outcome on the deployment's resources in the platform.\n`;
   return text;
+}
+
+/**
+ * What the caller can do next with a queued request, chosen from the action
+ * and the request's status rather than fixed, because the truth differs by
+ * action: a `Deployment.Delete` *is* tracked by the deployment's own status
+ * (`DELETE_INPROGRESS`, then 404), while a power action is not -- a deployment
+ * read `CREATE_SUCCESSFUL` throughout a PowerOff and a PowerOn on vRA 8.18
+ * (VCFO-088). A request that is not in a running state -- held for approval,
+ * failed -- is reported as such instead of as something to wait for, since
+ * waiting on the deployment would never settle it. Reading a request back by
+ * id through this server is tracked as VCFO-094.
+ */
+export function deploymentRequestNextStep(
+  actionId: string,
+  status: string | undefined,
+): string {
+  if (status && !ACTIVE_REQUEST_STATUSES.has(status.toUpperCase())) {
+    return `The request reports ${status} rather than a running state, so it is either already finished or held (an approval policy, for example); waiting on the deployment will not settle it. Reading a request back by ID is tracked as VCFO-094.\n`;
+  }
+  if (actionId === "Deployment.Delete") {
+    return `Deletion is asynchronous: the deployment reads DELETE_INPROGRESS until it is gone, so poll get-deployment until it answers 404, or list-deployments until the deployment is absent.\n`;
+  }
+  return `The action runs asynchronously, and get-deployment's status does not track it (a deployment read CREATE_SUCCESSFUL throughout a power action), so confirm the outcome on the deployment's resources. Reading a request back by ID is tracked as VCFO-094.\n`;
+}
+
+export function formatDeploymentRequest(
+  request: DeploymentRequest,
+  actionId: string = request.actionId ?? "",
+): string {
+  return `Deployment action request submitted.\n${deploymentRequestLines(request)}${deploymentRequestNextStep(actionId, request.status)}`;
 }
 
 /**
@@ -673,9 +716,9 @@ export function registerDeploymentTools(
         // A 2xx here means the delete was queued, not done: the deployment
         // reads DELETE_INPROGRESS for a while and then 404 (VCFO-088).
         let text = `Deletion of deployment ${id} requested.\n`;
-        if (request?.id) text += `Request ID: ${request.id}\n`;
-        if (request?.status) text += `Request status: ${request.status}\n`;
-        text += `Deletion is asynchronous: poll get-deployment until it answers 404, or list-deployments until the deployment is absent.\n`;
+        const lines = deploymentRequestLines(request);
+        if (lines) text += `The service queued this request:\n${lines}`;
+        text += deploymentRequestNextStep("Deployment.Delete", request?.status);
         return { content: [{ type: "text", text }] };
       } catch (error) {
         return {
@@ -996,7 +1039,9 @@ export function registerDeploymentTools(
           inputs,
         });
         return {
-          content: [{ type: "text", text: formatDeploymentRequest(request) }],
+          content: [
+            { type: "text", text: formatDeploymentRequest(request, actionId) },
+          ],
         };
       } catch (error) {
         return {

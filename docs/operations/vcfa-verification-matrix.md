@@ -269,10 +269,11 @@ then `404`. Note `INPROGRESS` carries **no underscore**.
   provider identity. *Partly resolved:* the tenant round of 2026-09-16 above covers the catalog,
   deployment, project and template tools. The event-broker and subscription tools are still
   unexercised on a 9.x tenant session.
-- **A deployment day-2 action has never been submitted.** The `run-deployment-action` guard paths are
-  verified live, but no action has been run on any platform, so the request envelope and the
-  `DeploymentRequest` response shape remain assumed. A deployment action's input shape
-  (`inputParameters` vs `inputs`) has never been observed either — 9.1 served neither.
+- **A deployment day-2 action has never been submitted on 9.x.** The `run-deployment-action` guard paths
+  are verified live here, but no action has been run on this platform. VCFO-088 has since submitted
+  `Deployment.PowerOff` and `Deployment.PowerOn` on vRA 8.18 and typed the `DeploymentRequest` that
+  platform serves, so what is open here is whether 9.1 serves the same envelope and shape. A deployment
+  action's input shape (`inputParameters` vs `inputs`) has never been observed on either platform.
 - **`import-configuration-file` remains unverifiable on any platform tested**, for the same reason
   as on vRA 8: nothing serves a genuine `.vsoconf` container.
 - **One defect found:** [#192](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/192)
