@@ -531,3 +531,188 @@ test("create-deployment reports a failed verification read without provisioning"
   assert.match(result.content[0].text, /No deployment was requested/);
   assert.doesNotMatch(result.content[0].text, /Failed to create deployment/);
 });
+
+// --- VCFO-074: shapes observed live on VCF Automation 9.1 ---
+
+test("create-deployment reports identifiers from the observed 9.1 request response", async () => {
+  // The live route answers a BARE ARRAY of {deploymentId, deploymentName} and
+  // carries no id/name/status, so reading the old `Deployment` fields printed
+  // nothing identifying at all.
+  const handlers = registeredDeploymentTools({
+    createDeploymentFromCatalogItem: async () => [
+      {
+        deploymentId: "11111111-2222-4333-8444-555555555555",
+        deploymentName: "vcfo074-livetest",
+      },
+    ],
+  });
+
+  const result = await handlers.get("create-deployment")({
+    catalogItemId: "catalog-1",
+    deploymentName: "vcfo074-livetest",
+    projectId: "project-1",
+    confirm: true,
+  });
+
+  assert.match(result.content[0].text, /Deployment request submitted\./);
+  assert.match(result.content[0].text, /ID: 11111111-2222-4333-8444-555555555555/);
+  assert.match(result.content[0].text, /Name: vcfo074-livetest/);
+  assert.match(result.content[0].text, /poll get-deployment/);
+});
+
+test("create-deployment also reads a single request object and the id/name aliases", async () => {
+  const handlers = registeredDeploymentTools({
+    createDeploymentFromCatalogItem: async () => ({
+      id: "deployment-9",
+      name: "single-object-arm",
+      status: "CREATE_INPROGRESS",
+    }),
+  });
+
+  const result = await handlers.get("create-deployment")({
+    catalogItemId: "catalog-1",
+    deploymentName: "single-object-arm",
+    projectId: "project-1",
+    confirm: true,
+  });
+
+  assert.match(result.content[0].text, /ID: deployment-9/);
+  assert.match(result.content[0].text, /Name: single-object-arm/);
+  assert.match(result.content[0].text, /Status: CREATE_INPROGRESS/);
+});
+
+test("create-deployment says so when the response carries no identifier", async () => {
+  const handlers = registeredDeploymentTools({
+    createDeploymentFromCatalogItem: async () => [],
+  });
+
+  const result = await handlers.get("create-deployment")({
+    catalogItemId: "catalog-1",
+    deploymentName: "nameless",
+    projectId: "project-7",
+    confirm: true,
+  });
+
+  assert.match(result.content[0].text, /returned no deployment identifier/);
+  assert.match(result.content[0].text, /projectId: project-7/);
+  assert.doesNotMatch(result.content[0].text, /undefined/);
+});
+
+test("delete-deployment matches expectedProjectName when 9.1 serves no projectName", async () => {
+  // Regression for the VCFO-077 class: a 9.1 deployment carries projectId but
+  // no projectName, so comparing the expected value straight against the
+  // deployment refused every legitimate call with `found (missing)`.
+  let deletedId;
+  const handlers = registeredDeploymentTools({
+    getDeployment: async (id) => ({
+      id,
+      name: "vcfo074-livetest",
+      status: "CREATE_SUCCESSFUL",
+      projectId: "99999999-8888-4777-8666-555555555555",
+    }),
+    getProject: async (id) => ({ id, name: "default-project" }),
+    deleteDeployment: async (id) => {
+      deletedId = id;
+    },
+  });
+
+  const result = await handlers.get("delete-deployment")({
+    id: "deployment-1",
+    confirm: true,
+    expectedName: "vcfo074-livetest",
+    expectedProjectName: "default-project",
+  });
+
+  assert.equal(result.isError, undefined);
+  assert.equal(deletedId, "deployment-1");
+});
+
+test("delete-deployment still refuses a genuinely wrong expectedProjectName", async () => {
+  let deleted = false;
+  const handlers = registeredDeploymentTools({
+    getDeployment: async (id) => ({ id, projectId: "project-1" }),
+    getProject: async (id) => ({ id, name: "default-project" }),
+    deleteDeployment: async () => {
+      deleted = true;
+    },
+  });
+
+  const result = await handlers.get("delete-deployment")({
+    id: "deployment-1",
+    confirm: true,
+    expectedProjectName: "some-other-project",
+  });
+
+  assert.equal(result.isError, true);
+  assert.match(result.content[0].text, /project name: expected "some-other-project", found "default-project"/);
+  assert.equal(deleted, false);
+});
+
+test("delete-deployment reports an unverifiable project name rather than a mismatch", async () => {
+  let deleted = false;
+  const handlers = registeredDeploymentTools({
+    getDeployment: async (id) => ({ id, projectId: "project-1" }),
+    getProject: async (id) => ({ id }),
+    deleteDeployment: async () => {
+      deleted = true;
+    },
+  });
+
+  const result = await handlers.get("delete-deployment")({
+    id: "deployment-1",
+    confirm: true,
+    expectedProjectName: "default-project",
+  });
+
+  assert.equal(result.isError, true);
+  assert.match(result.content[0].text, /Cannot verify expectedProjectName/);
+  assert.match(result.content[0].text, /was not deleted/);
+  assert.equal(deleted, false);
+});
+
+test("run-deployment-action resolves expectedProjectName through the project service", async () => {
+  let submitted = false;
+  const handlers = registeredDeploymentTools({
+    getDeployment: async (id) => ({
+      id,
+      name: "vcfo074-livetest",
+      status: "CREATE_SUCCESSFUL",
+      projectId: "project-1",
+    }),
+    getProject: async (id) => ({ id, name: "default-project" }),
+    listDeploymentActions: async () => [
+      { id: "Deployment.PowerOff", name: "PowerOff", actionType: "RESOURCE_ACTION", valid: true },
+    ],
+    runDeploymentAction: async () => {
+      submitted = true;
+      return { id: "request-1" };
+    },
+  });
+
+  const result = await handlers.get("run-deployment-action")({
+    deploymentId: "deployment-1",
+    actionId: "Deployment.PowerOff",
+    confirm: true,
+    expectedProjectName: "default-project",
+    expectedActionName: "PowerOff",
+  });
+
+  assert.equal(result.isError, undefined);
+  assert.equal(submitted, true);
+});
+
+test("list-deployment-actions handles the bare-array arm 9.1 actually serves", async () => {
+  const handlers = registeredDeploymentTools({
+    listDeploymentActions: async () => [
+      { id: "Deployment.PowerOff", name: "PowerOff", description: "Power off a deployment", valid: true, actionType: "RESOURCE_ACTION" },
+      { id: "Deployment.Delete", name: "Delete", description: "Delete a deployment", valid: true, actionType: "RESOURCE_ACTION" },
+    ],
+  });
+
+  const result = await handlers.get("list-deployment-actions")({
+    deploymentId: "deployment-1",
+  });
+
+  assert.match(result.content[0].text, /Found 2 deployment action\(s\)/);
+  assert.match(result.content[0].text, /PowerOff \(id: Deployment\.PowerOff\)/);
+});

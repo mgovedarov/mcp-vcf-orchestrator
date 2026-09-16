@@ -166,14 +166,78 @@ None was driven with `confirm: true`.
 | Tool | Status | Evidence |
 | --- | --- | --- |
 | `list-projects` / `get-project` | Verified under VCFO-065 | `$filter` accepted and applied on a 9.1 tenant session; 9.x role arrays rendered. Blocked by identity in this sweep — `403` confirmed. |
-| `list-catalog-items` / `get-catalog-item` | Verified under VCFO-074 | A released catalog item was read on a 9.1 lab and renders correctly. Blocked by identity here — `500` confirmed. |
-| `list-deployments` / `get-deployment` / `list-deployment-actions` | Blocked by identity | `500` confirmed. **No deployment has ever been observed on any lab, on either platform**, so the deployment item shape remains assumed; the `(unnamed)` fallback means a mismatch would degrade visibly. |
-| `create-deployment` / `delete-deployment` / `run-deployment-action` | Not exercised | These provision or destroy real infrastructure ([VCFO-084](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/188)). Deliberately excluded from this sweep; only the `confirm: false` refusals were driven. `create-deployment` has since gained `expectedCatalogItemName` / `expectedProjectName` and the destructive annotation (VCFO-084); those are covered by unit tests and **still await live exercise**, which needs a tenant session. |
+| `list-catalog-items` / `get-catalog-item` | Verified under VCFO-074 | A released catalog item was read on a 9.1 tenant session and renders correctly; see the tenant-session section below. Blocked by identity here — `500` confirmed. |
+| `list-deployments` / `get-deployment` / `list-deployment-actions` | Blocked by identity | `500` confirmed on this identity. The item and action shapes were settled separately on a **tenant** session — see the tenant-session section below (VCFO-074). |
+| `create-deployment` / `delete-deployment` / `run-deployment-action` | Not exercised **in this sweep** | These provision or destroy real infrastructure ([VCFO-084](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/188)), so only the `confirm: false` refusals were driven here. All three, and the VCFO-084 target guards, were exercised live on a **tenant** session — see the tenant-session section below (VCFO-074). |
 | `list-templates` / `get-template` | Blocked by identity | `500` confirmed. |
 | `create-template` / `delete-template` | Blocked by identity | `500` confirmed; writes keep their vRA 8 verification under VCFO-070. |
 | `list-event-topics` | Blocked by identity | `500` confirmed. |
 | `list-subscriptions` / `get-subscription` | Blocked by identity | `500` confirmed. |
 | `create-subscription` / `update-subscription` / `delete-subscription` | Not exercised | Subscriptions fire on real events in a live tenant; excluded by scope. Writes keep their vRA 8 verification under VCFO-070. |
+
+## Automation services — tenant session, 2026-09-16 (VCFO-074)
+
+The rows above are scoped to the **provider** identity, which cannot reach these services at all.
+This section is a separate round on the same 9.1 appliance with a **tenant** session
+(`VCFA_ORGANIZATION=<tenant slug>`), and it is the first time a live deployment has existed on any
+lab, on either platform. It does not replace the provider rows; both are true of their own identity.
+
+**Environment:** VCF Automation 9.1, tenant session, 2026-09-16. One released catalog item
+(`Basic Alpine VM`, a blueprint-backed `com.vmw.blueprint`), one project, two pre-existing
+deployments belonging to the environment's owner.
+**Topology:** `VCFA_VRO_HOST` was **set** for this org, and **zero `/vco/api` requests were made** —
+every service in this round (catalog, deployment, project, blueprint) is pinned to `VCFA_HOST`. A
+set-but-unused variable is not split-host evidence, so the "Still open" item below stands unchanged.
+**Provisioning:** three deployments were created and destroyed. The environment was returned to its
+exact starting count of two, confirmed by polling each to `404` **and** by `list-deployments`.
+
+| Tool | Status | Evidence |
+| --- | --- | --- |
+| `list-catalog-items` / `get-catalog-item` | Verified | Released item listed and read. The item serves `schema`, `sourceProjectId`, `bulkRequestLimit`, `isRequestable`, `externalId` and `global`, and serves neither `sourceType` nor `sourceName`. |
+| `list-deployments` / `get-deployment` | Verified | **The deployment item shape is now observed rather than assumed.** Both renderers print a real name; no `(unnamed)` anywhere in the captures. |
+| `list-deployment-actions` | Verified | **The service serves the bare-array arm**, not a Spring page. Five deployment-level actions. |
+| `create-deployment` | Verified, defect found and fixed | Provisioned three times. The `expectedCatalogItemName` and `expectedProjectName` guards (VCFO-084) were exercised live for the first time, both arms. The response shape defect below was found here. |
+| `delete-deployment` | Verified, defect found and fixed | Deprovisioned three times, each polled to `404`. The `expectedName`, `expectedProjectId` and `expectedStatus` guards all match live. `expectedProjectName` was the defect below. |
+| `run-deployment-action` | Guards verified; no action submitted | The `expectedActionName` and `expectedStatus` mismatch arms both refuse correctly, and `expectedProjectName` now matches. **No day-2 action was submitted** — out of scope for this round. |
+| `list-projects` / `get-project` | Verified | Reachable on this identity; `get-project` is what resolves the deployment's project name. |
+| `list-templates` | Verified | Lists the backing blueprint. |
+
+### Observed wire shapes
+
+`GET /deployment/api/deployments/{id}` serves: `id`, `name`, `description`, `orgId`,
+`catalogItemId`, `catalogItemVersion`, `blueprintId`, `blueprintVersion`, `iconId`, `createdAt`,
+`createdBy`, `ownedBy`, `ownerType`, `lastUpdatedAt`, `lastUpdatedBy`, `leaseGracePeriodDays`,
+`inputs`, `projectId`, `status`. **There is no `projectName`.** `description` appears only when set —
+the create request's `reason` becomes it.
+
+`GET /deployment/api/deployments/{id}/actions` serves a **bare array**, whose elements carry `id`,
+`name`, `displayName`, `description`, `valid` and `actionType` (`RESOURCE_ACTION`). None carried
+`inputParameters` or `inputs`, so the three-way input handling in `formatDeploymentActions` **remains
+unobserved everywhere** and must not be assumed correct.
+
+`POST /catalog/api/items/{id}/request` answers a **bare array** of `{deploymentId, deploymentName}` —
+not a `Deployment`, and carrying neither `id`, `name` nor `status`.
+
+Deployment status vocabulary observed: `CREATE_INPROGRESS`, `CREATE_SUCCESSFUL`, `DELETE_INPROGRESS`,
+then `404`. Note `INPROGRESS` carries **no underscore**.
+
+### Defects found and fixed in this round
+
+- **`create-deployment` returned no identifiers.** The client typed the catalog request response as a
+  single `Deployment` and read `.id` / `.name` / `.status` off it, all of which are absent from the
+  array the service actually serves, so the tool printed a bare `Deployment request submitted.` The
+  caller then had to recover the id from `list-deployments` by name — ambiguous the moment two
+  deployments share one. `normalizeCatalogItemRequest` now accepts both the array and the
+  single-object arm and both key spellings, and the tool prints the id and name.
+- **`expectedProjectName` refused every call on `delete-deployment` and `run-deployment-action`.**
+  Both compared the expected value straight against `deployment.projectName`, which 9.1 never serves,
+  so the guard reported `found (missing)` and refused — the VCFO-077 defect class, reintroduced
+  through a field that was assumed rather than observed. The name is now taken from the deployment
+  when a platform serves it and otherwise resolved through the project service, matching how
+  `guardCreateDeploymentTarget` already did it.
+- **`get-catalog-item` never rendered the request schema.** The wire serves `schema.properties` and
+  `schema.required` — the input contract for `create-deployment` — and the tool rendered neither, so
+  an agent driving a deployment through the MCP surface had to guess the inputs.
 
 ## Settled by this run
 
@@ -202,7 +266,13 @@ None was driven with `confirm: true`.
   orchestrator by choice. VCFO-081's own evidence stands, but no full-surface run has been made
   against an external vRO.
 - **The Automation-service surface needs a tenant session.** Twenty tools are blocked by the
-  provider identity, and the deployment item shape has still never been observed anywhere.
+  provider identity. *Partly resolved:* the tenant round of 2026-09-16 above covers the catalog,
+  deployment, project and template tools. The event-broker and subscription tools are still
+  unexercised on a 9.x tenant session.
+- **A deployment day-2 action has never been submitted.** The `run-deployment-action` guard paths are
+  verified live, but no action has been run on any platform, so the request envelope and the
+  `DeploymentRequest` response shape remain assumed. A deployment action's input shape
+  (`inputParameters` vs `inputs`) has never been observed either — 9.1 served neither.
 - **`import-configuration-file` remains unverifiable on any platform tested**, for the same reason
   as on vRA 8: nothing serves a genuine `.vsoconf` container.
 - **One defect found:** [#192](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/192)

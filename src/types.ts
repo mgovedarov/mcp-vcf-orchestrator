@@ -439,12 +439,64 @@ export interface CatalogItem {
   sourceName?: string;
   sourceId?: string;
   projectIds?: string[];
+  /**
+   * The project the item's source lives in, served by a blueprint-backed item
+   * on VCFA 9.1 alongside `projectIds` (VCFO-074).
+   */
+  sourceProjectId?: string;
   iconId?: string;
   createdAt?: string;
   createdBy?: string;
   lastUpdatedAt?: string;
   lastUpdatedBy?: string;
   requestScopeOrg?: boolean;
+  /**
+   * The request schema: what `create-deployment` must be given as `inputs`.
+   * Observed on VCFA 9.1 as a JSON-Schema-shaped object with `properties` and
+   * `required` (VCFO-074). Without it an agent cannot discover the item's
+   * inputs through the tool surface and would have to guess them.
+   */
+  schema?: CatalogItemSchema;
+  /** 0 on a 9.1 blueprint-backed item, meaning bulk requests are not offered. */
+  bulkRequestLimit?: number;
+  /** `/blueprint/api/blueprints/<id>` for a blueprint-backed item on 9.1. */
+  externalId?: string;
+  global?: boolean;
+  isRequestable?: boolean;
+}
+
+/**
+ * A catalog item's request schema, as served by VCFA 9.1 (VCFO-074).
+ *
+ * Deliberately permissive: this mirrors a JSON Schema subset the service
+ * composes from the blueprint's inputs, and an unmodelled keyword must survive
+ * a round trip rather than be dropped.
+ */
+export interface CatalogItemSchema {
+  type?: string;
+  encrypted?: boolean;
+  properties?: Record<string, CatalogItemSchemaProperty>;
+  required?: string[];
+  [key: string]: unknown;
+}
+
+export interface CatalogItemSchemaProperty {
+  type?: string;
+  title?: string;
+  description?: string;
+  /**
+   * Present on a value the service stores encrypted. Renderers must not print
+   * this property's `default` or any example value when it is true.
+   */
+  encrypted?: boolean;
+  default?: unknown;
+  pattern?: string;
+  enum?: unknown[];
+  minimum?: number;
+  maximum?: number;
+  minLength?: number;
+  maxLength?: number;
+  [key: string]: unknown;
 }
 
 export interface CatalogItemList {
@@ -461,14 +513,25 @@ export interface CatalogItemList {
 export interface Deployment {
   id: string;
   /**
-   * Optional, like `CatalogItem.name`: no deployment has ever been observed on
-   * either verification lab, so the shape is assumed rather than known and the
-   * renderers must not interpolate it unguarded (VCFO-074).
+   * Observed on VCFA 9.1 (VCFO-074), but kept optional: one lab is not a
+   * contract, and the renderers must not interpolate it unguarded.
    */
   name?: string;
+  /** Served on 9.1 only when set -- the create request's `reason` becomes it. */
   description?: string;
-  status?: string; // e.g. "CREATE_SUCCESSFUL" | "DELETE_IN_PROGRESS" | "UPDATE_FAILED" etc.
+  /**
+   * Observed values on VCFA 9.1: `CREATE_INPROGRESS`, `CREATE_SUCCESSFUL`,
+   * `DELETE_INPROGRESS`. Note `INPROGRESS` carries no underscore, so do not
+   * match on `IN_PROGRESS`. The full vocabulary is wider than what one round
+   * exercised (VCFO-074).
+   */
+  status?: string;
   projectId?: string;
+  /**
+   * NOT served by VCFA 9.1, which carries only `projectId` (VCFO-074). Guards
+   * comparing an expected project name against this field directly refuse
+   * every call; resolve the name through the project service instead.
+   */
   projectName?: string;
   catalogItemId?: string;
   catalogItemVersion?: string;
@@ -477,7 +540,43 @@ export interface Deployment {
   createdBy?: string;
   lastUpdatedAt?: string;
   lastUpdatedBy?: string;
+  /** The inputs the deployment was requested with, keyed by input name. */
+  inputs?: Record<string, unknown>;
+  /** Observed on 9.1: the blueprint behind the requested catalog item version. */
+  blueprintId?: string;
+  blueprintVersion?: string;
+  orgId?: string;
+  /** Observed on 9.1 as `USER`. */
+  ownerType?: string;
+  leaseGracePeriodDays?: number;
+  iconId?: string;
 }
+
+/**
+ * One element of the response to `POST /catalog/api/items/{id}/request`.
+ *
+ * The route answers a **bare array** of these on VCFA 9.1, NOT a `Deployment`:
+ * the observed element carries exactly `deploymentId` and `deploymentName` and
+ * neither `id`, `name` nor `status` (VCFO-074). Typing the response as a
+ * `Deployment` made `create-deployment` print no identifiers at all.
+ *
+ * The `id`/`name` aliases are kept because a platform that answers with a
+ * single request object is still plausible, and `normalizeCatalogItemRequest`
+ * accepts either spelling.
+ */
+export interface CatalogItemRequestEntry {
+  deploymentId?: string;
+  deploymentName?: string;
+  id?: string;
+  name?: string;
+  status?: string;
+  [key: string]: unknown;
+}
+
+/** Either arm: a bare array (observed on 9.1) or a single object. */
+export type CatalogItemRequestResponse =
+  | CatalogItemRequestEntry[]
+  | CatalogItemRequestEntry;
 
 export interface DeploymentList {
   content: Deployment[];
@@ -502,9 +601,19 @@ export interface DeploymentAction {
   name?: string;
   displayName?: string;
   description?: string;
+  /**
+   * None of these three was served by VCFA 9.1, whose action objects carry only
+   * `id`, `name`, `displayName`, `description`, `valid` and `actionType`
+   * (VCFO-074). So the three-way input handling below remains unobserved
+   * everywhere and must not be assumed correct.
+   */
   inputParameters?: DeploymentActionInput[];
   inputs?: DeploymentActionInput[] | Record<string, unknown>;
   formDefinition?: Record<string, unknown>;
+  /** Observed on 9.1: whether the action can currently be requested. */
+  valid?: boolean;
+  /** Observed on 9.1 as `RESOURCE_ACTION` for every deployment-level action. */
+  actionType?: string;
   [key: string]: unknown;
 }
 
