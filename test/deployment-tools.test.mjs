@@ -890,3 +890,44 @@ test("get-deployment renders the blueprint behind the requested catalog item ver
   assert.match(text, /Blueprint ID: blueprint-1/);
   assert.match(text, /Blueprint Version: 2/);
 });
+
+test("delete-deployment reports the queued request instead of a finished deletion", async () => {
+  // DELETE /deployments/{id} answers 200 with the Deployment.Delete request it
+  // queued, and the deployment reads DELETE_INPROGRESS for a while before it
+  // answers 404 (VCFO-088). "deleted successfully" overstated that.
+  const handlers = registeredDeploymentTools({
+    deleteDeployment: async () => ({
+      id: "request-9",
+      actionId: "Deployment.Delete",
+      status: "PENDING",
+    }),
+  });
+
+  const result = await handlers.get("delete-deployment")({
+    id: "deployment-1",
+    confirm: true,
+  });
+
+  assert.equal(result.isError, undefined);
+  assert.match(result.content[0].text, /Deletion of deployment deployment-1 requested\./);
+  assert.match(result.content[0].text, /Request ID: request-9/);
+  assert.match(result.content[0].text, /Request status: PENDING/);
+  assert.match(result.content[0].text, /poll get-deployment until it answers 404/);
+  assert.doesNotMatch(result.content[0].text, /deleted successfully/);
+});
+
+test("delete-deployment still reads as requested when the service answers no body", async () => {
+  const handlers = registeredDeploymentTools({
+    deleteDeployment: async () => undefined,
+  });
+
+  const result = await handlers.get("delete-deployment")({
+    id: "deployment-1",
+    confirm: true,
+  });
+
+  assert.equal(result.isError, undefined);
+  assert.match(result.content[0].text, /Deletion of deployment deployment-1 requested\./);
+  assert.doesNotMatch(result.content[0].text, /Request ID/);
+  assert.doesNotMatch(result.content[0].text, /undefined/);
+});

@@ -611,7 +611,7 @@ export class VroClient {
     return this.deployments.getDeployment(id);
   }
 
-  deleteDeployment(id: string): Promise<void> {
+  deleteDeployment(id: string): Promise<DeploymentRequest | undefined> {
     return this.deployments.deleteDeployment(id);
   }
 

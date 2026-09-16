@@ -828,11 +828,11 @@ Use `list-catalog-items` to find the catalog item ID, `list-projects` to find th
 
 When an expected name is supplied but the live record carries none, the call refuses with a "cannot verify" message rather than reporting a mismatch against a missing value: a caller who asked for two-phase verification is never told the target was confirmed when it was not. A verification read that fails outright is reported as such, so it is never mistaken for a failed provision.
 
-On success the tool reports the deployment ID and name the service assigned. Provisioning is asynchronous, so poll `get-deployment` until the status is terminal — VCF Automation 9.1 moves `CREATE_INPROGRESS` → `CREATE_SUCCESSFUL` (note there is no underscore in `INPROGRESS`). If the service returns no identifier at all, the tool says so explicitly and names `list-deployments` with the project ID, rather than leaving the caller unsure whether anything was requested.
+On success the tool reports the deployment ID and name the service assigned. Provisioning is asynchronous, so poll `get-deployment` until the status is terminal — VCF Automation 9.1 and vRA 8.18 both move `CREATE_INPROGRESS` → `CREATE_SUCCESSFUL` (note there is no underscore in `INPROGRESS`). If the service returns no identifier at all, the tool says so explicitly and names `list-deployments` with the project ID, rather than leaving the caller unsure whether anything was requested.
 
 Use `get-catalog-item` to read the item's request schema before composing `inputs`; a required input the blueprint declares is rejected by the catalog service if it is missing or fails the schema's `pattern`.
 
-In `VCFA_TARGET_PLATFORM=vra8` mode the catalog-service request is unsupported and refused; any expected-field reads are GETs and are made first, so the refusal arrives after them.
+Verified live on both platforms: VCF Automation 9.1 (VCFO-074) and, in `VCFA_TARGET_PLATFORM=vra8` mode, vRA 8.18 (VCFO-088). Both answer the request with the same bare array of `{deploymentId, deploymentName}`; the vRA 8 lab's single-VM blueprint took about four minutes to reach `CREATE_SUCCESSFUL`.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
@@ -850,7 +850,7 @@ In `VCFA_TARGET_PLATFORM=vra8` mode the catalog-service request is unsupported a
 
 ### `delete-deployment`
 
-Delete a deployment by its ID. This is a destructive live operation.
+Delete a deployment by its ID. This is a destructive live operation, and an asynchronous one: the service answers with the `Deployment.Delete` request it queued, the deployment reads `DELETE_INPROGRESS` for a while (about 45 s on the vRA 8.18 lab) and then answers `404`. The tool therefore reports the deletion as *requested* — with the request ID and status when the service returns them — and names `get-deployment` (poll to `404`) and `list-deployments` (poll to absence) as the way to confirm it; a success line here is not evidence that the resources are gone. Verified live on VCF Automation 9.1 (VCFO-074) and on vRA 8.18 in `vra8` mode (VCFO-088).
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
@@ -865,7 +865,7 @@ Delete a deployment by its ID. This is a destructive live operation.
 
 ### `list-deployment-actions`
 
-List deployment-level day-2 actions available for a VCF Automation deployment.
+List deployment-level day-2 actions available for a VCF Automation deployment. Both platforms tested serve a bare array of action objects carrying `id`, `name`, `displayName`, `description`, `valid` and `actionType` — five actions on VCF Automation 9.1 (VCFO-074), ten on vRA 8.18 (VCFO-088) — and neither serves `inputParameters` or `inputs`, so the input hints below remain unobserved.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
@@ -876,6 +876,8 @@ List deployment-level day-2 actions available for a VCF Automation deployment.
 ### `run-deployment-action`
 
 Run a deployment-level day-2 action. Use `list-deployment-actions` first to find the action ID and any required inputs.
+
+On success the tool renders the `DeploymentRequest` the service queued — its ID, name, action ID, deployment ID, status and details — and says that the action runs asynchronously. The deployment's own status does **not** track a day-2 action: on vRA 8.18 a deployment read `CREATE_SUCCESSFUL` throughout a `Deployment.PowerOff` and a `Deployment.PowerOn`, while the request itself moved `PENDING` (or `INITIALIZATION`) → `INPROGRESS` → `SUCCESSFUL` in about 30 s. The server has no tool that reads a request back by ID, so confirm the outcome on the deployment's resources in the platform. Verified live on vRA 8.18 in `vra8` mode under VCFO-088 — the first day-2 submission on any platform; on VCF Automation 9.1 only the guard arms have been exercised (VCFO-074).
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |

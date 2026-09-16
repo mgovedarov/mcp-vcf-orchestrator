@@ -1477,16 +1477,13 @@ test("a 2xx session response without the token header names the status and conte
   );
 });
 
-// The vra8 support surface after the VCFO-068 (vRO 8.18.1) and VCFO-070 (vRA
-// 8.18 Automation services) lab verifications: every Automation-service read,
-// the whole vRO surface, and the blueprint-service and event-broker writes go
-// through; catalog-service and deployment-service writes and the single-
-// configuration artifact export do not. Each case below mirrors an operation
-// exercised against the lab.
-const CATALOG_WRITE_REFUSAL =
-  /Catalog item requests .* not supported .*vra8 mode pending lab verification/;
-const DEPLOYMENT_WRITE_REFUSAL =
-  /Deployment deletion and day-2 actions .* not supported .*vra8 mode pending lab verification/;
+// The vra8 support surface after the VCFO-068 (vRO 8.18.1), VCFO-070 (vRA
+// 8.18 Automation services) and VCFO-088 (vRA 8.18 catalog and deployment
+// writes) lab verifications: every Automation-service read, the whole vRO
+// surface, and the blueprint-service, event-broker, catalog-service and
+// deployment-service writes go through; only the single-configuration
+// artifact export does not. Each case below mirrors an operation exercised
+// against the lab.
 
 // Answers the vra8 logins and then every Automation-service read with one
 // empty Spring page, the envelope vRA 8 returns.
@@ -1737,30 +1734,77 @@ test("vra8 createSubscription returns the posted element when the read-back fail
   assert.equal(requests.filter((r) => r.method === "POST").length, 1);
 });
 
-test("vra8 platform rejects catalog-service and deployment-service writes", async () => {
+// Lifted under VCFO-088 after a live round on vRA 8.18: a catalog request, a
+// PowerOff and a PowerOn, and a deployment delete all answered 200 through the
+// real tool handlers. The stub answers both POSTs with a request-shaped
+// element and the DELETE with an empty 204, so an answered body and an empty
+// one are both covered.
+test("vra8 platform allows catalog-service and deployment-service writes", async () => {
+  const requests = [];
+  globalThis.fetch = vra8AutomationWriteStub(requests, {
+    id: "request-1",
+    actionId: "Deployment.PowerOff",
+    status: "PENDING",
+  });
   const client = new VroClient(vra8Config());
 
-  await assert.rejects(
-    () => client.deleteDeployment("deployment-1"),
-    DEPLOYMENT_WRITE_REFUSAL,
+  const requested = await client.createDeploymentFromCatalogItem({
+    catalogItemId: "item-1",
+    deploymentName: "Deployment",
+    projectId: "project-1",
+    version: "1",
+  });
+  assert.equal(requested.id, "request-1");
+  const action = await client.runDeploymentAction({
+    deploymentId: "deployment-1",
+    actionId: "Deployment.PowerOff",
+  });
+  assert.equal(action.status, "PENDING");
+  // An empty 204 must read as "no request came back", not as an empty one.
+  assert.equal(await client.deleteDeployment("deployment-1"), undefined);
+
+  assert.ok(
+    requests.every((r) => !r.url.includes("/vco/api")),
+    "no Automation write should reach /vco/api",
   );
-  await assert.rejects(
-    () =>
-      client.runDeploymentAction({
-        deploymentId: "deployment-1",
-        actionId: "action-1",
-      }),
-    DEPLOYMENT_WRITE_REFUSAL,
+  const writes = requests.filter((r) => r.method !== "GET");
+  assert.deepEqual(
+    writes.map((r) => `${r.method} ${new URL(r.url).pathname}`),
+    [
+      "POST /catalog/api/items/item-1/request",
+      "POST /deployment/api/deployments/deployment-1/requests",
+      "DELETE /deployment/api/deployments/deployment-1",
+    ],
   );
-  await assert.rejects(
-    () =>
-      client.createDeploymentFromCatalogItem({
-        catalogItemId: "item-1",
-        deploymentName: "Deployment",
-        projectId: "project-1",
-      }),
-    CATALOG_WRITE_REFUSAL,
-  );
+  assert.deepEqual(writes[0].body, {
+    deploymentName: "Deployment",
+    projectId: "project-1",
+    version: "1",
+  });
+});
+
+// DELETE /deployments/{id} answers 200 with the Deployment.Delete request it
+// queued (VCFO-088), and that body is what lets delete-deployment report a
+// request id rather than a completed deletion.
+test("deleteDeployment hands back the request the service answers with", async () => {
+  const login = vra8LoginStub();
+  globalThis.fetch = async (url, init = {}) => {
+    const fromLogin = login(url);
+    if (fromLogin) return fromLogin;
+    assert.equal(init.method, "DELETE");
+    return Response.json({
+      id: "request-2",
+      actionId: "Deployment.Delete",
+      status: "PENDING",
+    });
+  };
+  const client = new VroClient(vra8Config());
+
+  assert.deepEqual(await client.deleteDeployment("deployment-1"), {
+    id: "request-2",
+    actionId: "Deployment.Delete",
+    status: "PENDING",
+  });
 });
 
 test("vra8 platform allows vRO writes", async () => {

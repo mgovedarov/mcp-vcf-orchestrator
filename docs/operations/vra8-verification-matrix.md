@@ -5,7 +5,8 @@ Per-tool status of `VCFA_TARGET_PLATFORM=vra8`, from the full-surface live sweep
 **Environment:** vRA 8.18 / vRO 8.18.1, provider user in the `System Domain` vIDM domain, 2026-09-11.
 **Inventory:** 565 workflows, 613 actions, 134 workflow categories, 2 configuration categories, 27 resource
 categories, 2 configuration elements, 11 resource elements, 25 packages, 22 plugins, 70 event topics,
-68 subscriptions, 1 project, 1 blueprint, **0 catalog items, 0 deployments**.
+68 subscriptions, 1 project, 1 blueprint, **0 catalog items, 0 deployments** — until 2026-09-16, when the lab
+gained one released catalog item and one deployment; see the [VCFO-088 section](#catalog-and-deployment-writes-2026-09-16-vcfo-088) below.
 
 All 78 registered tools were invoked through the real MCP tool handlers over stdio (277 captured calls).
 The environment was returned to its exact starting counts afterwards.
@@ -128,14 +129,93 @@ containing the word "undefined" and validation errors from deliberately malforme
 | `create-subscription` | Verified | Client-generated UUID, `Location`-header re-read, created disabled and non-blocking. |
 | `update-subscription` | Verified | The POST upsert preserves `type`, `broadcast`, `system`, `contextual`, `subscriberId`, `ownerId`, `orgId`, topic and runnable. |
 | `delete-subscription` | Verified | Guard mismatch refuses. |
-| `list-catalog-items` | **Unverifiable here** | Endpoint and envelope answer; the lab has no catalog items, so the item shape is unconfirmed. |
-| `get-catalog-item` | **Unverifiable here** | Only the 404 path exercised. |
-| `list-deployments` | **Unverifiable here** | Same as catalog items. |
-| `get-deployment` | **Unverifiable here** | Only the 404 path exercised. |
-| `list-deployment-actions` | **Unverifiable here** | Only the 404 path exercised. |
-| `create-deployment` | Expected refusal | Catalog-service writes withheld pending released catalog content. |
-| `delete-deployment` | Expected refusal | Deployment-service writes withheld pending an existing deployment. |
-| `run-deployment-action` | Expected refusal | As above. |
+| `list-catalog-items` | Verified under VCFO-088 | Unverifiable in this sweep (empty catalog); the released `ubunutu` item was listed and read on 2026-09-16 — see the VCFO-088 section below. |
+| `get-catalog-item` | Verified under VCFO-088 | Only the 404 path here; the item, its `type` and its (empty) request schema rendered in the VCFO-088 round. |
+| `list-deployments` | Verified under VCFO-088 | Bare and `projectId`-scoped, with one, two and again one deployment present. |
+| `get-deployment` | Verified under VCFO-088 | Renders name, status, the project name resolved through the project service, catalog item and blueprint versions. |
+| `list-deployment-actions` | Verified under VCFO-088 | Ten deployment-level actions, bare-array arm. |
+| `create-deployment` | Verified under VCFO-088 | Refused in this sweep by design; lifted after the 2026-09-16 round provisioned through the real handler. |
+| `delete-deployment` | Verified under VCFO-088, defect found and fixed | Refused in this sweep by design; lifted after the 2026-09-16 round. The success text overstated completion — see below. |
+| `run-deployment-action` | Verified under VCFO-088 | Refused in this sweep by design; lifted after `PowerOff` and `PowerOn` were submitted through the real handler — the first day-2 action on any platform. |
+
+## Catalog and deployment writes — 2026-09-16 (VCFO-088)
+
+The rows above were measured on a lab with an empty catalog. This section is a separate round on the
+same appliance, same user, once the lab held **one released catalog item** (`ubunutu`, a blueprint-backed
+`com.vmw.blueprint` with a single version and an empty request schema) and **one pre-existing deployment**
+belonging to the environment's owner, which was read but never acted on. It is what lifted the
+`catalog` and `deployment` entries of the `vra8` write guard.
+
+**Method.** Two passes, per [VCFO-088](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/196):
+
+- **Pass A, guards in place.** A throwaway stdio client drove the real handlers to capture every
+  `confirm: false` refusal, every `expected*` mismatch arm and the three `vra8` refusals themselves; a
+  raw-HTTP probe — the server's own `VroHttpClient.authenticatedFetch`, which bypasses the guard that lives
+  in `send` — then performed the same writes and dumped **response keys only** (never a token or a body).
+- **Pass B, guards lifted.** The rebuilt server was driven end to end through the real handlers with
+  `confirm: true`: `create-deployment` with both target guards → `get-deployment` polled to
+  `CREATE_SUCCESSFUL` → `list-deployment-actions` → `run-deployment-action` `PowerOff` then `PowerOn`,
+  each with all five `expected*` guards → `delete-deployment` with all four → polled to `404`.
+
+Two disposable deployments (`zz-vcfo088-1`, `zz-vcfo088-2`) were created, one per pass, and each removal
+was confirmed by `get-deployment` answering `404` **and** by `list-deployments` (bare and
+`projectId`-scoped) showing the environment's exact starting count of one.
+
+| Tool | Status | Evidence |
+| --- | --- | --- |
+| `list-catalog-items` / `get-catalog-item` | Verified | One released item; `type` renders as `VMware Aria Automation Templates`; the empty schema renders no `Request inputs` block and the absent `isRequestable` no `Requestable:` line. |
+| `list-deployments` / `get-deployment` | Verified | Both renderers print real names; the project name resolves through the project service exactly as on 9.1 (no `projectName` on the wire). |
+| `list-deployment-actions` | Verified | Bare array of ten actions: `ChangeLease`, `ChangeOwner`, `ChangeProject`, `Delete`, `EditDeployment`, `EditTags`, `PowerOff`, `PowerOn`, `RebuildVMs`, `Update`. No `inputParameters` or `inputs` on any of them. |
+| `create-deployment` | Verified | `confirm: false` refuses before any HTTP. Wrong `expectedCatalogItemName` and wrong `expectedProjectName` each refuse after their read. With matching guards the request answered `200` and the tool printed the deployment ID and name (pass B). |
+| `run-deployment-action` | Verified | Wrong `expectedActionName`, wrong `expectedStatus` and wrong `expectedProjectName` each refuse after their read. `PowerOff` and `PowerOn` both submitted with all five guards; each answered a `PENDING` request that reached `SUCCESSFUL` in about 30 s. |
+| `delete-deployment` | Verified, defect found and fixed | Wrong `expectedName` refuses. With all four guards the delete answered `200` with the queued `Deployment.Delete` request; the deployment read `DELETE_INPROGRESS` for 46–51 s and then `404`. |
+
+### Observed wire shapes
+
+Every shape matches VCF Automation 9.1 (VCFO-074) unless noted.
+
+- `GET /catalog/api/items` — Spring page (`content`, `totalElements`, `totalPages`, `last`, `first`,
+  `number`, `size`, `numberOfElements`, `pageable`, `sort`, `empty`). **`size` came back `20` for a
+  request of `size=100`**: the catalog service caps the page. The pager stops on `last`/`totalPages`, so
+  a larger catalog would be traversed page by page; only one page has been observed here.
+- `GET /catalog/api/items/{id}` — `bulkRequestLimit` (`1`), `createdAt`, `createdBy`, `description`,
+  `externalId`, `iconId`, `id`, `lastUpdatedAt`, `lastUpdatedBy`, `name`, `projectIds`, `schema`, `type`.
+  **Serves neither `isRequestable`, `sourceProjectId` nor `global`**, all three of which 9.1 serves.
+  `schema.properties` and `schema.required` were both empty for this blueprint.
+- `POST /catalog/api/items/{id}/request` — `200`, a **bare array** of `{deploymentId, deploymentName}`.
+  Identical to 9.1, which settles the shape question left open on the issue.
+- `GET /deployment/api/deployments/{id}` — the same nineteen keys as 9.1, `description` present only once
+  set (the request's `reason`), **no `projectName`**. Status: `CREATE_INPROGRESS` for about four minutes
+  (244 s and 224 s) → `CREATE_SUCCESSFUL`; after a delete, `DELETE_INPROGRESS` → `404` with body
+  `{"message":"No value present","statusCode":404}`. **A day-2 action does not move it**: the deployment
+  read `CREATE_SUCCESSFUL` throughout both power actions.
+- `GET /deployment/api/deployments/{id}/actions` — bare array; elements carry exactly `actionType`
+  (`RESOURCE_ACTION`), `description`, `displayName`, `id`, `name`, `valid`.
+- `POST /deployment/api/deployments/{id}/requests` — `200`, a `DeploymentRequest`: `id`, `name` (`Power
+  Off` / `Power On`), `actionId`, `deploymentId`, `requestedBy`, `status`, `details`, `createdAt`,
+  `updatedAt`, `totalTasks`, `completedTasks`, `resourceIds`, `cancelable`. Read back at
+  `GET /deployment/api/requests/{id}`, `approvedAt` appears once started and `cancelable` disappears once
+  finished. Status vocabulary: `PENDING` or `INITIALIZATION` at submission → `INPROGRESS` → `SUCCESSFUL`,
+  4 tasks, about 30 s.
+- `DELETE /deployment/api/deployments/{id}` — **`200` with a `DeploymentRequest` body** (`actionId:
+  Deployment.Delete`, `status: PENDING`, two `resourceIds`), not an empty `204`. The client had discarded
+  it.
+
+### Defect found and fixed in this round
+
+- **`delete-deployment` reported `deleted successfully` for a deletion that had only been queued.** The
+  service answers with a `PENDING` request and the deployment remains, as `DELETE_INPROGRESS`, for close
+  to a minute. `deleteDeployment` now returns that request and the tool reports the deletion as
+  *requested*, with the request ID and status, and names `get-deployment` (to `404`) and
+  `list-deployments` (to absence) as the confirmation. `run-deployment-action`'s success text now says the
+  action is asynchronous and that `get-deployment`'s status does not track it.
+
+### Not exercised here
+
+- `inputs` on `create-deployment` and on `run-deployment-action`: the blueprint declares none and no
+  action serves an input description. A catalog item with inputs is what would settle both.
+- A catalog of more than 20 items, which is where the page cap above would matter.
+- A failed provision (`CREATE_FAILED`) and the delete of one.
 
 ## Settled by this run
 
@@ -153,15 +233,14 @@ containing the word "undefined" and validation errors from deliberately malforme
 
 ## Still open
 
-`import-configuration-file` and the catalog/deployment item shapes and writes need an environment this lab
-cannot provide — a 9.x environment that can export a `.vsoconf`, and a vRA 8 environment with released
-catalog content and a live deployment. See [VCFO-074](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/170).
+`import-configuration-file` needs a genuine `.vsoconf` container, which no environment tested can produce.
+See [VCFO-074](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/170). The catalog and deployment
+items are no longer open on this platform: the VCFO-088 round above settled their shapes and the three
+writes here, and VCFO-074 had already settled the shapes on VCFA 9.1, where deployments have also been
+provisioned and destroyed. What VCFO-088 left unexercised is listed at the end of its section.
 
-VCFO-074 has since narrowed two of these against a VCFA 9.1 lab, without changing any row above:
+Earlier narrowing by VCFO-074 against a VCFA 9.1 lab, kept for the record:
 
-- **The catalog item shape is confirmed on 9.1**, where a released item renders correctly, but not on vRA 8.
-  No deployment exists on either lab, so the deployment item shape is still assumed. Both renderers now
-  fall back to `(unnamed)`, so a mismatch would be visible rather than silent.
 - **A 9.x `.vsoconf` export is not the way out after all.** vRO 9.1 answers the artifact request with
   `406` exactly as vRA 8 does — every artifact `Accept` refused, `*/*` returning JSON — on a standalone
   appliance and on an appliance-embedded orchestrator alike, while workflow, action and package exports

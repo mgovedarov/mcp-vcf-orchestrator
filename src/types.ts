@@ -422,18 +422,18 @@ export interface CatalogItem {
   id: string;
   /**
    * Optional for the same reason `Subscription.name` is (VCFO-070): a renderer
-   * must not interpolate it unguarded. A released blueprint-backed item on
-   * VCFA 9.1 does carry one, but the vRA 8 shape has never been observed --
-   * both labs that verified `vra8` mode had an empty catalog (VCFO-074).
+   * must not interpolate it unguarded. A released blueprint-backed item carries
+   * one on VCFA 9.1 (VCFO-074) and on vRA 8.18 (VCFO-088) alike, so the guard
+   * is provision for shapes not yet seen rather than a fix for a known gap.
    */
   name?: string;
   description?: string;
   type?: CatalogItemType;
   /**
-   * Neither field is served for a blueprint-backed item on VCFA 9.1, which
-   * identifies its origin through `type.id` (`com.vmw.blueprint`) and a
-   * `sourceProjectId` this interface does not model. They are kept because a
-   * content-source-backed item may still carry them (VCFO-074).
+   * Neither field is served for a blueprint-backed item on VCFA 9.1 or on
+   * vRA 8.18, both of which identify its origin through `type.id`
+   * (`com.vmw.blueprint`) (VCFO-074, VCFO-088). They are kept because a
+   * content-source-backed item may still carry them.
    */
   sourceType?: string;
   sourceName?: string;
@@ -441,7 +441,8 @@ export interface CatalogItem {
   projectIds?: string[];
   /**
    * The project the item's source lives in, served by a blueprint-backed item
-   * on VCFA 9.1 alongside `projectIds` (VCFO-074).
+   * on VCFA 9.1 alongside `projectIds` (VCFO-074). Not served by vRA 8.18,
+   * which carries `projectIds` only (VCFO-088).
    */
   sourceProjectId?: string;
   iconId?: string;
@@ -453,15 +454,25 @@ export interface CatalogItem {
   /**
    * The request schema: what `create-deployment` must be given as `inputs`.
    * Observed on VCFA 9.1 as a JSON-Schema-shaped object with `properties` and
-   * `required` (VCFO-074). Without it an agent cannot discover the item's
-   * inputs through the tool surface and would have to guess them.
+   * `required` (VCFO-074), and on vRA 8.18 in the same shape -- with both
+   * empty for a blueprint that declares no inputs (VCFO-088). Without it an
+   * agent cannot discover the item's inputs through the tool surface and would
+   * have to guess them.
    */
   schema?: CatalogItemSchema;
-  /** 0 on a 9.1 blueprint-backed item, meaning bulk requests are not offered. */
+  /**
+   * 0 on a 9.1 blueprint-backed item, meaning bulk requests are not offered;
+   * 1 on the vRA 8.18 item (VCFO-088).
+   */
   bulkRequestLimit?: number;
   /** `/blueprint/api/blueprints/<id>` for a blueprint-backed item on 9.1. */
   externalId?: string;
+  /** Served by VCFA 9.1; absent from the vRA 8.18 item (VCFO-088). */
   global?: boolean;
+  /**
+   * Served by VCFA 9.1; absent from the vRA 8.18 item, so `get-catalog-item`
+   * prints no `Requestable:` line there (VCFO-088).
+   */
   isRequestable?: boolean;
 }
 
@@ -517,20 +528,27 @@ export interface Deployment {
    * contract, and the renderers must not interpolate it unguarded.
    */
   name?: string;
-  /** Served on 9.1 only when set -- the create request's `reason` becomes it. */
+  /**
+   * Served on 9.1 and vRA 8.18 only when set -- the create request's `reason`
+   * becomes it.
+   */
   description?: string;
   /**
-   * Observed values on VCFA 9.1: `CREATE_INPROGRESS`, `CREATE_SUCCESSFUL`,
-   * `DELETE_INPROGRESS`. Note `INPROGRESS` carries no underscore, so do not
-   * match on `IN_PROGRESS`. The full vocabulary is wider than what one round
-   * exercised (VCFO-074).
+   * Observed values on VCFA 9.1 and vRA 8.18 alike: `CREATE_INPROGRESS`,
+   * `CREATE_SUCCESSFUL`, `DELETE_INPROGRESS`, then 404. Note `INPROGRESS`
+   * carries no underscore, so do not match on `IN_PROGRESS`. A day-2 action
+   * does not move it: a deployment read `CREATE_SUCCESSFUL` throughout a
+   * PowerOff and a PowerOn on vRA 8.18, so an action's progress lives on its
+   * `DeploymentRequest`, not here (VCFO-074, VCFO-088). The full vocabulary is
+   * wider than what these rounds exercised.
    */
   status?: string;
   projectId?: string;
   /**
-   * NOT served by VCFA 9.1, which carries only `projectId` (VCFO-074). Guards
-   * comparing an expected project name against this field directly refuse
-   * every call; resolve the name through the project service instead.
+   * NOT served by VCFA 9.1 or vRA 8.18, both of which carry only `projectId`
+   * (VCFO-074, VCFO-088). Guards comparing an expected project name against
+   * this field directly refuse every call; resolve the name through the
+   * project service instead.
    */
   projectName?: string;
   catalogItemId?: string;
@@ -555,10 +573,11 @@ export interface Deployment {
 /**
  * One element of the response to `POST /catalog/api/items/{id}/request`.
  *
- * The route answers a **bare array** of these on VCFA 9.1, NOT a `Deployment`:
- * the observed element carries exactly `deploymentId` and `deploymentName` and
- * neither `id`, `name` nor `status` (VCFO-074). Typing the response as a
- * `Deployment` made `create-deployment` print no identifiers at all.
+ * The route answers a **bare array** of these on VCFA 9.1 (VCFO-074) and on
+ * vRA 8.18 (VCFO-088) alike, NOT a `Deployment`: the observed element carries
+ * exactly `deploymentId` and `deploymentName` and neither `id`, `name` nor
+ * `status`. Typing the response as a `Deployment` made `create-deployment`
+ * print no identifiers at all.
  *
  * The `id`/`name` aliases are kept because a platform that answers with a
  * single request object is still plausible, and `normalizeCatalogItemRequest`
@@ -573,7 +592,7 @@ export interface CatalogItemRequestEntry {
   [key: string]: unknown;
 }
 
-/** Either arm: a bare array (observed on 9.1) or a single object. */
+/** Either arm: a bare array (observed on 9.1 and vRA 8.18) or a single object. */
 export type CatalogItemRequestResponse =
   | CatalogItemRequestEntry[]
   | CatalogItemRequestEntry;
@@ -602,10 +621,11 @@ export interface DeploymentAction {
   displayName?: string;
   description?: string;
   /**
-   * None of these three was served by VCFA 9.1, whose action objects carry only
-   * `id`, `name`, `displayName`, `description`, `valid` and `actionType`
-   * (VCFO-074). So the three-way input handling below remains unobserved
-   * everywhere and must not be assumed correct.
+   * None of these three was served by VCFA 9.1 (VCFO-074) or by vRA 8.18
+   * (VCFO-088): both serve action objects carrying exactly `id`, `name`,
+   * `displayName`, `description`, `valid` and `actionType`, in a bare array.
+   * So the three-way input handling below remains unobserved everywhere and
+   * must not be assumed correct.
    */
   inputParameters?: DeploymentActionInput[];
   inputs?: DeploymentActionInput[] | Record<string, unknown>;
@@ -632,6 +652,17 @@ export interface DeploymentActionRequestParams {
   inputs?: Record<string, unknown>;
 }
 
+/**
+ * The request a deployment-service write queues: what `POST
+ * /deployments/{id}/requests` and `DELETE /deployments/{id}` both answer 200
+ * with on vRA 8.18 (VCFO-088). Observed keys: `id`, `name` (the action's
+ * display name, e.g. `Power Off`), `actionId`, `deploymentId`, `requestedBy`,
+ * `status`, `details`, `createdAt`, `updatedAt`, `totalTasks`,
+ * `completedTasks`, `resourceIds`, `cancelable` while it can still be
+ * cancelled, and `approvedAt` once it has started. Status vocabulary observed:
+ * `PENDING` or `INITIALIZATION` at submission, `INPROGRESS`, `SUCCESSFUL`.
+ * The server exposes no tool that reads a request back by id.
+ */
 export interface DeploymentRequest {
   id?: string;
   actionId?: string;
@@ -643,6 +674,8 @@ export interface DeploymentRequest {
   createdAt?: string;
   updatedAt?: string;
   completedAt?: string;
+  approvedAt?: string;
+  cancelable?: boolean;
   totalTasks?: number;
   completedTasks?: number;
   inputs?: Record<string, unknown>;

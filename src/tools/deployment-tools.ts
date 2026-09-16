@@ -212,6 +212,11 @@ export function formatDeploymentRequest(request: DeploymentRequest): string {
   if (request.deploymentId) text += `Deployment ID: ${request.deploymentId}\n`;
   if (request.status) text += `Status: ${request.status}\n`;
   if (request.details) text += `Details: ${request.details}\n`;
+  // The deployment's own status does not track a day-2 action -- it read
+  // CREATE_SUCCESSFUL throughout a PowerOff and a PowerOn on vRA 8.18
+  // (VCFO-088) -- and the server has no tool that reads a request by id, so
+  // say where the outcome can and cannot be observed.
+  text += `The action runs asynchronously, and get-deployment's status does not track it; confirm the outcome on the deployment's resources in the platform.\n`;
   return text;
 }
 
@@ -572,7 +577,7 @@ export function registerDeploymentTools(
     {
       title: "Delete Deployment",
       description:
-        "Delete a deployment by its ID. Set confirm to true to proceed.",
+        "Delete a deployment by its ID. This destroys the deployment's resources and is asynchronous: the service queues a Deployment.Delete request and the deployment reads DELETE_INPROGRESS until it answers 404, so verify with get-deployment or list-deployments afterwards. Set confirm to true to proceed.",
       inputSchema: z.object({
         id: z.string().describe("The deployment ID to delete"),
         expectedName: z
@@ -664,12 +669,14 @@ export function registerDeploymentTools(
           if (projectGuard) return projectGuard;
         }
 
-        await client.deleteDeployment(id);
-        return {
-          content: [
-            { type: "text", text: `Deployment ${id} deleted successfully.` },
-          ],
-        };
+        const request = await client.deleteDeployment(id);
+        // A 2xx here means the delete was queued, not done: the deployment
+        // reads DELETE_INPROGRESS for a while and then 404 (VCFO-088).
+        let text = `Deletion of deployment ${id} requested.\n`;
+        if (request?.id) text += `Request ID: ${request.id}\n`;
+        if (request?.status) text += `Request status: ${request.status}\n`;
+        text += `Deletion is asynchronous: poll get-deployment until it answers 404, or list-deployments until the deployment is absent.\n`;
+        return { content: [{ type: "text", text }] };
       } catch (error) {
         return {
           content: [
@@ -689,7 +696,7 @@ export function registerDeploymentTools(
     {
       title: "Create Deployment",
       description:
-        "Create a new deployment from a catalog item. This provisions real infrastructure. Use list-catalog-items to find the catalog item ID, list-projects to find the project ID, and list-deployments to verify afterwards. Both IDs are opaque, so pass expectedCatalogItemName and expectedProjectName to bind the request to the target you discovered: each is verified against live metadata first, and a mismatch refuses before anything is provisioned. In VCFA_TARGET_PLATFORM=vra8 mode the catalog-service request is unsupported and refused, but any expected-field reads are made first, so the refusal arrives after them.",
+        "Create a new deployment from a catalog item. This provisions real infrastructure. Use list-catalog-items to find the catalog item ID, list-projects to find the project ID, and list-deployments to verify afterwards. Both IDs are opaque, so pass expectedCatalogItemName and expectedProjectName to bind the request to the target you discovered: each is verified against live metadata first, and a mismatch refuses before anything is provisioned.",
       inputSchema: z.object({
         catalogItemId: z.string().describe("The catalog item ID to deploy"),
         deploymentName: z.string().describe("Name for the new deployment"),
