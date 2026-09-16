@@ -12,6 +12,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { registerVcfaPrompts } from "../dist/prompts/index.js";
 import { registerVcfaResources } from "../dist/resources/index.js";
+import { registerActionTools } from "../dist/tools/action-tools.js";
 
 function registeredResources(client, serverOverrides = {}) {
   const resources = new Map();
@@ -158,6 +159,138 @@ test("the deployment resource withholds credential-looking inputs", async () => 
   assert.equal(parsed.inputs.hostname, "alpine1");
   assert.equal(parsed.inputs.sshConfig.user, "root");
   assert.equal(parsed.projectId, "project-1");
+});
+
+test("the action resource summarizes the script instead of serving it", async () => {
+  const script = "var creds = 'hunter2-should-never-render';";
+  const resources = registeredResources({
+    getAction: async (id) => ({ id, name: "getVmIp", module: "com.example.actions", script }),
+  });
+
+  const action = await resources.get("vcfa-action").handler(
+    new URL("vcfa://actions/com.example.actions.getVmIp"),
+    { id: "com.example.actions.getVmIp" },
+  );
+  const text = action.contents[0].text;
+
+  // get-action hides the script behind includeScript because it "may embed
+  // credentials"; without this the gate was one URI read away from being
+  // bypassed (VCFO-092).
+  assert.doesNotMatch(text, /hunter2/);
+  const parsed = JSON.parse(text);
+  assert.equal(parsed.script.included, false);
+  assert.match(parsed.script.sha256, /^[0-9a-f]{64}$/);
+  assert.equal(parsed.script.length, script.length);
+  // The metadata a caller actually reads this resource for survives.
+  assert.equal(parsed.name, "getVmIp");
+  assert.equal(parsed.module, "com.example.actions");
+});
+
+test("the action resource and get-action agree on the script digest", async () => {
+  const script = "var creds = 'hunter2-should-never-render';";
+  const client = {
+    getAction: async (id) => ({ id, name: "getVmIp", module: "com.example.actions", script }),
+  };
+
+  const resources = registeredResources(client);
+  const fromResource = JSON.parse(
+    (
+      await resources.get("vcfa-action").handler(
+        new URL("vcfa://actions/a-1"),
+        { id: "a-1" },
+      )
+    ).contents[0].text,
+  ).script;
+
+  const handlers = new Map();
+  registerActionTools(
+    { registerTool: (name, _config, handler) => handlers.set(name, handler) },
+    client,
+  );
+  const fromTool = (await handlers.get("get-action")({ id: "a-1" })).content[0].text;
+
+  // Both surfaces reduce the same content, so a caller comparing one against
+  // the other must see the same digest and length. If these ever diverge, one
+  // of the two stopped hashing what it claims to.
+  assert.match(fromTool, new RegExp(`sha256: ${fromResource.sha256}`));
+  assert.match(fromTool, new RegExp(`length: ${fromResource.length} chars`));
+});
+
+test("the subscription resource summarizes constraints", async () => {
+  const constraints = { projectId: "p-1", secretThing: "must-not-render" };
+  const resources = registeredResources({
+    getSubscription: async (id) => ({ id, name: "sub1", eventTopicId: "compute.allocation.pre", constraints }),
+  });
+
+  const subscription = await resources.get("vcfa-subscription").handler(
+    new URL("vcfa://subscriptions/subscription-1"),
+    { id: "subscription-1" },
+  );
+  const text = subscription.contents[0].text;
+
+  assert.doesNotMatch(text, /must-not-render/);
+  const parsed = JSON.parse(text);
+  assert.equal(parsed.constraints.included, false);
+  assert.match(parsed.constraints.sha256, /^[0-9a-f]{64}$/);
+  assert.equal(parsed.eventTopicId, "compute.allocation.pre");
+});
+
+test("the configuration resource withholds server-declared secure values", async () => {
+  const resources = registeredResources({
+    getConfiguration: async (id) => ({
+      id,
+      name: "cfg1",
+      attributes: [
+        { name: "plain", type: "string", value: { string: { value: "visible" } } },
+        { name: "pw", type: "SecureString", value: { string: { value: "secure-must-not-render" } } },
+        { name: "sneaky", type: "Any", value: { "secure-string": { value: "envelope-must-not-render" } } },
+      ],
+    }),
+  });
+
+  const configuration = await resources.get("vcfa-configuration").handler(
+    new URL("vcfa://configurations/config-1"),
+    { id: "config-1" },
+  );
+  const text = configuration.contents[0].text;
+
+  assert.doesNotMatch(text, /must-not-render/);
+  const parsed = JSON.parse(text);
+  assert.equal(parsed.attributes[1].value, "[redacted]");
+  // Declared permissively, returned in a secure envelope -- the case a
+  // type-only check would miss, which is why get-configuration checks both.
+  assert.equal(parsed.attributes[2].value, "[redacted]");
+  // Unlike the context snapshot, a plain value is still served.
+  assert.deepEqual(parsed.attributes[0].value, { string: { value: "visible" } });
+});
+
+test("resources whose tools withhold nothing stay faithful", async () => {
+  const resources = registeredResources({
+    getWorkflow: async (id) => ({
+      id,
+      name: "Provision VM",
+      "input-parameters": [{ name: "hostname", type: "string" }],
+    }),
+    getResourceElement: async (id) => ({ id, name: "logo.png", mimeType: "image/png" }),
+    getPackage: async (name) => ({ name, version: "1.0.0", actions: [{ name: "a" }] }),
+  });
+
+  const workflow = JSON.parse(
+    (await resources.get("vcfa-workflow").handler(new URL("vcfa://workflows/w-1"), { id: "w-1" })).contents[0].text,
+  );
+  const element = JSON.parse(
+    (await resources.get("vcfa-resource-element").handler(new URL("vcfa://resource-elements/r-1"), { id: "r-1" })).contents[0].text,
+  );
+  const pkg = JSON.parse(
+    (await resources.get("vcfa-package").handler(new URL("vcfa://packages/p"), { name: "p" })).contents[0].text,
+  );
+
+  // These three have no tool-side gate to mirror, so they serialize the record
+  // as served. Package content listings are metadata get-package omits for
+  // brevity, and brevity is not secrecy (VCFO-092).
+  assert.deepEqual(workflow["input-parameters"], [{ name: "hostname", type: "string" }]);
+  assert.equal(element.mimeType, "image/png");
+  assert.deepEqual(pkg.actions, [{ name: "a" }]);
 });
 
 test("context snapshot resources list and read persisted files", async () => {

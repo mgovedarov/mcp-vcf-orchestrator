@@ -1,3 +1,6 @@
+import { isSecureAttributeType } from "./client/configuration-client.js";
+import { vroValueEnvelopeKeys } from "./client/parameters.js";
+
 /**
  * Withhold values that read as credential material from a free-form key/value
  * map.
@@ -79,5 +82,28 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
     value !== null &&
     (Object.getPrototypeOf(value) === Object.prototype ||
       Object.getPrototypeOf(value) === null)
+  );
+}
+
+/**
+ * True when a vRO attribute holds a value the server declares secure.
+ *
+ * Redact by the declared type, and also by the type key vRO wrapped the value
+ * in -- an attribute declared as something permissive can still come back in a
+ * `secure-string` envelope, and the repo never prints a secret it can
+ * recognize.
+ *
+ * Note this is a different class of signal from the key-name heuristic above,
+ * and a stronger one: the type is supplied by the service rather than guessed
+ * from a name. Prefer it wherever a declared type exists, and fall back to the
+ * name only for the untyped free-form maps that have no such signal.
+ */
+export function isSecureAttributeValue(
+  type: string | undefined,
+  value: unknown,
+): boolean {
+  return (
+    isSecureAttributeType(type) ||
+    vroValueEnvelopeKeys(value).some(isSecureAttributeType)
   );
 }

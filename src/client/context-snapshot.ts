@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { basename, isAbsolute } from "node:path";
 import type {
@@ -17,6 +16,7 @@ import type {
   Workflow,
 } from "../types.js";
 import { getExistingFile, resolveFileInDirectory } from "./files.js";
+import { contentMetadata } from "../content-metadata.js";
 
 const CORE_DOMAINS = [
   "workflows",
@@ -697,9 +697,11 @@ function summarizeEventTopic(topic: EventTopic) {
     name: topic.name,
     description: topic.description,
     blockable: topic.blockable,
-    schema: topic.schema
-      ? { included: false, sha256: hash(JSON.stringify(topic.schema)), length: JSON.stringify(topic.schema).length }
-      : undefined,
+    // Same reduction as every other bulky field; this used to be an inline
+    // copy of it, which is how it drifted from carrying the shared shape.
+    schema: contentMetadata(
+      topic.schema ? JSON.stringify(topic.schema) : undefined,
+    ),
   });
 }
 
@@ -756,15 +758,6 @@ function summarizeParameters(parameters?: VroParameter[]) {
       description: parameter.description,
     }),
   );
-}
-
-function contentMetadata(content?: string) {
-  if (content === undefined) return undefined;
-  return {
-    included: false,
-    sha256: hash(content),
-    length: content.length,
-  };
 }
 
 function renderMarkdown(snapshot: ContextSnapshot): string {
@@ -977,10 +970,6 @@ function dropUndefined<T extends Record<string, unknown>>(value: T): T {
   return Object.fromEntries(
     Object.entries(value).filter(([, item]) => item !== undefined),
   ) as T;
-}
-
-function hash(value: string): string {
-  return createHash("sha256").update(value).digest("hex");
 }
 
 function title(value: string): string {
