@@ -5298,6 +5298,37 @@ test("listDeploymentActions calls deployment actions endpoint", async () => {
   ]);
 });
 
+test("getDeploymentRequest calls the global deployment request endpoint", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return Response.json({
+      id: "request 1/2",
+      deploymentId: "deployment-1",
+      status: "INPROGRESS",
+      completedTasks: 2,
+      totalTasks: 4,
+    });
+  };
+
+  const client = new VroClient(config());
+  const request = await client.getDeploymentRequest("request 1/2");
+
+  assert.equal(
+    calls[1].url,
+    "https://vcfa.example.test/deployment/api/requests/request%201%2F2",
+  );
+  assert.equal(calls[1].init.method, "GET");
+  assert.deepEqual(request, {
+    id: "request 1/2",
+    deploymentId: "deployment-1",
+    status: "INPROGRESS",
+    completedTasks: 2,
+    totalTasks: 4,
+  });
+});
+
 test("runDeploymentAction posts action request with optional fields", async () => {
   const calls = [];
   globalThis.fetch = async (url, init) => {

@@ -16,6 +16,17 @@ function registeredDeploymentTools(client) {
   return handlers;
 }
 
+function registeredDeploymentToolConfigs(client = {}) {
+  const configs = new Map();
+  const server = {
+    registerTool(name, config, handler) {
+      configs.set(name, { ...config, handler });
+    },
+  };
+  registerDeploymentTools(server, client);
+  return configs;
+}
+
 test("list-deployment-actions reports empty action lists", async () => {
   const handlers = registeredDeploymentTools({
     listDeploymentActions: async () => ({ content: [], totalElements: 0 }),
@@ -122,6 +133,71 @@ test("deployment tools list, get, create, and delete with confirmation", async (
     confirm: true,
   });
   assert.equal(deletedId, "deployment-1");
+});
+
+test("get-deployment-request is read-only and renders observed progress fields", async () => {
+  let receivedId;
+  const config = registeredDeploymentToolConfigs({
+    getDeploymentRequest: async (requestId) => {
+      receivedId = requestId;
+      return {
+        id: requestId,
+        name: "Power Off",
+        actionId: "Deployment.PowerOff",
+        deploymentId: "deployment-1",
+        requestedBy: "operator@example.test",
+        status: "INPROGRESS",
+        details: "Powering off resources",
+        completedTasks: 0,
+        totalTasks: 4,
+        cancelable: false,
+        createdAt: "2026-09-16T10:00:00Z",
+        updatedAt: "2026-09-16T10:00:05Z",
+        approvedAt: "2026-09-16T10:00:01Z",
+        completedAt: "2026-09-16T10:00:30Z",
+        resourceIds: ["resource-1", "resource-2"],
+        inputs: { password: "must-not-render" },
+        outputs: { token: "must-not-render" },
+        resources: [{ id: "expanded-resource-must-not-render" }],
+      };
+    },
+  }).get("get-deployment-request");
+
+  assert.equal(config.annotations.readOnlyHint, true);
+  assert.deepEqual(config.inputSchema.parse({ requestId: "request-1" }), {
+    requestId: "request-1",
+  });
+  assert.equal(config.inputSchema.safeParse({}).success, false);
+
+  const result = await config.handler({ requestId: "request-1" });
+  const text = result.content[0].text;
+  assert.equal(receivedId, "request-1");
+  assert.match(text, /ID: request-1/);
+  assert.match(text, /Requested By: operator@example\.test/);
+  assert.match(text, /Task Progress: 0\/4/);
+  assert.match(text, /Cancelable: No/);
+  assert.match(text, /Created At: 2026-09-16T10:00:00Z/);
+  assert.match(text, /Updated At: 2026-09-16T10:00:05Z/);
+  assert.match(text, /Approved At: 2026-09-16T10:00:01Z/);
+  assert.match(text, /Completed At: 2026-09-16T10:00:30Z/);
+  assert.match(text, /Resource IDs: resource-1, resource-2/);
+  assert.doesNotMatch(text, /must-not-render|password|token|expanded-resource/);
+});
+
+test("get-deployment-request reports read failures", async () => {
+  const handlers = registeredDeploymentTools({
+    getDeploymentRequest: async () => {
+      throw new Error("404 request not found");
+    },
+  });
+
+  const result = await handlers.get("get-deployment-request")({
+    requestId: "missing-request",
+  });
+
+  assert.equal(result.isError, true);
+  assert.match(result.content[0].text, /Failed to get deployment request/);
+  assert.match(result.content[0].text, /404 request not found/);
 });
 
 test("list-deployment-actions formats actions and input hints", async () => {
@@ -913,6 +989,7 @@ test("delete-deployment reports the queued request instead of a finished deletio
   assert.match(result.content[0].text, /The service queued this request:\nID: request-9\n/);
   assert.match(result.content[0].text, /Action ID: Deployment\.Delete/);
   assert.match(result.content[0].text, /Status: PENDING/);
+  assert.match(result.content[0].text, /get-deployment-request\(requestId: "request-9"\)/);
   assert.match(result.content[0].text, /poll get-deployment until it answers 404/);
   assert.doesNotMatch(result.content[0].text, /deleted successfully/);
 });
@@ -951,7 +1028,8 @@ test("run-deployment-action chooses its next step from the action, not a fixed s
     actionId: "Deployment.PowerOff",
     confirm: true,
   });
-  assert.match(power.content[0].text, /get-deployment's status does not track it/);
+  assert.match(power.content[0].text, /get-deployment-request\(requestId: "request-4"\)/);
+  assert.match(power.content[0].text, /until it reports a confirmed terminal or held status/);
   assert.doesNotMatch(power.content[0].text, /404/);
 
   const del = await handlers.get("run-deployment-action")({
@@ -959,6 +1037,7 @@ test("run-deployment-action chooses its next step from the action, not a fixed s
     actionId: "Deployment.Delete",
     confirm: true,
   });
+  assert.match(del.content[0].text, /get-deployment-request\(requestId: "request-4"\)/);
   assert.match(del.content[0].text, /poll get-deployment until it answers 404/);
   assert.doesNotMatch(del.content[0].text, /does not track/);
 });
@@ -994,4 +1073,42 @@ test("deployment writes do not tell the caller to wait on a request that is not 
   assert.match(del.content[0].text, /FAILED rather than a running state/);
   assert.match(del.content[0].text, /Details: policy refused/);
   assert.doesNotMatch(del.content[0].text, /poll get-deployment until it answers 404/);
+});
+
+test("an unfamiliar deployment request status remains pollable", async () => {
+  const handlers = registeredDeploymentTools({
+    runDeploymentAction: async () => ({
+      id: "request-8",
+      status: "RUNNING",
+    }),
+  });
+
+  const result = await handlers.get("run-deployment-action")({
+    deploymentId: "deployment-1",
+    actionId: "Deployment.PowerOff",
+    confirm: true,
+  });
+
+  assert.match(result.content[0].text, /Poll get-deployment-request/);
+  assert.match(result.content[0].text, /treat an unfamiliar status as potentially active/);
+  assert.doesNotMatch(result.content[0].text, /already finished or held/);
+});
+
+test("a successful delete request still requires deployment absence verification", async () => {
+  const handlers = registeredDeploymentTools({
+    deleteDeployment: async () => ({
+      id: "request-7",
+      actionId: "Deployment.Delete",
+      status: "SUCCESSFUL",
+    }),
+  });
+
+  const result = await handlers.get("delete-deployment")({
+    id: "deployment-1",
+    confirm: true,
+  });
+
+  assert.match(result.content[0].text, /SUCCESSFUL rather than a running state/);
+  assert.match(result.content[0].text, /get-deployment-request/);
+  assert.match(result.content[0].text, /Verify the deployment is absent/);
 });
