@@ -183,7 +183,7 @@ None was driven with `confirm: true`.
 | `list-catalog-items` / `get-catalog-item` | Verified under VCFO-074 | A released catalog item was read on a 9.1 tenant session and renders correctly; see the tenant-session section below. Blocked by identity here — `500` confirmed. |
 | `list-deployments` / `get-deployment` / `list-deployment-actions` | Blocked by identity | `500` confirmed on this identity. The item and action shapes were settled separately on a **tenant** session — see the tenant-session section below (VCFO-074). |
 | `create-deployment` / `delete-deployment` / `run-deployment-action` | Not exercised **in this sweep** | These provision or destroy real infrastructure ([VCFO-084](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/188)), so only the `confirm: false` refusals were driven here. All three, and the VCFO-084 target guards, were exercised live on a **tenant** session — see the tenant-session section below (VCFO-074). |
-| `list-templates` / `get-template` | Verified under VCFO-099 | Both driven on a 9.x tenant session; `get-template` renders status, project, validity and omits content behind a sha256 summary until `includeContent`. Blocked by identity on a provider session — `500` confirmed. **`list-templates`' `search` is a silent no-op on 9.1** — see the tenant section below. |
+| `list-templates` / `get-template` | Verified under VCFO-099 | Both driven on a 9.x tenant session; `get-template` renders status, project, validity and omits content behind a sha256 summary until `includeContent`. Blocked by identity on a provider session — `500` confirmed. **`list-templates`' `search` was a silent no-op on 9.1** — matched client-side since VCFO-100; see the tenant section below. |
 | `create-template` / `delete-template` | Verified under VCFO-099 | Both exercised on a 9.x tenant session against a disposable DRAFT blueprint, with all four `delete-template` guard arms. **`create-template` requires non-empty `content` on 9.1**, contradicting its own description — see the tenant section below. Blocked by identity on a provider session — `500` confirmed. |
 | `list-event-topics` | Blocked on both identities | `500` on a provider session; **`403` on a tenant session** (VCFO-099, and independently under VCFO-098). Not reachable with either identity this environment offers — see [Event-broker: blocked on both identities](#event-broker-blocked-on-both-identities-2026-09-17-vcfo-099). |
 | `list-subscriptions` / `get-subscription` | Blocked on both identities | `500` on a provider session; **`403` on a tenant session** (VCFO-099). |
@@ -450,6 +450,15 @@ the delete independently confirmed by `get-deployment` answering `404`.
   `/blueprints`, `/deployments` and `/items` — so 9.1's services ignore the parameter. The tools
   present `search` as a filter, so a caller asking whether something exists gets a misleading answer.
   `list-projects` is unaffected: it sends an OData `$filter`, which 9.1 does apply (VCFO-065/072).
+  **Fixed under VCFO-100**: the three listings now match the needle client-side against name and
+  description, the way the `conditions`-ignoring vRO listings have since VCFO-073, while still
+  sending `$search`. Re-verified live on the same 9.1 tenant session: each of the three needles that
+  previously returned the full inventory now returns zero rows, a matching needle still returns the
+  real rows, `ALPINE` matches `Basic Alpine VM` and a padded ` alpine ` reaches the wire trimmed.
+  The **description arm** was proven against a disposable blueprint whose description carried a
+  token present in no name: with two templates in the project, the description token selected only
+  that one and a name token selected only the other. `$search` was observed still on the wire for
+  all three routes throughout.
 - **A day-2 action's input shape remains unobserved.** A raw key-only dump of
   `GET /deployments/{id}/actions` on both deployments shows all five actions carrying exactly
   `actionType, description, displayName, id, name, valid` — no `inputParameters`, no `inputs`. The
@@ -520,10 +529,11 @@ VCFO-069/070 and have **no 9.x evidence of any kind**.
 - **`FAILED` and `APPROVAL_PENDING`** request statuses remain assumed members of the non-running set;
   neither is producible benignly.
 - **`vcfa9.0` remains a verified pin *mechanism* only** — no 9.0 environment exists.
-- **Two defects VCFO-099 found, neither fixed in that round:**
-  - [#223](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/223) (VCFO-100) — `search` is a silent no-op on `list-templates`, `list-deployments` and `list-catalog-items` on
+- **Two defects VCFO-099 found, both since fixed:**
+  - [#223](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/223) (VCFO-100) — `search` was a silent no-op on `list-templates`, `list-deployments` and `list-catalog-items` on
     9.1. The client sends `$search`; the services ignore it and return the full inventory, so a
-    filtered question gets an unfiltered answer that reads as a match.
+    filtered question got an unfiltered answer that read as a match. **Fixed under VCFO-100** by
+    matching the needle client-side against name and description.
   - [#224](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/224) (VCFO-101) — `create-template` describes `content` as optional and says an empty template is created when it
     is omitted. On 9.1 that request answers `400`. The description is correct for vRA 8 only.
 - **One defect carried forward:** [#192](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/192)

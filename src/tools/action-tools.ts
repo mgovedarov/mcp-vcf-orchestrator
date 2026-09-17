@@ -52,7 +52,7 @@ export function registerActionTools(
         const actions = result.link ?? [];
         if (actions.length === 0) {
           return {
-            content: [{ type: "text", text: `No actions found.${limit !== undefined ? truncationNote(result, 0, result.total) : ""}` }],
+            content: [{ type: "text", text: `No actions found.${truncationNote(result, 0, result.total)}` }],
           };
         }
         const lines = actions.map(

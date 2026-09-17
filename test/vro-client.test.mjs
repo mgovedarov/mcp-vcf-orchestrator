@@ -60,10 +60,10 @@ const inventoryLists = [
   ["listResources", ["sample"], "/resources", { conditions: "name~sample" }, false, true],
   ["listPackages", ["sample"], "/packages", { conditions: "name~sample" }, false, true],
   ["listPlugins", ["sample"], "/plugins", { conditions: "name~sample" }, false, true],
-  ["listCatalogItems", ["sample"], "/items", { $search: "sample" }, true],
+  ["listCatalogItems", ["sample"], "/items", { $search: "sample" }, true, true],
   ["listProjects", ["sample"], "/projects", { $filter: projectSearchFilter("sample") }, true],
-  ["listDeployments", ["sample", "project"], "/deployments", { $search: "sample", projectId: "project" }, true],
-  ["listTemplates", ["sample", "project"], "/blueprints", { $search: "sample", projectId: "project" }, true],
+  ["listDeployments", ["sample", "project"], "/deployments", { $search: "sample", projectId: "project" }, true, true],
+  ["listTemplates", ["sample", "project"], "/blueprints", { $search: "sample", projectId: "project" }, true, true],
   ["listEventTopics", [], "/topics", {}, true],
   ["listSubscriptions", ["project'one"], "/subscriptions", { $filter: "projectId eq 'project''one'" }, true],
 ];
@@ -265,6 +265,210 @@ for (const [method, call] of localNameFilterLists) {
       assert.equal(result.total, 8);
       assert.equal(result.limited, undefined);
       assert.equal(calls[0].searchParams.has("conditions"), false);
+    } finally {
+      await client.close();
+    }
+  });
+}
+
+// VCFO-100: VCF Automation 9.1 accepts `$search` on these three routes with a
+// 200 and ignores it, answering with the whole inventory — the inverse of the
+// silent false negative VCFO-098 hardened against, and worse for a discovery
+// tool, since a needle matching nothing came back looking like a match. Each
+// listing therefore matches name and description client-side.
+const automationSearchLists = [
+  [
+    "listTemplates",
+    "/blueprint/api/blueprints",
+    (client, search, options) => client.listTemplates(search, undefined, options),
+  ],
+  [
+    "listDeployments",
+    "/deployment/api/deployments",
+    (client, search, options) => client.listDeployments(search, undefined, options),
+  ],
+  [
+    "listCatalogItems",
+    "/catalog/api/items",
+    (client, search, options) => client.listCatalogItems(search, options),
+  ],
+];
+
+/**
+ * Serves `rows` as a paginated Automation listing. With `honorSearch` the
+ * service applies `$search` itself; without it the parameter is accepted and
+ * ignored, which is what 9.1 does (VCFO-100).
+ */
+function automationInventory(rows, { honorSearch = false } = {}) {
+  const calls = [];
+  globalThis.fetch = async (url) => {
+    const request = new URL(String(url));
+    if (request.pathname.includes("/sessions")) return authResponse();
+    calls.push(request);
+    const needle = request.searchParams.get("$search");
+    const matching =
+      honorSearch && needle
+        ? rows.filter((row) =>
+            `${row.name ?? ""} ${row.description ?? ""}`
+              .toLowerCase()
+              .includes(needle.toLowerCase()),
+          )
+        : rows;
+    const size = Number(request.searchParams.get("size"));
+    const page = Number(request.searchParams.get("page"));
+    const content = matching
+      .slice(page * size, page * size + size)
+      .map((row, index) => ({ id: `id-${page * size + index}`, ...row }));
+    return Response.json({
+      content,
+      number: page,
+      numberOfElements: content.length,
+      size,
+      totalElements: matching.length,
+      totalPages: Math.max(1, Math.ceil(matching.length / size)),
+    });
+  };
+  return calls;
+}
+
+const sparseAutomationInventory = Array.from({ length: 250 }, (_, index) => ({
+  name: index % 10 === 0 ? `alpine-${index}` : `other-${index}`,
+}));
+
+for (const [method, path, call] of automationSearchLists) {
+  test(`${method} filters client-side when the service ignores $search`, async () => {
+    const calls = automationInventory([
+      ...Array.from({ length: 22 }, (_, index) => ({ name: `other-${index}` })),
+      { name: "alpine-a" },
+      { name: "ALPINE-b" },
+      { name: "unrelated-c", description: "an Alpine guest image" },
+    ]);
+    const client = new VroClient(config());
+    try {
+      const result = await call(client, "alpine");
+      assert.deepEqual(
+        result.content.map((item) => item.name),
+        ["alpine-a", "ALPINE-b", "unrelated-c"],
+      );
+      // The server total describes the unfiltered inventory, so the match
+      // count is reported instead — never "of 25".
+      assert.equal(result.totalElements, 3);
+      assert.equal(result.numberOfElements, 3);
+      assert.equal(result.limited, undefined);
+      // `$search` is still sent: it reduces the payload where honored.
+      assert.equal(calls[0].searchParams.get("$search"), "alpine");
+      assert.equal(calls[0].pathname, path);
+    } finally {
+      await client.close();
+    }
+  });
+
+  test(`${method} reports no matches rather than the whole inventory`, async () => {
+    const client = new VroClient(config());
+    try {
+      for (const options of [undefined, { limit: 3 }]) {
+        automationInventory(
+          Array.from({ length: 134 }, (_, index) => ({ name: `other-${index}` })),
+        );
+        const result = await call(client, "zz-no-such-thing-xyz", options);
+        assert.deepEqual(result.content, []);
+        assert.equal(result.totalElements, 0);
+        // No limit notice: an empty match set withholds nothing.
+        assert.equal(result.limited, undefined);
+      }
+    } finally {
+      await client.close();
+    }
+  });
+
+  test(`${method} counts matches, not raw rows, when a limit accompanies the search`, async () => {
+    const calls = automationInventory(sparseAutomationInventory);
+    const client = new VroClient(config());
+    try {
+      const result = await call(client, "alpine", { limit: 2 });
+      assert.deepEqual(
+        result.content.map((item) => item.name),
+        ["alpine-0", "alpine-10"],
+      );
+      assert.equal(result.limited, true);
+      // A local filter keeps the full raw page size instead of clamping to the
+      // limit, so sparse matches do not cost one request per row.
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].searchParams.get("size"), "100");
+    } finally {
+      await client.close();
+    }
+  });
+
+  test(`${method} leaves a service-honored $search unchanged`, async () => {
+    automationInventory(
+      [
+        { name: "alpine-a" },
+        { name: "alpine-b" },
+        { name: "alpine-c" },
+        { name: "other-1" },
+        { name: "other-2" },
+      ],
+      { honorSearch: true },
+    );
+    const client = new VroClient(config());
+    try {
+      const all = await call(client, "alpine");
+      assert.deepEqual(
+        all.content.map((item) => item.name),
+        ["alpine-a", "alpine-b", "alpine-c"],
+      );
+      assert.equal(all.totalElements, 3);
+
+      const limited = await call(client, "alpine", { limit: 2 });
+      assert.deepEqual(
+        limited.content.map((item) => item.name),
+        ["alpine-a", "alpine-b"],
+      );
+      assert.equal(limited.limited, true);
+    } finally {
+      await client.close();
+    }
+  });
+
+  test(`${method} passes the server total through when no search is given`, async () => {
+    const calls = automationInventory(
+      Array.from({ length: 8 }, (_, index) => ({ name: `thing-${index}` })),
+    );
+    const client = new VroClient(config());
+    try {
+      const result = await call(client, undefined);
+      assert.equal(result.content.length, 8);
+      assert.equal(result.totalElements, 8);
+      assert.equal(result.limited, undefined);
+      assert.equal(calls[0].searchParams.has("$search"), false);
+    } finally {
+      await client.close();
+    }
+  });
+
+  test(`${method} neither sends nor matches a blank search`, async () => {
+    const calls = automationInventory([{ name: "alpine-a" }, { name: "other-1" }]);
+    const client = new VroClient(config());
+    try {
+      const result = await call(client, "   ");
+      assert.equal(result.content.length, 2);
+      assert.equal(calls[0].searchParams.has("$search"), false);
+    } finally {
+      await client.close();
+    }
+  });
+
+  test(`${method} trims a padded search on both the wire and the match`, async () => {
+    const calls = automationInventory([{ name: "alpine-a" }, { name: "other-1" }]);
+    const client = new VroClient(config());
+    try {
+      const result = await call(client, "  alpine  ");
+      assert.deepEqual(
+        result.content.map((item) => item.name),
+        ["alpine-a"],
+      );
+      assert.equal(calls[0].searchParams.get("$search"), "alpine");
     } finally {
       await client.close();
     }
@@ -3190,10 +3394,13 @@ test("Automation service list clients aggregate multiple page results", async ()
     const requestUrl = new URL(String(url));
     const page = Number(requestUrl.searchParams.get("page"));
     const count = page === 0 ? 100 : 1;
+    // Every row carries the needle, so the client-side match added in
+    // VCFO-100 keeps all of them and this stays a test of aggregation across
+    // pages rather than of filtering.
     return Response.json({
       content: Array.from({ length: count }, (_, index) => ({
         id: `deployment-${page * 100 + index}`,
-        name: `Deployment ${page * 100 + index}`,
+        name: `prod vm ${page * 100 + index}`,
       })),
       last: page === 1,
       number: page,

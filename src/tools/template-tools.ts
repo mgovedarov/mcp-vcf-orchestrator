@@ -20,12 +20,14 @@ export function registerTemplateTools(
     {
       title: "List Templates",
       description:
-        "List blueprint templates in VCF Automation Cloud Assembly. Optionally filter by name/keyword search or by project ID. Use list-projects to discover project IDs.",
+        "List blueprint templates in VCF Automation Cloud Assembly. Optionally filter by search or by project ID. Use list-projects to discover project IDs.",
       inputSchema: z.object({
         search: z
           .string()
           .optional()
-          .describe("Search templates by name or keyword"),
+          .describe(
+            "Search templates by name or description, as a case-insensitive substring matched client-side (VCF Automation 9.1 accepts the server-side search and ignores it)",
+          ),
         limit: listLimitSchema,
         projectId: z
           .string()
@@ -42,7 +44,7 @@ export function registerTemplateTools(
         const items = result.content ?? [];
         if (items.length === 0) {
           return {
-            content: [{ type: "text", text: `No templates found.${limit !== undefined ? truncationNote(result, 0, result.totalElements) : ""}` }],
+            content: [{ type: "text", text: `No templates found.${truncationNote(result, 0, result.totalElements)}` }],
           };
         }
         const lines = items.map((t) => {

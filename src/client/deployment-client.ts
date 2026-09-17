@@ -8,7 +8,11 @@ import type {
   ListOptions,
 } from "../types.js";
 import type { VroHttpClient } from "./core.js";
-import { getAllAutomationPages } from "./pagination.js";
+import { matchesNameOrDescription } from "./filter.js";
+import {
+  getAllAutomationPages,
+  getFilteredAutomationList,
+} from "./pagination.js";
 
 /**
  * Both deployment-service writes answer a `DeploymentRequest`. `request<T>`
@@ -35,18 +39,24 @@ export class DeploymentClient {
     options?: ListOptions,
   ): Promise<DeploymentList> {
     const params = new URLSearchParams();
-    if (search) {
-      params.set("$search", search);
+    // Trimmed so the server-side query and the client-side needle agree on
+    // what counts as a filter: a blank one is neither sent nor matched, and a
+    // padded one selects the same rows on both. See getFilteredAutomationList.
+    const trimmedSearch = search?.trim();
+    if (trimmedSearch) {
+      params.set("$search", trimmedSearch);
     }
     if (projectId) {
       params.set("projectId", projectId);
     }
-    return getAllAutomationPages<Deployment>(
+    return getFilteredAutomationList<Deployment>(
       this.http,
       "/deployments",
       this.http.deploymentBaseUrl,
       params,
-      { maxItems: options?.limit },
+      matchesNameOrDescription,
+      trimmedSearch,
+      options?.limit,
     );
   }
 

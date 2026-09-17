@@ -63,7 +63,7 @@ export function registerConfigTools(
             content: [
               {
                 type: "text",
-                text: `No configuration elements found.${limit !== undefined ? truncationNote(result, 0, result.total) : ""}`,
+                text: `No configuration elements found.${truncationNote(result, 0, result.total)}`,
               },
             ],
           };
