@@ -1112,3 +1112,98 @@ test("a successful delete request still requires deployment absence verification
   assert.match(result.content[0].text, /get-deployment-request/);
   assert.match(result.content[0].text, /Verify the deployment is absent/);
 });
+
+test("the poll guidance names every active status observed live (VCFO-095)", async () => {
+  const handlers = registeredDeploymentTools({
+    runDeploymentAction: async () => ({
+      id: "request-95",
+      actionId: "Deployment.PowerOff",
+      status: "PENDING",
+      completedTasks: 0,
+      totalTasks: 1,
+    }),
+  });
+
+  const result = await handlers.get("run-deployment-action")({
+    deploymentId: "deployment-1",
+    actionId: "Deployment.PowerOff",
+    confirm: true,
+  });
+  const text = result.content[0].text;
+
+  // Verified live on vRA 8.18 and VCF Automation 9.1 under VCFO-095. A request
+  // passes through CHECKING_APPROVAL on both platforms and through COMPLETION
+  // on 9.1, and the guidance used to name neither.
+  for (const status of [
+    "PENDING",
+    "INITIALIZATION",
+    "CHECKING_APPROVAL",
+    "INPROGRESS",
+    "COMPLETION",
+  ]) {
+    assert.match(text, new RegExp(`Observed active statuses are [^\\n]*${status}`));
+  }
+  // The submission total is a placeholder the service replaces, so a caller
+  // must not read the ratio as monotonic (0/1 at submission, then 1/5).
+  assert.match(text, /Task Progress: 0\/1/);
+  assert.match(text, /progress is not monotonic/i);
+});
+
+test("an approval check in flight is not reported as held (VCFO-095)", async () => {
+  for (const status of ["CHECKING_APPROVAL", "COMPLETION"]) {
+    const handlers = registeredDeploymentTools({
+      runDeploymentAction: async () => ({
+        id: "request-96",
+        actionId: "Deployment.PowerOn",
+        status,
+      }),
+    });
+
+    const result = await handlers.get("run-deployment-action")({
+      deploymentId: "deployment-1",
+      actionId: "Deployment.PowerOn",
+      confirm: true,
+    });
+    const text = result.content[0].text;
+
+    assert.match(text, /Poll get-deployment-request/);
+    assert.doesNotMatch(text, /already finished or held/);
+  }
+});
+
+test("a create request renders without an action and withholds its inputs (VCFO-095)", async () => {
+  const config = registeredDeploymentToolConfigs({
+    getDeploymentRequest: async (requestId) => ({
+      // The shape both platforms serve for a Deployment.Create request: no
+      // actionId, blueprintId and catalogItemId instead, and on 9.1 the inputs
+      // the deployment was requested with.
+      id: requestId,
+      name: "Create",
+      deploymentId: "deployment-1",
+      blueprintId: "blueprint-1",
+      catalogItemId: "catalog-item-1",
+      requestedBy: "operator@example.test",
+      status: "SUCCESSFUL",
+      details: "",
+      completedTasks: 7,
+      totalTasks: 7,
+      inputs: { hostname: "must-not-render", password: "must-not-render" },
+      resourceIds: ["resource-1"],
+    }),
+  }).get("get-deployment-request");
+
+  const result = await config.handler({ requestId: "request-97" });
+  const text = result.content[0].text;
+
+  assert.match(text, /Name: Create/);
+  assert.match(text, /Task Progress: 7\/7/);
+  // No actionId on the wire means no line rather than "Action ID: undefined".
+  assert.doesNotMatch(text, /Action ID:/);
+  // An empty details string is dropped, not rendered as a blank field.
+  assert.doesNotMatch(text, /Details:/);
+  // cancelable and completedAt are absent on a finished request on both
+  // platforms, so neither line may be invented.
+  assert.doesNotMatch(text, /Cancelable:/);
+  assert.doesNotMatch(text, /Completed At:/);
+  assert.doesNotMatch(text, /must-not-render|hostname|password/);
+});

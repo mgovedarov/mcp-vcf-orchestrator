@@ -19,7 +19,7 @@ for the other platform.
 
 | Tool | Status | Evidence |
 | --- | --- | --- |
-| `get-deployment-request` | Route observed; MCP tool pending live verification | Added after the 78-tool sweep under VCFO-094. The underlying `GET /deployment/api/requests/{id}` route was read by raw HTTP during the VCFO-088 round: power and delete requests moved through `PENDING` or `INITIALIZATION`, `INPROGRESS`, and `SUCCESSFUL`, with task progress and timestamps. The new handler and renderer are covered locally, but have not yet been driven through stdio against this lab. |
+| `get-deployment-request` | Verified under VCFO-095 | Route observed by raw HTTP in the VCFO-088 round; the MCP handler itself was pending then. Driven through stdio against this lab on 2026-09-17 over five real requests — two creates, a `PowerOff`, a `PowerOn` and a `Delete` — plus a 404 and a 400 arm. See the [VCFO-095 section](#deployment-request-lookup-2026-09-17-vcfo-095) below. |
 
 ## How to read the status column
 
@@ -144,6 +144,66 @@ containing the word "undefined" and validation errors from deliberately malforme
 | `delete-deployment` | Verified under VCFO-088, defect found and fixed | Refused in this sweep by design; lifted after the 2026-09-16 round. The success text overstated completion — see below. |
 | `run-deployment-action` | Verified under VCFO-088 | Refused in this sweep by design; lifted after `PowerOff` and `PowerOn` were submitted through the real handler — the first day-2 action on any platform. |
 
+## Deployment request lookup, 2026-09-17 (VCFO-095)
+
+The `get-deployment-request` row above was recorded from a raw-HTTP reading of the route during the
+VCFO-088 round. This section is the round that drove the **MCP handler** against it, on the same
+appliance and user, per [VCFO-095](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/213).
+
+**Method.** A throwaway stdio client on a fresh `dist/index.js`, with a raw-HTTP key-only dump — the
+server's own `VroHttpClient.authenticatedFetch` — taken alongside one mid-flight and one terminal
+sample of every request, so no key rests on rendered output alone.
+
+**Free evidence first.** `GET /deployments/{id}/requests` was read for the environment's pre-existing
+deployment before anything was provisioned; it yielded that deployment's own **create** request, which
+the handler rendered at zero infrastructure cost. One disposable deployment (`zz-vcfo095-1`) was then
+created from `ubunutu`, powered off and on, and deleted; `list-deployments` was back at the starting
+count of one, bare and `projectId`-scoped, and the pre-existing deployment was only ever read.
+
+| Tool | Status | Evidence |
+| --- | --- | --- |
+| `get-deployment-request` | Verified | Renders a real request's identity, requester, status, task progress including a zero numerator, cancelability, timestamps and resource IDs. An unknown UUID answers `404 {"message":"No value present"}` and a non-UUID a `400` naming the Java conversion, both as `isError`. Captures carry no `undefined`, `[object Object]`, `NaN`, `(id: )`, `(unnamed)` or secret. |
+| `run-deployment-action` | Verified again | `PowerOff` 36 s, `PowerOn` 17 s, each with all five `expected*` guards; the deployment read `CREATE_SUCCESSFUL` throughout both, confirming VCFO-088. |
+| `delete-deployment` | Verified again | All four guards; the request reached `SUCCESSFUL` at 38 s and the deployment answered `404` on that same poll. |
+
+### Observed wire shapes
+
+- **Status vocabulary is wider than VCFO-088 recorded.** Every day-2 and delete request passed through
+  **`CHECKING_APPROVAL`**: `PENDING` → `INITIALIZATION` → `CHECKING_APPROVAL` → `INPROGRESS` →
+  `SUCCESSFUL`. It is not a member of the tool's non-running set, so the fail-open default held and the
+  guidance kept saying "poll" — the design working rather than a near miss. The tool's own text, which
+  named only three active statuses, was corrected in this change. The `COMPLETION` status the 9.1 round
+  saw was **not captured here**, but this round's 2 s poll interval caught it on only one of three
+  requests there too, so its absence from these captures is not evidence that this platform lacks it.
+- **`totalTasks` is a placeholder at submission.** `1` for a power action and `2` for a delete, replaced
+  once the service enumerates the tasks: power settles at 4, delete at **5**, a create at 7. VCFO-088's
+  "4 tasks for a power action" was the settled value and stands; its "2 for a delete" was the submission
+  value and is superseded. The renderer is deliberately left printing what the service served, so a
+  caller polling across the transition sees the denominator jump — documented rather than smoothed,
+  since smoothing would mean inventing a number.
+- `details` reads `Waiting to start execution` while `PENDING` and an empty string afterwards, so the
+  `Details:` line appears and then disappears. `cancelable: true` for the whole run, absent at terminal.
+  `approvedAt` appears with `INPROGRESS`. **`completedAt` was never served**, on any of the five
+  requests — the renderer's `Completed At:` line has never fired on this platform.
+- **A create request carries no `actionId`**; it carries `blueprintId` and `catalogItemId` instead, and
+  its `name` is `Create`. Both keys are now modelled on `DeploymentRequest` and neither is rendered.
+- **`GET /deployments/{id}/requests` and `GET /requests?deploymentId=` both exist** and serve a Spring
+  page (`content`, `totalElements`, `pageable`, …), not a bare array. **No MCP tool exposes either**, so
+  a *create* request ID cannot be reached from the MCP surface at all — the gap the optional
+  `list-deployment-requests` companion in
+  [VCFO-094](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/212) would close.
+- **A request outlives its deployment.** After the delete both listings answer `404`, yet the create,
+  both power requests and the delete each still read by ID through `get-deployment-request`.
+
+### Not exercised here
+
+- `FAILED` and `APPROVAL_PENDING`: neither is producible benignly, so both remain **assumed** members of
+  the non-running set rather than observed ones.
+- **A cancelled request, deliberately.** `Cancelable: Yes` renders throughout a running request, but this
+  server exposes no cancel route, so the field is informative and never actionable through the MCP
+  surface; cancelling would also have to happen outside the surface under test.
+- A day-2 action carrying `inputs`: no action on this blueprint declares any.
+
 ## Catalog and deployment writes, 2026-09-16 (VCFO-088)
 
 The rows above were measured on a lab with an empty catalog. This section is a separate round on the
@@ -205,11 +265,12 @@ or recorded the delete body, so neither matrix is evidence for the other there.
   `updatedAt`, `totalTasks`, `completedTasks`, `resourceIds`, `cancelable`. Read back at
   `GET /deployment/api/requests/{id}`, `approvedAt` appears once started and `cancelable` disappears once
   finished. Status vocabulary: `PENDING` or `INITIALIZATION` at submission → `INPROGRESS` → `SUCCESSFUL`,
-  4 tasks, about 30 s.
+  4 tasks, about 30 s. **Superseded in part by VCFO-095 above**, which observed `CHECKING_APPROVAL`
+  between the two and found the delete's task total to settle at 5 rather than the 2 recorded here.
 - `DELETE /deployment/api/deployments/{id}` — **`200` with a `DeploymentRequest` body** (`actionId:
   Deployment.Delete`, `status: PENDING`, two `resourceIds`), not an empty `204`. The client had discarded
-  it. **vRA 8.18 only**: the 9.1 round saw the same `DELETE_INPROGRESS` → `404` sequence but did not
-  record the body.
+  it. Recorded here as vRA 8.18 only; VCFO-095 has since observed the same body on VCF Automation 9.1,
+  in that platform's own matrix.
 
 ### Defect found and fixed in this round
 
