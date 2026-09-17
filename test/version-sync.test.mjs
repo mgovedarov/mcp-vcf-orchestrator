@@ -28,3 +28,6 @@ test("MCP server version is read from package.json at runtime", () => {
 test("package.json version is a valid semver string", () => {
   assert.match(pkg.version, /^\d+\.\d+\.\d+/);
 });
+
+// VCFO-102 verification scratch: tests-only change, outside the old package-check paths
+// allowlist. This branch exists only to prove `Verify npm package contents` now reports.
