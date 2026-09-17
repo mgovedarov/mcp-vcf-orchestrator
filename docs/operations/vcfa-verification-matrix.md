@@ -452,7 +452,13 @@ the delete independently confirmed by `get-deployment` answering `404`.
   `list-projects` is unaffected: it sends an OData `$filter`, which 9.1 does apply (VCFO-065/072).
   **Fixed under VCFO-100**: the three listings now match the needle client-side against name and
   description, the way the `conditions`-ignoring vRO listings have since VCFO-073, while still
-  sending `$search`.
+  sending `$search`. Re-verified live on the same 9.1 tenant session: each of the three needles that
+  previously returned the full inventory now returns zero rows, a matching needle still returns the
+  real rows, `ALPINE` matches `Basic Alpine VM` and a padded ` alpine ` reaches the wire trimmed.
+  The **description arm** was proven against a disposable blueprint whose description carried a
+  token present in no name: with two templates in the project, the description token selected only
+  that one and a name token selected only the other. `$search` was observed still on the wire for
+  all three routes throughout.
 - **A day-2 action's input shape remains unobserved.** A raw key-only dump of
   `GET /deployments/{id}/actions` on both deployments shows all five actions carrying exactly
   `actionType, description, displayName, id, name, valid` — no `inputParameters`, no `inputs`. The

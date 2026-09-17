@@ -234,7 +234,8 @@ answers `204`.
 full inventory comes back. Since VCFO-100 the client matches the needle itself, against name and
 description, so the tools return the filtered rows the caller asked for; `$search` is still sent for
 a service that honors it. A needle matching nothing now yields an empty result rather than the whole
-inventory, which is the check to re-run here. `list-projects` is unaffected; its `search` becomes an
+inventory — verified live under VCFO-100 on a 9.1 tenant session, together with a matching needle,
+a differing case, a padded needle, and a description-only match against a disposable blueprint. `list-projects` is unaffected; its `search` becomes an
 OData `$filter` that the project service does apply (VCFO-065/072, VCFO-099).
 
 ### Deployment lifecycle (9.x, tenant session)
