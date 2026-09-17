@@ -24,7 +24,7 @@ vRA 8 evidence.
 
 | Tool | Status | Evidence |
 | --- | --- | --- |
-| `get-deployment-request` | Pending live verification | Added after the full-surface sweep under VCFO-094. No 9.1 round has submitted a day-2 action or read `GET /deployment/api/requests/{id}`, so the route and response shape remain unverified on this platform. Local client and tool tests cover the expected contract without turning the vRA 8.18 observation into 9.x evidence. |
+| `get-deployment-request` | Verified under VCFO-095 | Pending when it was added under VCFO-094. Driven through stdio on a tenant session on 2026-09-17: **`GET /deployment/api/requests/{id}` does exist on 9.1** and serves the same key set as vRA 8.18. Five real requests plus a 404 and a 400 arm. See the [VCFO-095 section](#deployment-request-lookup-tenant-session-2026-09-17-vcfo-095) below. |
 
 ## How to read the status column
 
@@ -245,6 +245,65 @@ then `404`. Note `INPROGRESS` carries **no underscore**.
   `schema.required` — the input contract for `create-deployment` — and the tool rendered neither, so
   an agent driving a deployment through the MCP surface had to guess the inputs.
 
+## Deployment request lookup, tenant session, 2026-09-17 (VCFO-095)
+
+The tenant round above provisioned and destroyed deployments but submitted no day-2 action, so nothing
+on 9.x had ever produced a `DeploymentRequest`. This round did, on the same appliance and tenant
+identity, per [VCFO-095](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/213). **It is the
+first day-2 action submitted on 9.x.**
+
+**Environment:** VCF Automation 9.1 (negotiated 9.1.0), tenant session, 2026-09-17. One project, one
+released catalog item (`Basic Alpine VM`, four released versions, one required `hostname` input), two
+pre-existing deployments belonging to the environment's owner, which were only ever read.
+**Topology:** `VCFA_VRO_HOST` was set to this org's external vRO; **no `/vco/api` request was made**,
+so every route here is on `VCFA_HOST`. That is not split-host evidence.
+**Provisioning:** one disposable deployment (`zz-vcfo095-1`, `version` pinned to `4`) created,
+powered off and on, and deleted; `list-deployments` back at the starting count of two, bare and
+`projectId`-scoped, and the delete independently confirmed by `get-deployment` answering `404`.
+
+**Method.** A throwaway stdio client on a fresh `dist/index.js`, with a raw-HTTP key-only dump of every
+request at one mid-flight and one terminal sample, so no key rests on rendered output alone.
+
+| Tool | Status | Evidence |
+| --- | --- | --- |
+| `get-deployment-request` | Verified | The route exists and renders identity, requester, status, task progress including a zero numerator, cancelability, timestamps and resource IDs. An unknown UUID answers `404 {"message":"No value present"}`; a non-UUID answers `400` naming the parameter. Captures carry no `undefined`, `[object Object]`, `NaN`, `(id: )`, `(unnamed)` or secret. |
+| `run-deployment-action` | **Verified — first submission on 9.x** | `PowerOff` 30 s and `PowerOn` 21 s, each with all five `expected*` guards. The deployment read `CREATE_SUCCESSFUL` throughout both, exactly as on vRA 8.18. |
+| `create-deployment` | Verified again | `confirm: false` and a wrong `expectedCatalogItemName` refused first; the provision took 46 s with `inputs` and a pinned `version`. |
+| `delete-deployment` | Verified again | A wrong `expectedName` refused first; with all four guards the request reached `SUCCESSFUL` at 29 s and the deployment answered `404` on that same poll. |
+
+### Observed wire shapes
+
+- `GET /deployment/api/requests/{id}` — the **same key set vRA 8.18 serves**: `actionId`, `cancelable`,
+  `completedTasks`, `createdAt`, `deploymentId`, `details`, `id`, `name`, `requestedBy`, `resourceIds`,
+  `status`, `totalTasks`, `updatedAt`, plus `approvedAt` once started. `cancelable` disappears at
+  terminal. **`completedAt` is never served.**
+- **Status vocabulary:** `PENDING` → `INITIALIZATION` → `CHECKING_APPROVAL` → **`COMPLETION`** →
+  `SUCCESSFUL`, with `INPROGRESS` before `COMPLETION`. `COMPLETION` appears at full task progress and
+  still cancelable, one poll before `SUCCESSFUL`, and **has not been seen on vRA 8.18**. Neither status
+  is a member of the tool's non-running set, so the fail-open default kept the guidance correct; the
+  tool's own text, which named three active statuses, was corrected in this change.
+- **`totalTasks` is a placeholder at submission** — `1` for a power action, `2` for a delete — replaced
+  once the service enumerates the tasks (4, 5, and 7 for a create), exactly as on vRA 8.18.
+- **A 9.1 create request carries `inputs`**, alongside `blueprintId` and `catalogItemId` and without an
+  `actionId`. The tool **withheld every one of them**, verified by grepping the rendered output for each
+  input name. This is the first platform where that deliberate omission is load-bearing: the vRA 8.18
+  blueprint declared no inputs at all.
+- `GET /deployments/{id}/requests` and `GET /requests?deploymentId=` both exist and serve a **Spring
+  page**. No MCP tool exposes either, so a *create* request ID cannot be reached from the MCP surface.
+- **A request outlives its deployment.** After the delete both listings answer `404`, yet every request
+  still reads by ID.
+- Platform differences worth recording against vRA 8.18: 9.1 offers **five** deployment-level actions
+  rather than ten, the catalog item carries a real input schema, and provisioning is far quicker
+  (46 s against 289 s).
+
+### Not exercised here
+
+- `FAILED` and `APPROVAL_PENDING`: not producible benignly, so both remain **assumed** members of the
+  non-running set.
+- **A cancelled request, deliberately.** `Cancelable: Yes` renders throughout, but this server exposes
+  no cancel route, so the field is informative and never actionable through the MCP surface.
+- A day-2 action carrying `inputs`: none of the five actions this platform offers declares any.
+
 ## Settled by this run
 
 - **VCFO-060 holds on VCF Automation 9.1.** A scaffolded `.workflow` — string, number, boolean and
@@ -275,11 +334,12 @@ then `404`. Note `INPROGRESS` carries **no underscore**.
   provider identity. *Partly resolved:* the tenant round of 2026-09-16 above covers the catalog,
   deployment, project and template tools. The event-broker and subscription tools are still
   unexercised on a 9.x tenant session.
-- **A deployment day-2 action has never been submitted on 9.x.** The `run-deployment-action` guard paths
-  are verified live here, but no action has been run on this platform. VCFO-088 has since submitted
-  `Deployment.PowerOff` and `Deployment.PowerOn` on vRA 8.18 and typed the `DeploymentRequest` that
-  platform serves, so what is open here is whether 9.1 serves the same envelope and shape. A deployment
-  action's input shape (`inputParameters` vs `inputs`) has never been observed on either platform.
+- ~~**A deployment day-2 action has never been submitted on 9.x.**~~ **Closed by VCFO-095** on
+  2026-09-17: `Deployment.PowerOff`, `Deployment.PowerOn` and `Deployment.Delete` were all submitted on a
+  9.1 tenant session, and the `DeploymentRequest` envelope matches the one vRA 8.18 serves. See the
+  VCFO-095 section above. Still open within it: **a deployment action's input shape** (`inputParameters`
+  vs `inputs`) has never been observed on either platform, because no action offered by either lab
+  declares any inputs.
 - **`import-configuration-file` remains unverifiable on any platform tested**, for the same reason
   as on vRA 8: nothing serves a genuine `.vsoconf` container.
 - **One defect found:** [#192](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/192)

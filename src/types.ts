@@ -655,18 +655,34 @@ export interface DeploymentActionRequestParams {
 /**
  * The request a deployment-service write queues: what `POST
  * /deployments/{id}/requests` and `DELETE /deployments/{id}` both answer 200
- * with on vRA 8.18 (VCFO-088). Observed keys: `id`, `name` (the action's
- * display name, e.g. `Power Off`), `actionId`, `deploymentId`, `requestedBy`,
- * `status`, `details`, `createdAt`, `updatedAt`, `totalTasks`,
- * `completedTasks`, `resourceIds`, `cancelable` while it can still be
- * cancelled, and `approvedAt` once it has started. Status vocabulary observed:
- * `PENDING` or `INITIALIZATION` at submission, `INPROGRESS`, `SUCCESSFUL`.
- * The same object is read back by id from `GET /requests/{id}` (VCFO-094).
+ * with on vRA 8.18 (VCFO-088) and on VCF Automation 9.1 (VCFO-095). Observed
+ * keys: `id`, `name` (the action's display name, e.g. `Power Off`), `actionId`,
+ * `deploymentId`, `requestedBy`, `status`, `details`, `createdAt`, `updatedAt`,
+ * `totalTasks`, `completedTasks`, `resourceIds`, `cancelable` while it can
+ * still be cancelled, and `approvedAt` once it has started. The same object is
+ * read back by id from `GET /requests/{id}` (VCFO-094), verified live on both
+ * platforms under VCFO-095.
+ *
+ * Status vocabulary observed there: `PENDING` -> `INITIALIZATION` ->
+ * `CHECKING_APPROVAL` -> `INPROGRESS` -> `SUCCESSFUL`, with `COMPLETION`
+ * between the last two on 9.1. `totalTasks` is a placeholder at submission
+ * (`1` for a power action, `2` for a delete) that the service replaces once it
+ * enumerates the tasks (4, 5, and 7 for a create), so progress is not
+ * monotonic.
+ *
+ * A **create** request is the same object without an `actionId`, and carries
+ * `blueprintId` and `catalogItemId` instead; on 9.1 it also carries the
+ * `inputs` the deployment was requested with. `completedAt` has never been
+ * served on either platform.
  */
 export interface DeploymentRequest {
   id?: string;
   actionId?: string;
   deploymentId?: string;
+  /** Served on a create request instead of `actionId` (VCFO-095). */
+  blueprintId?: string;
+  /** Served on a create request instead of `actionId` (VCFO-095). */
+  catalogItemId?: string;
   name?: string;
   status?: string;
   details?: string;

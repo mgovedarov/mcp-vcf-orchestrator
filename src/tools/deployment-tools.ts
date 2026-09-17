@@ -208,12 +208,38 @@ export function formatDeploymentInputs(
  * Request statuses known to be terminal or held. The service vocabulary is
  * wider than the values observed on vRA 8.18, so an unknown status must remain
  * pollable rather than being declared finished by default.
+ *
+ * That fail-open default earned its keep under VCFO-095: `CHECKING_APPROVAL`
+ * turned out to be a normal, transient step of every day-2 and delete request
+ * on both platforms, and because it is not a member here the tool kept telling
+ * the caller to poll instead of declaring the request held. Only `SUCCESSFUL`
+ * has ever been observed; `FAILED` and `APPROVAL_PENDING` remain assumed
+ * members that no round has produced, and `APPROVAL_PENDING` in particular is
+ * *not* the status an approval check reports while it is running.
  */
 const NON_RUNNING_REQUEST_STATUSES = new Set([
   "SUCCESSFUL",
   "FAILED",
   "APPROVAL_PENDING",
 ]);
+
+/**
+ * Statuses observed on a request that is still running, named in the poll
+ * guidance so a caller can recognize them. Narrative only: the decision of
+ * whether to keep polling is made by `NON_RUNNING_REQUEST_STATUSES` above, so
+ * a status missing from this list is still treated as active.
+ *
+ * `PENDING`, `INITIALIZATION`, `CHECKING_APPROVAL` and `INPROGRESS` were seen
+ * on both vRA 8.18 and VCF Automation 9.1; `COMPLETION` only on 9.1, at full
+ * task progress and still cancelable, one poll before `SUCCESSFUL` (VCFO-095).
+ */
+const OBSERVED_ACTIVE_REQUEST_STATUSES = [
+  "PENDING",
+  "INITIALIZATION",
+  "CHECKING_APPROVAL",
+  "INPROGRESS",
+  "COMPLETION",
+];
 
 /**
  * Render operational `DeploymentRequest` metadata shared by submission and
@@ -256,7 +282,8 @@ export function deploymentRequestLines(
  * action: a `Deployment.Delete` *is* tracked by the deployment's own status
  * (`DELETE_INPROGRESS`, then 404), while a power action is not -- a deployment
  * read `CREATE_SUCCESSFUL` throughout a PowerOff and a PowerOn on vRA 8.18
- * (VCFO-088). A request that is not in a running state -- held for approval,
+ * (VCFO-088) and again on VCF Automation 9.1 (VCFO-095). A request that is not
+ * in a running state -- held for approval,
  * failed -- is reported as such instead of as something to wait for, since
  * waiting on the deployment would never settle it. When the service returns
  * a request id, `get-deployment-request` is the authoritative progress read
@@ -278,7 +305,7 @@ export function deploymentRequestNextStep(
     return `The request reports ${status} rather than a running state, so it is either already finished or held (an approval policy, for example); waiting on the deployment will not settle it.${reread}${verifyDeletion}\n`;
   }
   if (requestId) {
-    const poll = `Poll get-deployment-request(requestId: "${requestId}") until it reports a confirmed terminal or held status. Observed active statuses are PENDING, INITIALIZATION, and INPROGRESS; treat an unfamiliar status as potentially active.`;
+    const poll = `Poll get-deployment-request(requestId: "${requestId}") until it reports a confirmed terminal or held status. Observed active statuses are ${OBSERVED_ACTIVE_REQUEST_STATUSES.join(", ")}; treat an unfamiliar status as potentially active. Task progress is not monotonic: the service reports a placeholder total at submission and replaces it once it enumerates the tasks.`;
     if (actionId === "Deployment.Delete") {
       return `${poll} Also poll get-deployment until it answers 404, or list-deployments until the deployment is absent, to confirm its resources are gone.\n`;
     }

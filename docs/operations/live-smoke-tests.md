@@ -347,6 +347,13 @@ Free calls first, so a late failure still leaves the cheap findings recorded.
   status. Record task progress, timestamps and response keys without printing untyped inputs or
   outputs.
 
+**A free request to read before any write.** `GET /deployment/api/deployments/{id}/requests` and
+`GET /deployment/api/requests?deploymentId=<id>` both serve a deployment's request history — a Spring
+page on vRA 8.18 and on VCF Automation 9.1 alike (VCFO-095). Reading either for a deployment that
+already exists yields a real, terminal request ID, so `get-deployment-request` can be exercised at zero
+infrastructure cost before the round decides whether to provision anything. No MCP tool exposes those
+listings, which is also the only way to reach a **create** request's ID.
+
 Rendered output cannot settle a wire shape: a `(unnamed)` fallback says nothing about the real key,
 and both arms of the `DeploymentActionList` union render identically. A shape question needs a
 raw-HTTP key dump alongside the tool calls. Dump **keys only**, never the token or a response body.

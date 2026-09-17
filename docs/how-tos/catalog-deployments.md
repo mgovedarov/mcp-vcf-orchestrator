@@ -42,7 +42,7 @@ After a deployment exists, inspect available actions before submitting one:
 2. Review action IDs, names, and input hints.
 3. `run-deployment-action(..., confirm: true)`
 4. Capture the request ID the tool renders.
-5. Poll `get-deployment-request(requestId: "<request-id>")` until it reports a confirmed terminal or held status. Observed active statuses are `PENDING`, `INITIALIZATION`, and `INPROGRESS`; treat an unfamiliar status as potentially active.
+5. Poll `get-deployment-request(requestId: "<request-id>")` until it reports a confirmed terminal or held status. Observed active statuses are `PENDING`, `INITIALIZATION`, `CHECKING_APPROVAL`, `INPROGRESS`, and `COMPLETION`; treat an unfamiliar status as potentially active. Task progress is not monotonic — the service replaces a placeholder total once it enumerates the tasks, so `0/1` can become `1/5`.
 
 The action runs asynchronously. For anything but `Deployment.Delete`, the deployment's own status does not track it — `get-deployment` kept reading `CREATE_SUCCESSFUL` throughout a power action on vRA 8.18 — so the request read is the progress signal. After it succeeds, confirm the outcome on the deployment's resources. Day-2 action availability is deployment-specific. Do not guess action IDs or inputs from another deployment.
 
