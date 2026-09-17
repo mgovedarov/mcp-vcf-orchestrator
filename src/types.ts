@@ -707,6 +707,30 @@ export interface DeploymentRequest {
   }[];
 }
 
+/**
+ * A page of `DeploymentRequest` objects, the shape `GET
+ * /deployments/{id}/requests` answers with. Both that route and the equivalent
+ * `GET /requests?deploymentId=<id>` serve a Spring page -- `content`,
+ * `totalElements`, `totalPages`, `pageable`, `sort` and the rest -- on vRA 8.18
+ * and on VCF Automation 9.1 alike (VCFO-095), not the bare array the sibling
+ * `/deployments/{id}/actions` route serves on both. So this is a plain page
+ * type rather than a union like `DeploymentActionList`; the tolerance for an
+ * array body lives in `getAllAutomationPages`, where it protects every
+ * Automation listing instead of this one (VCFO-097).
+ *
+ * The listing is scoped to a *live* deployment: once the deployment is gone
+ * both routes answer `404`, while each individual request still reads by id
+ * through `GET /requests/{id}` (VCFO-095).
+ */
+export interface DeploymentRequestList {
+  content: DeploymentRequest[];
+  totalElements?: number;
+  numberOfElements?: number;
+  /** Present (true) when server-side pagination stopped at the page-request cap. */
+  truncated?: boolean;
+  limited?: boolean;
+}
+
 // --- Blueprint Templates (Cloud Assembly) ---
 
 export interface Template {

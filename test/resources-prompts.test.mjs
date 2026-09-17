@@ -724,6 +724,7 @@ test("vcfa-troubleshoot-deployment prompt accepts goalHint argument", async () =
   assert.match(text, /VM stuck in creating state/);
   assert.match(text, /get-deployment/);
   assert.match(text, /get-deployment-request/);
+  assert.match(text, /list-deployment-requests/);
   assert.match(text, /list-deployment-actions/);
   assert.match(text, /poll its returned request ID/);
   assert.match(text, /Do not invent IDs/);

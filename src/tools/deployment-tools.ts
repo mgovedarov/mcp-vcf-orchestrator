@@ -9,6 +9,7 @@ import type {
   DeploymentActionList,
   DeploymentRequest,
 } from "../types.js";
+import { apiErrorStatus } from "../client/core.js";
 import type { VroClient } from "../vro-client.js";
 import { truncationNote } from "./truncation.js";
 import { listLimitSchema, limitNote } from "./list-limit.js";
@@ -276,6 +277,35 @@ export function deploymentRequestLines(
     text += `Resource IDs: ${request.resourceIds.join(", ")}\n`;
   }
   return text;
+}
+
+/**
+ * One request as a single line for `list-deployment-requests`.
+ *
+ * Deliberately not `deploymentRequestLines`, which is a detail block: a
+ * listing's job is to let the caller pick an id to hand to
+ * `get-deployment-request`, so it carries identity, what the request is,
+ * where it got to, and nothing else.
+ *
+ * Every suffix is conditional on a value being *present*, never on another
+ * being absent. A create request is recognized by `blueprintId`/`catalogItemId`
+ * rather than by a missing `actionId` (VCFO-095), so a sparse record renders as
+ * a bare name and id instead of being mislabelled a create.
+ *
+ * `inputs`, `outputs` and expanded `resources` stay out, exactly as they do in
+ * `deploymentRequestLines`: a create request carries the inputs the deployment
+ * was requested with, and those are not this tool's to print.
+ */
+export function deploymentRequestRow(request: DeploymentRequest): string {
+  let line = `• ${request.name || "(unnamed)"} (id: ${request.id ?? "(unknown)"})`;
+  if (request.status) line += ` [${request.status}]`;
+  if (request.actionId) line += ` — action: ${request.actionId}`;
+  else if (request.blueprintId || request.catalogItemId) line += ` — create`;
+  if (request.completedTasks !== undefined || request.totalTasks !== undefined) {
+    line += ` — tasks: ${request.completedTasks ?? "?"}/${request.totalTasks ?? "?"}`;
+  }
+  if (request.requestedBy) line += ` — by: ${request.requestedBy}`;
+  return line;
 }
 
 /**
@@ -709,6 +739,86 @@ export function registerDeploymentTools(
             {
               type: "text",
               text: `Failed to get deployment request: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  server.registerTool(
+    "list-deployment-requests",
+    {
+      title: "List Deployment Requests",
+      description:
+        "List the requests submitted against a deployment -- its create request, every day-2 action, and a queued delete -- whoever submitted them and through whatever interface. Use it to discover a request ID to hand to get-deployment-request, including the create request that provisioned the deployment, whose ID is returned nowhere else. Each row renders the request's name, ID, status, action or create marker, task progress and requester; the inputs a create request carries are not rendered. The listing is scoped to a deployment that still exists and answers 404 once it is gone, while the requests it listed keep reading by ID.",
+      inputSchema: z.object({
+        deploymentId: z
+          .string()
+          .describe("The deployment ID (discover with list-deployments)"),
+        limit: listLimitSchema,
+      }),
+      annotations: { readOnlyHint: true },
+    },
+    async ({ deploymentId, limit }): Promise<CallToolResult> => {
+      try {
+        const result = await client.listDeploymentRequests(deploymentId, {
+          limit,
+        });
+        const items = result.content ?? [];
+        if (items.length === 0) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `No deployment requests found for deployment ${deploymentId}.${limit !== undefined ? truncationNote(result, 0, result.totalElements) : ""}`,
+              },
+            ],
+          };
+        }
+        const lines = items.map(deploymentRequestRow);
+        const total =
+          limit === undefined
+            ? result.totalElements ?? items.length
+            : items.length;
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Found ${total} deployment request(s):\n\n${lines.join("\n")}${truncationNote(result, items.length, result.totalElements)}${limitNote(result, items.length, result.totalElements)}`,
+            },
+          ],
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        // A request outlives its deployment: once the deployment is gone this
+        // listing answers 404 while every request it would have listed still
+        // reads by id (VCFO-095). Saying only "not found" would read as though
+        // the history were gone too, so the refusal names the read that still
+        // works -- for a caller who already holds an id (VCFO-097).
+        //
+        // The status alone cannot say *what* was absent: an unknown deployment
+        // and a platform not serving this route answer the same 404, and both
+        // routes were only measured on the two supported platforms. So the lead
+        // offers both causes rather than asserting the deployment is gone and
+        // sending the caller to re-confirm an ID that was right.
+        if (apiErrorStatus(error) === 404) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `No request listing is available for deployment ${deploymentId}: either the deployment does not exist -- confirm the ID with list-deployments -- or this platform does not serve the listing. A deleted deployment's requests are not gone either way: each one still reads by ID with get-deployment-request, so use an ID captured earlier if you have one.\n${message}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to list deployment requests: ${message}`,
             },
           ],
           isError: true,

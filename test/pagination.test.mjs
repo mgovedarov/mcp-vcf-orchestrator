@@ -221,3 +221,42 @@ test("getAllAutomationPages treats a negative totalElements as unknown and keeps
     "falls back to the collected count instead of leaking the -1 sentinel",
   );
 });
+
+test("getAllAutomationPages reads a bare array body as a single complete page (VCFO-097)", async () => {
+  // Automation services are inconsistent about the two shapes -- the sibling
+  // /deployments/{id}/actions route answers a bare array on both platforms --
+  // so a listing that switched arms must not render as an empty inventory.
+  let requests = 0;
+  const http = {
+    get: async () => {
+      requests += 1;
+      return [{ id: "request-1" }, { id: "request-2" }];
+    },
+  };
+
+  const result = await getAllAutomationPages(http, "/things", "https://example.test");
+
+  assert.equal(requests, 1);
+  assert.deepEqual(result.content, [{ id: "request-1" }, { id: "request-2" }]);
+  assert.equal(result.numberOfElements, 2);
+  assert.equal(result.totalElements, 2);
+  assert.equal(result.truncated, undefined);
+  assert.equal(result.limited, undefined);
+});
+
+test("getAllAutomationPages limits a bare array body and reports it (VCFO-097)", async () => {
+  const http = {
+    get: async () => [{ id: "request-1" }, { id: "request-2" }],
+  };
+
+  const result = await getAllAutomationPages(
+    http,
+    "/things",
+    "https://example.test",
+    undefined,
+    { maxItems: 1 },
+  );
+
+  assert.deepEqual(result.content, [{ id: "request-1" }]);
+  assert.equal(result.limited, true);
+});
