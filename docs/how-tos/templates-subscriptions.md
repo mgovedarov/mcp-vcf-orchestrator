@@ -16,6 +16,8 @@ Recommended sequence:
 4. `create-template(name: "...", projectId: "...", content: "...", confirm: true)`
 5. `get-template(id: "<new-template-id>")`
 
+Always pass `content`. It is schema-optional, but only vRA 8 creates an empty template when it is omitted; VCF Automation 9.1 refuses that request with an opaque `400` and a minimal `formatVersion: 1` document is the smallest it accepts.
+
 Do not invent provider-specific YAML properties. If no reliable example or user-provided schema exists, report the missing facts.
 
 ## Wire A Workflow To An Event Topic

@@ -1,5 +1,9 @@
 import type { ListOptions, Template, TemplateList } from "../types.js";
-import type { VroHttpClient } from "./core.js";
+import {
+  apiErrorStatus,
+  TEMPLATE_CREATE_CONTENT_REQUIRED,
+  type VroHttpClient,
+} from "./core.js";
 import { getAllAutomationPages } from "./pagination.js";
 
 export class TemplateClient {
@@ -29,7 +33,14 @@ export class TemplateClient {
     );
   }
 
-  createTemplate(params: {
+  /**
+   * Creates a blueprint. `content` stays optional on the wire — vRA 8 creates
+   * an empty template from a request without it (VCFO-070) — but VCF
+   * Automation 9.1 refuses that request with an opaque 400, so the two facts
+   * are reconciled by asking the server and explaining its answer rather than
+   * by refusing pre-emptively. See TEMPLATE_CREATE_CONTENT_REQUIRED.
+   */
+  async createTemplate(params: {
     name: string;
     projectId: string;
     description?: string;
@@ -44,11 +55,22 @@ export class TemplateClient {
     if (params.content !== undefined) body.content = params.content;
     if (params.requestScopeOrg !== undefined)
       body.requestScopeOrg = params.requestScopeOrg;
-    return this.http.post<Template>(
-      "/blueprints",
-      body,
-      this.http.blueprintBaseUrl,
-    );
+    try {
+      return await this.http.post<Template>(
+        "/blueprints",
+        body,
+        this.http.blueprintBaseUrl,
+      );
+    } catch (error) {
+      if (params.content === undefined && apiErrorStatus(error) === 400) {
+        const message = (error as Error).message;
+        throw Object.assign(
+          new Error(`${message}${TEMPLATE_CREATE_CONTENT_REQUIRED}`),
+          { status: 400 },
+        );
+      }
+      throw error;
+    }
   }
 
   async deleteTemplate(id: string): Promise<void> {

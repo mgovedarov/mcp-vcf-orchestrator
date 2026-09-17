@@ -3324,6 +3324,111 @@ test("template client uses blueprint endpoints and optional payload fields", asy
   assert.equal(calls[4].init.method, "DELETE");
 });
 
+// VCFO-101: VCF Automation 9.1 refuses a blueprint create that omits `content`
+// with a body naming neither the field nor the rule, so the omission — not the
+// body text, which is server-version-specific — is what earns the guidance.
+// Nothing is pre-emptive: vRA 8 creates an empty template from the same
+// request (VCFO-070), so the server is asked and only its refusal is explained.
+function blueprintCreateFailure(status, body) {
+  globalThis.fetch = async (url) => {
+    const request = new URL(String(url));
+    if (request.pathname.includes("/sessions")) return authResponse();
+    return Response.json(body, { status });
+  };
+}
+
+test("a 400 on a create-template that omitted content explains the omission", async () => {
+  blueprintCreateFailure(400, {
+    message: "Unknown Server Validation Error",
+    statusCode: 400,
+  });
+  const client = new VroClient(config());
+  try {
+    await assert.rejects(
+      () => client.createTemplate({ name: "New VM", projectId: "project-1" }),
+      (error) => {
+        // The server's own message survives: the hint is appended, not
+        // substituted, so a 400 still shows what the service said.
+        assert.match(error.message, /400 Bad Request/);
+        assert.match(error.message, /Unknown Server Validation Error/);
+        assert.match(error.message, /this create omitted `content`/);
+        assert.match(error.message, /formatVersion: 1/);
+        // Preserved so apiErrorStatus still reads it downstream.
+        assert.equal(error.status, 400);
+        return true;
+      },
+    );
+  } finally {
+    await client.close();
+  }
+});
+
+test("a 400 on a create-template that supplied content is left alone", async () => {
+  blueprintCreateFailure(400, { message: "Invalid blueprint YAML", statusCode: 400 });
+  const client = new VroClient(config());
+  try {
+    await assert.rejects(
+      () =>
+        client.createTemplate({
+          name: "New VM",
+          projectId: "project-1",
+          content: "formatVersion: nope",
+        }),
+      (error) => {
+        assert.match(error.message, /Invalid blueprint YAML/);
+        assert.doesNotMatch(error.message, /omitted `content`/);
+        return true;
+      },
+    );
+  } finally {
+    await client.close();
+  }
+});
+
+test("a non-400 failure on a create-template without content is left alone", async () => {
+  blueprintCreateFailure(500, { message: "Internal Server Error", statusCode: 500 });
+  const client = new VroClient(config());
+  try {
+    await assert.rejects(
+      () => client.createTemplate({ name: "New VM", projectId: "project-1" }),
+      (error) => {
+        assert.match(error.message, /500/);
+        assert.doesNotMatch(error.message, /omitted `content`/);
+        return true;
+      },
+    );
+  } finally {
+    await client.close();
+  }
+});
+
+test("create-template without content still creates where the platform accepts it", async () => {
+  // The vRA 8 path (VCFO-070): `content` stays optional on the wire, so the
+  // key must be absent from the body rather than defaulted to something the
+  // caller never wrote.
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    const request = new URL(String(url));
+    if (request.pathname.includes("/sessions")) return authResponse();
+    calls.push({ url: String(url), init });
+    return Response.json({ id: "template-2", name: "New VM", status: "DRAFT" });
+  };
+  const client = new VroClient(config());
+  try {
+    const created = await client.createTemplate({
+      name: "New VM",
+      projectId: "project-1",
+    });
+    assert.equal(created.id, "template-2");
+    assert.deepEqual(JSON.parse(calls[0].init.body), {
+      name: "New VM",
+      projectId: "project-1",
+    });
+  } finally {
+    await client.close();
+  }
+});
+
 test("subscription client uses event broker endpoints and payloads", async () => {
   const calls = [];
   globalThis.fetch = async (url, init) => {
