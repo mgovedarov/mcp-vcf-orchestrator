@@ -120,7 +120,7 @@ Use \`list-templates\` to discover existing Cloud Assembly blueprint templates b
 Template metadata handled by the current tools includes:
 
 - \`id\`, \`name\`, \`description\`, \`status\`, \`projectId\`, \`projectName\`, \`valid\`, \`createdBy\`, \`createdAt\`, \`updatedBy\`, and \`updatedAt\` when returned by the API.
-- \`create-template\` accepts \`name\`, \`projectId\`, optional \`description\`, optional YAML \`content\`, optional \`requestScopeOrg\`, and required \`confirm: true\`.
+- \`create-template\` accepts \`name\`, \`projectId\`, optional \`description\`, YAML \`content\`, optional \`requestScopeOrg\`, and required \`confirm: true\`. \`content\` is optional only on vRA 8, which creates an empty template without it; VCF Automation 9.1 refuses that request with an opaque 400, so supply it — a minimal \`formatVersion: 1\` document is accepted.
 
 Authoring rules:
 

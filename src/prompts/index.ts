@@ -287,7 +287,7 @@ export function registerVcfaPrompts(server: McpServer): void {
           "Use list-projects to resolve the project hint to a verified projectId and get-project to confirm it; never guess project IDs.",
           "Use list-catalog-items or list-deployments when the template must align with catalog or deployment behavior.",
           ...discoveryGuardrails(),
-          "Call create-template with confirm set to true only after the target projectId and YAML content are confirmed, then verify with get-template.",
+          "Call create-template with confirm set to true only after the target projectId and YAML content are confirmed, then verify with get-template. Always send content: VCF Automation 9.1 refuses a create without it with an opaque 400.",
         ]),
       ),
   );

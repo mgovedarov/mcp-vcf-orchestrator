@@ -149,7 +149,7 @@ export function registerTemplateTools(
           .string()
           .optional()
           .describe(
-            "YAML blueprint content for the template. If omitted, an empty template is created.",
+            "YAML blueprint content for the template. Supply it: VCF Automation 9.1 refuses a create without it with an opaque 400, and a minimal 'formatVersion: 1' document is accepted. Only vRA 8 creates an empty template when it is omitted.",
           ),
         requestScopeOrg: z
           .boolean()

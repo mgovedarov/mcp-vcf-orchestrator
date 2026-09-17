@@ -70,6 +70,26 @@ export const UNSUPPORTED_VRA8_CONFIGURATION_EXPORT =
 export const CONFIGURATION_EXPORT_NOT_ACCEPTABLE =
   "This vRO server does not serve a single configuration element as a .vsoconf artifact: it answered the export request with 406 Not Acceptable. Use get-configuration to read the element, or add it to the project package with add-configuration-to-project-package and export that package instead.";
 
+// Appended to a 400 on a blueprint create that omitted `content`. VCF
+// Automation 9.1 refuses such a request with `{"message":"Unknown Server
+// Validation Error","statusCode":400}` — a body that names neither the field
+// nor the rule, so a caller following the tool's own description had nothing
+// to act on. A minimal `formatVersion: 1` document is accepted and creates the
+// blueprint in DRAFT (verified live on a 9.1 tenant session, VCFO-099).
+//
+// The hint is appended rather than substituted, and gated on the omission
+// rather than on the body text: `/blueprints` answers 400 for other reasons
+// too — malformed YAML, an unknown project — and those keep their own message.
+// The body string is server-version-specific and is deliberately not matched.
+//
+// Unlike the configuration-export refusal above, nothing here is pre-emptive.
+// vRA 8 creates an empty template from exactly this request (verified under
+// VCFO-070), so refusing before the wire would break a working path; and no
+// 9.0 environment exists to establish that the 9.x family as a whole behaves
+// like 9.1. The server is asked, and only its own refusal is explained.
+export const TEMPLATE_CREATE_CONTENT_REQUIRED =
+  "\nHint: this create omitted `content`. VCF Automation 9.1 refuses a blueprint create without it and answers exactly this 400, whose body names neither the field nor the rule; a minimal `content: \"formatVersion: 1\"` document is accepted and creates the template in DRAFT. Inspect an existing blueprint with get-template (includeContent set to true) for the conventions this project uses, then re-send with content. vRA 8 does create an empty template from this request, so a 400 here points at the platform rather than at the call being malformed.";
+
 // Appended to a 409 on a workflow, action or configuration delete. vRO names
 // the remedy itself — "Specify '?force=true' parameter to delete it" — but an
 // MCP caller cannot send a query parameter, so the hint re-spells it as the

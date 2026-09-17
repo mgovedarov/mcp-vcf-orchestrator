@@ -962,13 +962,17 @@ Get detailed information about a specific blueprint template by its ID. The YAML
 
 Create a new blueprint template in VCF Automation Cloud Assembly. Use `list-templates` to verify afterwards.
 
+`content` is schema-optional but should always be supplied. VCF Automation 9.1 refuses a create that omits it with `400 {"message":"Unknown Server Validation Error","statusCode":400}` — a body naming neither the field nor the rule — while a minimal `content: "formatVersion: 1"` document is accepted and creates the blueprint in `DRAFT` (verified live under VCFO-099).
+
+It stays optional in the schema because vRA 8 *does* create an empty template from exactly that request (verified under VCFO-070), and no 9.0 environment exists to establish that the whole 9.x family behaves like 9.1. So nothing is refused pre-emptively: the request is sent, and a `400` on a create that omitted `content` is reported with that guidance appended to the server's own message rather than as an opaque validation error. A `400` raised for any other reason — malformed YAML, an unknown project — keeps its own message unchanged.
+
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `name` | string | Yes | - | Name for the new template. |
 | `projectId` | string | Yes | - | Project ID in which to create the template (discover with `list-projects`). |
 | `description` | string | No | - | Optional template description. |
-| `content` | string | No | empty template | YAML blueprint content for the template. Treat this as Cloud Assembly blueprint content and verify conventions from existing templates or docs before authoring. |
+| `content` | string | No | - | YAML blueprint content for the template. Effectively required on VCF Automation 9.1, which refuses a create without it; omitting it creates an empty template on vRA 8 only. Treat this as Cloud Assembly blueprint content and verify conventions from existing templates or docs before authoring. |
 | `requestScopeOrg` | boolean | No | `false` | If `true`, the template is available org-wide rather than project-scoped. |
 | `confirm` | boolean | Yes | - | Must be `true` to confirm creation. If `false`, the template is not created. |
 :::
