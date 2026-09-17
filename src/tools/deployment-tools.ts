@@ -230,8 +230,10 @@ const NON_RUNNING_REQUEST_STATUSES = new Set([
  * a status missing from this list is still treated as active.
  *
  * `PENDING`, `INITIALIZATION`, `CHECKING_APPROVAL` and `INPROGRESS` were seen
- * on both vRA 8.18 and VCF Automation 9.1; `COMPLETION` only on 9.1, at full
- * task progress and still cancelable, one poll before `SUCCESSFUL` (VCFO-095).
+ * on both vRA 8.18 and VCF Automation 9.1; `COMPLETION` on 9.1, at full task
+ * progress and still cancelable, one poll before `SUCCESSFUL`. It was caught
+ * on one request in three at a 2 s poll interval, so not seeing it on vRA 8.18
+ * says nothing about whether that platform serves it (VCFO-095).
  */
 const OBSERVED_ACTIVE_REQUEST_STATUSES = [
   "PENDING",

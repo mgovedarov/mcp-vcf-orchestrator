@@ -279,9 +279,12 @@ request at one mid-flight and one terminal sample, so no key rests on rendered o
   terminal. **`completedAt` is never served.**
 - **Status vocabulary:** `PENDING` → `INITIALIZATION` → `CHECKING_APPROVAL` → **`COMPLETION`** →
   `SUCCESSFUL`, with `INPROGRESS` before `COMPLETION`. `COMPLETION` appears at full task progress and
-  still cancelable, one poll before `SUCCESSFUL`, and **has not been seen on vRA 8.18**. Neither status
-  is a member of the tool's non-running set, so the fail-open default kept the guidance correct; the
-  tool's own text, which named three active statuses, was corrected in this change.
+  still cancelable, one poll before `SUCCESSFUL`. **Read it as a sampling result, not a platform
+  difference:** at a 2 s poll interval it was caught on one of this round's three requests, inside a
+  window of at most 2 s, and on vRA 8.18 the same interval caught it on none — which cannot distinguish
+  a short-lived state from its absence. What is established is that 9.1 serves it. Neither status is a
+  member of the tool's non-running set, so the fail-open default kept the guidance correct; the tool's
+  own text, which named three active statuses, was corrected in this change.
 - **`totalTasks` is a placeholder at submission** — `1` for a power action, `2` for a delete — replaced
   once the service enumerates the tasks (4, 5, and 7 for a create), exactly as on vRA 8.18.
 - **A 9.1 create request carries `inputs`**, alongside `blueprintId` and `catalogItemId` and without an

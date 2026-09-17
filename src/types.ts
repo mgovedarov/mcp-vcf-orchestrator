@@ -664,8 +664,10 @@ export interface DeploymentActionRequestParams {
  * platforms under VCFO-095.
  *
  * Status vocabulary observed there: `PENDING` -> `INITIALIZATION` ->
- * `CHECKING_APPROVAL` -> `INPROGRESS` -> `SUCCESSFUL`, with `COMPLETION`
- * between the last two on 9.1. `totalTasks` is a placeholder at submission
+ * `CHECKING_APPROVAL` -> `INPROGRESS` -> `SUCCESSFUL`, and on 9.1 also
+ * `COMPLETION` between the last two -- short-lived enough that a 2 s poll
+ * caught it once in three requests, so its absence elsewhere is a sampling
+ * result rather than a platform difference. `totalTasks` is a placeholder at submission
  * (`1` for a power action, `2` for a delete) that the service replaces once it
  * enumerates the tasks (4, 5, and 7 for a create), so progress is not
  * monotonic.

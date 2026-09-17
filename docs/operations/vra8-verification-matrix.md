@@ -172,7 +172,9 @@ count of one, bare and `projectId`-scoped, and the pre-existing deployment was o
   **`CHECKING_APPROVAL`**: `PENDING` → `INITIALIZATION` → `CHECKING_APPROVAL` → `INPROGRESS` →
   `SUCCESSFUL`. It is not a member of the tool's non-running set, so the fail-open default held and the
   guidance kept saying "poll" — the design working rather than a near miss. The tool's own text, which
-  named only three active statuses, was corrected in this change.
+  named only three active statuses, was corrected in this change. The `COMPLETION` status the 9.1 round
+  saw was **not captured here**, but this round's 2 s poll interval caught it on only one of three
+  requests there too, so its absence from these captures is not evidence that this platform lacks it.
 - **`totalTasks` is a placeholder at submission.** `1` for a power action and `2` for a delete, replaced
   once the service enumerates the tasks: power settles at 4, delete at **5**, a create at 7. VCFO-088's
   "4 tasks for a power action" was the settled value and stands; its "2 for a delete" was the submission
