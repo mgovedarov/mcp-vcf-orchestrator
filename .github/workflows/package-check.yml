@@ -1,32 +1,24 @@
+# `Verify npm package contents` is a required status check on `main`, so this workflow
+# deliberately carries no `paths` filter. GitHub does not auto-pass a path-filtered
+# required check: a PR touching nothing in such a filter never fires the workflow, the
+# context stays at "Expected — waiting for status to be reported", and the merge is
+# blocked. A filter also let publish-affecting files (CHANGELOG.md, LICENSE, NOTICE and
+# .npmignore are all part of the published tarball) skip the very check that verifies it.
+# The job takes ~15s; do not reintroduce a filter to save that (VCFO-102).
+
 name: Package Check
 
 on:
   pull_request:
-    paths:
-      - ".github/workflows/package-check.yml"
-      - "README.md"
-      - "docs/**"
-      - "examples/**"
-      - "package-lock.json"
-      - "package.json"
-      - "scripts/**"
-      - "src/**"
-      - "tsconfig.json"
   push:
     branches: [main]
-    paths:
-      - ".github/workflows/package-check.yml"
-      - "README.md"
-      - "docs/**"
-      - "examples/**"
-      - "package-lock.json"
-      - "package.json"
-      - "scripts/**"
-      - "src/**"
-      - "tsconfig.json"
 
 permissions:
   contents: read
+
+concurrency:
+  group: package-check-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   pack:
