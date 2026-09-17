@@ -1,6 +1,22 @@
 # Changelog
 
-## Unreleased
+## 3.3.0 - 2026-09-17
+
+The first release since 3.2.0. A deployment request is now followable from submission to settlement: two new
+tools take the surface from 78 to 80 — `get-deployment-request` reads one request by ID, and
+`list-deployment-requests` lists every request a deployment has received, its create, each day-2 action and
+a queued delete, whoever submitted them and through whatever interface. The create request that
+`POST /catalog/api/items/{id}/request` answers with no request ID is reachable through the MCP surface for
+the first time. Around them, the first live provisions on either platform fixed what only a real deployment
+could show: `create-deployment` reports the ID and name it just requested instead of three `undefined`
+fields, `delete-deployment` reports a deletion as *requested* rather than done, `expectedProjectName` stops
+refusing every call on 9.1, and `VCFA_TARGET_PLATFORM=vra8` sends catalog-service and deployment-service
+writes after a vRA 8.18 round instead of refusing them pending verification. Two classes of quiet wrongness
+close alongside. Secrets: a `SecureString` workflow execution output and an action script read through
+`vcfa://actions/{id}` were printed past the gates their own tools apply, and are withheld now. Silent false
+negatives: a list envelope the pagination walker cannot read throws instead of rendering as "none found",
+and `search` filters `list-templates`, `list-deployments` and `list-catalog-items` client-side rather than
+being accepted and ignored by 9.1, where a needle matching nothing returned the full inventory.
 
 ### Added
 
