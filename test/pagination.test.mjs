@@ -260,3 +260,70 @@ test("getAllAutomationPages limits a bare array body and reports it (VCFO-097)",
   assert.deepEqual(result.content, [{ id: "request-1" }]);
   assert.equal(result.limited, true);
 });
+
+test("getAllAutomationPages throws when the list envelope is unrecognized (VCFO-098)", async () => {
+  // The old vRA envelope VCF Automation 9.1 still serves on the blueprint
+  // service when asked for apiVersion=2019-01-15. Reading `content` off it
+  // yields nothing, which would render a populated environment as an empty
+  // inventory instead of failing.
+  const http = {
+    get: async () => ({ count: 1, links: [], objects: [{ id: "blueprint-1" }] }),
+  };
+
+  await assert.rejects(
+    () => getAllAutomationPages(http, "/blueprints", "https://example.test"),
+    /unrecognized envelope[\s\S]*top-level keys: count, links, objects/,
+  );
+});
+
+test("getAllAutomationPages names the endpoint it could not read (VCFO-098)", async () => {
+  const http = { get: async () => ({ supportedApis: [], latestApiVersion: "x" }) };
+
+  await assert.rejects(
+    () => getAllAutomationPages(http, "/about", "https://example.test"),
+    /Automation list response for \/about/,
+  );
+});
+
+test("getAllAutomationPages reads an empty object body as a complete empty page (VCFO-098)", async () => {
+  // An empty 2xx body reaches the walk as `{}` -- that is the transport
+  // reporting no content, not an envelope this client failed to recognize, so
+  // it must stay a clean empty result rather than becoming an error.
+  let requests = 0;
+  const http = {
+    get: async () => {
+      requests += 1;
+      return {};
+    },
+  };
+
+  const result = await getAllAutomationPages(http, "/things", "https://example.test");
+
+  assert.equal(requests, 1);
+  assert.deepEqual(result.content, []);
+  assert.equal(result.numberOfElements, 0);
+});
+
+test("getAllAutomationPages reads a page carrying no content key as empty (VCFO-098)", async () => {
+  // Paging metadata identifies a page even when the server omitted `content`
+  // rather than sending an empty array, so this arm reports nothing found
+  // instead of throwing.
+  const http = {
+    get: async () => ({ last: true, totalElements: 0, totalPages: 0 }),
+  };
+
+  const result = await getAllAutomationPages(http, "/things", "https://example.test");
+
+  assert.deepEqual(result.content, []);
+  assert.equal(result.numberOfElements, 0);
+  assert.equal(result.totalElements, 0);
+});
+
+test("getAllAutomationPages throws when the list body is not an object (VCFO-098)", async () => {
+  const http = { get: async () => "not json" };
+
+  await assert.rejects(
+    () => getAllAutomationPages(http, "/things", "https://example.test"),
+    /was not an object or an array/,
+  );
+});

@@ -316,6 +316,58 @@ export async function getFilteredVroList<
   };
 }
 
+// Keys that identify a Spring page even when the server omitted `content`
+// entirely rather than sending an empty array. Any one of them is enough to
+// read the body as a page with no items.
+const AUTOMATION_PAGE_MARKER_KEYS = [
+  "last",
+  "first",
+  "number",
+  "numberOfElements",
+  "size",
+  "totalElements",
+  "totalPages",
+] as const;
+
+/**
+ * Normalize an Automation list body into the page shape the walk consumes.
+ *
+ * Three arms are recognized. A **bare array** is a single complete page:
+ * Automation services are not consistent about which shape they serve --
+ * `/deployments/{id}/actions` answers an array on both platforms while
+ * `/deployments/{id}/requests` answers a page (VCFO-074, VCFO-095) -- and
+ * `last` completes the walk in one pass, since an array carries no paging
+ * metadata to continue from (VCFO-097). A **Spring page** carrying a `content`
+ * array is passed through. An **empty result** is a body with no keys, which is
+ * what `request()` returns for an empty 2xx (`core.ts`), or one carrying paging
+ * metadata but no `content`.
+ *
+ * Anything else is a response this client cannot read, and reading `content`
+ * off it yields nothing -- so a listing whose route switched to an envelope we
+ * do not know would render as an empty inventory rather than failing: a silent
+ * false negative, and the worst outcome for a discovery tool. Such a body
+ * throws instead, naming the endpoint and the keys it did carry. Key names
+ * only: a value could be anything the service holds (VCFO-098).
+ */
+function normalizeAutomationPage<T>(
+  body: AutomationPage<T> | T[],
+  path: string,
+): AutomationPage<T> {
+  if (Array.isArray(body)) return { content: body, last: true };
+  if (body === null || typeof body !== "object") {
+    throw new Error(
+      `Automation list response for ${path} was not an object or an array; this client cannot read it`,
+    );
+  }
+  if (Array.isArray(body.content)) return body;
+  const keys = Object.keys(body);
+  if (keys.length === 0) return body;
+  if (AUTOMATION_PAGE_MARKER_KEYS.some((key) => key in body)) return body;
+  throw new Error(
+    `Automation list response for ${path} has an unrecognized envelope; expected a page with a "content" array or a bare array, got top-level keys: ${keys.sort().join(", ")}`,
+  );
+}
+
 export async function getAllAutomationPages<T>(
   http: VroHttpClient,
   path: string,
@@ -347,22 +399,11 @@ export async function getAllAutomationPages<T>(
     pageParams.set("page", String(pageNumber));
     pageParams.set("size", String(pageSize));
 
-    // A bare array is accepted alongside the Spring page. Automation services
-    // are not consistent about which they serve -- `/deployments/{id}/actions`
-    // answers an array on both platforms while `/deployments/{id}/requests`
-    // answers a page (VCFO-074, VCFO-095) -- and reading `content` off an array
-    // yields nothing, so a listing that switched arms would render as an empty
-    // inventory rather than failing. `last` completes the walk in one pass,
-    // since an array carries no paging metadata to continue from. No caller can
-    // regress on this: one already receiving an array reads zero items today
-    // (VCFO-097).
     const body = await http.get<AutomationPage<T> | T[]>(
       withQuery(path, pageParams),
       baseUrl,
     );
-    const page: AutomationPage<T> = Array.isArray(body)
-      ? { content: body, last: true }
-      : body;
+    const page = normalizeAutomationPage<T>(body, path);
     const items = page.content ?? [];
     if (page.totalElements !== undefined && page.totalElements >= 0)
       reportedTotal = page.totalElements;
