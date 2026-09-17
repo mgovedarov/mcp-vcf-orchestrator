@@ -15,6 +15,11 @@ The split-host external-vRO path keeps its own evidence under
 204 calls were made through the real MCP tool handlers over stdio. The environment was returned to
 its exact starting counts afterwards.
 
+**A later round, VCFO-099 (2026-09-17), covers the two cells this sweep could not.** It ran the full
+vRO surface with writes against an **external** vRO over the split-host `VCFA_VRO_HOST` path, and the
+remaining Automation-service gaps on a **tenant** session — 276 further calls through the real
+handlers, plus a few raw-HTTP key-only probes, both environments restored. Its sections are below; the rows above keep their own scope.
+
 This matrix covers `vcfa` only. For `VCFA_TARGET_PLATFORM=vra8`, see the
 [vRA 8 Verification Matrix](./vra8-verification-matrix.md) — its "Verified" column is evidence for
 vRA 8.18 / vRO 8.18.1 and must not be read as 9.x evidence, just as this one must not be read as
@@ -26,6 +31,8 @@ vRA 8 evidence.
 | --- | --- | --- |
 | `list-deployment-requests` | Verified under VCFO-097 | Added under VCFO-097 and driven through stdio on a tenant session on 2026-09-17, read-only, against the environment's own two deployments. See the [VCFO-097 section](#deployment-request-listing-tenant-session-2026-09-17-vcfo-097) below. |
 | `get-deployment-request` | Verified under VCFO-095 | Pending when it was added under VCFO-094. Driven through stdio on a tenant session on 2026-09-17: **`GET /deployment/api/requests/{id}` does exist on 9.1** and serves the same key set as vRA 8.18. Five real requests plus a 404 and a 400 arm. See the [VCFO-095 section](#deployment-request-lookup-tenant-session-2026-09-17-vcfo-095) below. |
+| `import-action-file`, `get-template`, `create-template`, `delete-template` | Verified under VCFO-099 | The four rows the sweep left unverified that an available identity could reach. Driven through stdio on 2026-09-17. |
+| `list-event-topics`, `list-subscriptions`, `get-subscription`, `create-subscription`, `update-subscription`, `delete-subscription` | Blocked on both identities under VCFO-099 | Re-measured rather than assumed: `500` on a provider session, `403` on a tenant one. |
 
 ## How to read the status column
 
@@ -101,8 +108,8 @@ Consequences:
 | `export-action-file` | Verified | By fully qualified name — the VCFO-076 fix holds on 9.1. |
 | `preflight-action-file` | Verified | Passes live exports. |
 | `diff-action-file` | Verified | live/file and file/file; the live variant takes `actionId`. |
-| `import-action-file` | Unverifiable here | Only the `confirm: false` refusal was exercised; the module-creation behaviour VCFO-079 measured on 8.18.1 was not re-tested on 9.1. |
-| `delete-action` | Verified | Deletes cleanly, including straight after `delete-package` with `deleteContents: false` (the sequence [#192](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/192) reports) — the 409 was never observed on `/actions` here. `force` is wired identically to `delete-workflow`; the flag's effect on this route is therefore untested. |
+| `import-action-file` | Verified under VCFO-099 | Both VCFO-079 arms reproduce on 9.1: importing into a module that does not exist answers `404 Action category name not found`, and importing into an existing one succeeds. `create-action` still creates the module implicitly. See the [VCFO-099 split-host section](#split-host-external-vro-provider-session-2026-09-17-vcfo-099). |
+| `delete-action` | Verified | Deletes cleanly. **The 409 *does* occur on `/actions`** — VCFO-099 observed it on an external vRO after deleting a package that had been exported and re-imported — and it is transient there too: one plain retry cleared it. This supersedes the sweep's "never observed on `/actions`" reading, which was taken from a shorter-lived package. See [The 409 on delete](#the-409-on-delete-vcfo-087). |
 
 ## Configuration elements
 
@@ -115,7 +122,7 @@ Consequences:
 | `export-configuration-file` | Expected refusal | **406**, reported as the actionable refusal naming the project-package route — VCFO-074 confirmed on 9.1, identical to vRA 8. |
 | `preflight-configuration-file` | Verified (local) | Validates ZIP/XML safety without contacting the server. It accepted a package zip merely renamed to `.vsoconf`, so **a local pass does not imply live import would accept the container** — the same caveat as on vRA 8. No genuine `.vsoconf` exists to feed it, because the export is refused. |
 | `import-configuration-file` | Unverifiable here | Same root cause as on vRA 8: no vRO tested serves a `.vsoconf` for a single element, and a package stores elements as `elements/<id>/data`. Only the `confirm: false` refusal was exercised. |
-| `delete-configuration` | Verified | Guard mismatch refuses; correct guard deletes, including straight after `delete-package` with `deleteContents: false` — the 409 was not observed on `/configurations` here either. `force` is wired identically; its effect on this route is untested. |
+| `delete-configuration` | Verified | Guard mismatch refuses; correct guard deletes. **The 409 also occurs on `/configurations`** and clears on one plain retry (VCFO-099). The documented refusals both fire: omitting `attributes` on an element that has some, and a secure attribute sent without a value. |
 
 ## Resource elements
 
@@ -125,7 +132,7 @@ Consequences:
 | `export-resource-element` | Verified | Exported a binary element. |
 | `import-resource-element` | Verified | Creates a new element. |
 | `update-resource-element` | Verified | Succeeds with `expectedName`. **VCFO-077 behaves identically on 9.1**: the live record reports no category, so `expectedCategoryName` refuses with the explanatory message rather than a bogus mismatch. |
-| `delete-resource-element` | Verified | Guard mismatch refuses; correct guard deletes. |
+| `delete-resource-element` | Verified | Guard mismatch refuses; correct guard deletes. **The 409 occurs on `/resources` too** and clears on one plain retry (VCFO-099). |
 
 ## Packages
 
@@ -176,11 +183,11 @@ None was driven with `confirm: true`.
 | `list-catalog-items` / `get-catalog-item` | Verified under VCFO-074 | A released catalog item was read on a 9.1 tenant session and renders correctly; see the tenant-session section below. Blocked by identity here — `500` confirmed. |
 | `list-deployments` / `get-deployment` / `list-deployment-actions` | Blocked by identity | `500` confirmed on this identity. The item and action shapes were settled separately on a **tenant** session — see the tenant-session section below (VCFO-074). |
 | `create-deployment` / `delete-deployment` / `run-deployment-action` | Not exercised **in this sweep** | These provision or destroy real infrastructure ([VCFO-084](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/188)), so only the `confirm: false` refusals were driven here. All three, and the VCFO-084 target guards, were exercised live on a **tenant** session — see the tenant-session section below (VCFO-074). |
-| `list-templates` / `get-template` | Blocked by identity | `500` confirmed. |
-| `create-template` / `delete-template` | Blocked by identity | `500` confirmed; writes keep their vRA 8 verification under VCFO-070. |
-| `list-event-topics` | Blocked by identity | `500` confirmed. |
-| `list-subscriptions` / `get-subscription` | Blocked by identity | `500` confirmed. |
-| `create-subscription` / `update-subscription` / `delete-subscription` | Not exercised | Subscriptions fire on real events in a live tenant; excluded by scope. Writes keep their vRA 8 verification under VCFO-070. |
+| `list-templates` / `get-template` | Verified under VCFO-099 | Both driven on a 9.x tenant session; `get-template` renders status, project, validity and omits content behind a sha256 summary until `includeContent`. Blocked by identity on a provider session — `500` confirmed. **`list-templates`' `search` is a silent no-op on 9.1** — see the tenant section below. |
+| `create-template` / `delete-template` | Verified under VCFO-099 | Both exercised on a 9.x tenant session against a disposable DRAFT blueprint, with all four `delete-template` guard arms. **`create-template` requires non-empty `content` on 9.1**, contradicting its own description — see the tenant section below. Blocked by identity on a provider session — `500` confirmed. |
+| `list-event-topics` | Blocked on both identities | `500` on a provider session; **`403` on a tenant session** (VCFO-099, and independently under VCFO-098). Not reachable with either identity this environment offers — see [Event-broker: blocked on both identities](#event-broker-blocked-on-both-identities-2026-09-17-vcfo-099). |
+| `list-subscriptions` / `get-subscription` | Blocked on both identities | `500` on a provider session; **`403` on a tenant session** (VCFO-099). |
+| `create-subscription` / `update-subscription` / `delete-subscription` | Blocked on both identities | Approved for VCFO-099 and **still not runnable**: `create-subscription` needs an `eventTopicId` from a listing that `403`s, and a `runnableId` the tenant cannot see. Writes keep their vRA 8 verification under VCFO-070. |
 
 ## Automation services — tenant session, 2026-09-16 (VCFO-074)
 
@@ -360,6 +367,119 @@ request at one mid-flight and one terminal sample, so no key rests on rendered o
   no cancel route, so the field is informative and never actionable through the MCP surface.
 - A day-2 action carrying `inputs`: none of the five actions this platform offers declares any.
 
+## Split-host external vRO, provider session, 2026-09-17 (VCFO-099)
+
+The sweep above ran against the **appliance-embedded** orchestrator with `VCFA_VRO_HOST` unset, and
+recorded "the split-host `VCFA_VRO_HOST` path was not exercised" as its largest open item. This round
+closes it, per [VCFO-099](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/222): the full vRO surface, **writes included**, driven against an **external vRO 9.1** while
+authentication and every Automation service stayed on `VCFA_HOST`.
+
+**Environment:** VCF Automation 9.1 (negotiated 9.1.0), provider session, external vRO 9.1.0,
+2026-09-17.
+**Topology:** `VCFA_VRO_HOST` set **and used**. Unlike the earlier tenant rounds, this is genuine
+split-host evidence: every `/vco/api` request was logged with the external host and no other service
+was, so the routing is observed rather than inferred from a set variable.
+**Inventory (external vRO, provider):** 548 workflows, 598 actions, 135 workflow categories,
+3 configuration categories, 28 resource categories, 0 action categories, 3 configuration elements,
+10 resource elements, 25 packages, 22 plugins.
+
+**The gate was a measurement, not an assumption.** A provider session writing on an *external* vRO had
+never been tried — the tenant identity is refused there (`403 … (Edit, false)`). A disposable
+configuration element was created first, and only then did the writes proceed.
+
+| Tool group | Status | Evidence |
+| --- | --- | --- |
+| Workflows (15) | Verified | A scaffolded four-input container preflighted, imported, opened and **ran**, returning `result (string): "hello vcfo099 x3"` and a real `System.log` line. All three `diff-workflow-file` modes; `expectedCategoryName` and `expectedName` mismatches refuse. Input validation names a bad `number`/`boolean` before running. |
+| Actions (9) | Verified | `create-action` creates the module implicitly; `update-action` carries `inputParameters` forward when only `script` is sent, confirmed by read-back; `export-action-file` by FQN. **`import-action-file` closed** — see below. |
+| Configuration elements (8) | Verified | Create/read/update/delete with read-back. `SecureString` renders `[redacted]`; vRO coerces `"42"`→`42` and `"true"`→`true`. `export-configuration-file` answers the same `406`. |
+| Resource elements (5) | Verified | Export, import, update, delete; VCFO-077's "cannot verify here" message reproduces. |
+| Packages (17) | Verified | The whole project-package family against a disposable package: four elements added, rebuilt, exported, import-details read, re-imported both ways. `preflight-package` reports `workflowArtifacts: 0` with its accurate warning. A non-fully-qualified package name is refused. |
+| Categories, plugins, context, promotion (4) | Verified | `ActionCategory` still returns nothing. `collect-context-snapshot` default profile works; `prepare-artifact-promotion` for workflow, action and package. |
+
+### Settled by this round
+
+- **Split-host routing is observed.** Every `/vco/api` request carried the external host in its log
+  line while the login, `GET /api/versions` and the Automation services stayed on `VCFA_HOST`. The
+  startup banner states the split explicitly.
+- **A provider session can write on an external vRO.** The tenant identity cannot; the two are not
+  interchangeable, and only the provider one is usable for vRO authoring in this topology.
+- **`import-action-file` behaves on 9.1 exactly as VCFO-079 measured on 8.18.1.** A module that does
+  not exist answers `404 Action category name not found`; an existing one imports. The tool cannot
+  create a module, `create-action` can, and deleting a module's last action removes the module, so a
+  disposable module leaves no residue — confirmed by the restored category counts.
+- **The external and embedded orchestrators are different instances with near-identical built-ins.**
+  Identical workflow, action, package and plugin counts; different user content (3 configuration
+  elements against 2, 28 resource categories against 45). Do not read one inventory as the other's.
+- **The environment was returned to its exact starting counts**, verified by re-listing all nine
+  inventories. The disposable workflow category was created and removed by raw HTTP, since no MCP
+  tool creates one.
+
+### Not settled here
+
+- `import-configuration-file` — unchanged: no `.vsoconf` exists to feed it.
+- `collect-context-snapshot` with `includeOptionalDomains: true` **fails the whole snapshot** on a
+  provider session rather than skipping the unreachable domains; the `500` carries the
+  `VCFA_ORGANIZATION` hint. Recorded as observed behaviour, not judged.
+
+## Automation services, tenant session, 2026-09-17 (VCFO-099)
+
+Per [VCFO-099](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/222).
+
+**Environment:** VCF Automation 9.1, tenant session, 2026-09-17. One project, one released catalog
+item with a single pattern-constrained `hostname` input, one DRAFT blueprint, two pre-existing
+deployments belonging to the environment's owner, which were only ever read.
+**Provisioning:** one disposable deployment created and deleted; `list-deployments` back at two, and
+the delete independently confirmed by `get-deployment` answering `404`.
+
+| Tool | Status | Evidence |
+| --- | --- | --- |
+| `get-template` | Verified | Renders status, project, validity and timestamps; content is omitted behind a sha256 summary by default and returned with `includeContent`. |
+| `create-template` | Verified, with a platform constraint | Created a disposable DRAFT blueprint. **`content` is not optional on 9.1**: omitting it answers `400 {"message":"Unknown Server Validation Error"}`. A minimal `formatVersion: 1` is accepted. The tool's description says an empty template is created when `content` is omitted, which is true on vRA 8 and false here. |
+| `delete-template` | Verified | All four `expected*` guards exercised on both arms — name, project ID, project name and status each refuse on mismatch; the correct set deletes. |
+| `list-deployment-requests` | Verified — post-deletion `404` closed | The arm VCFO-097 deliberately skipped. After the deployment was deleted the listing answers `404` **through the real handler**, and the refusal names both causes a `404` could have and points at the read that still works. |
+| `get-deployment` | Verified again | `404` after deletion, on the same poll that confirmed the delete. |
+| `get-deployment-request` | Verified again | **A request outlives its deployment through the MCP surface**: the create request still read `SUCCESSFUL` after the deployment was `404`. Previously only a raw-HTTP measurement. |
+| `create-deployment` / `delete-deployment` | Verified again | Provision 37 s, delete 26 s. `confirm: false` and a wrong `expectedCatalogItemName` refuse first; all four delete guards match live. |
+| `list-deployment-actions` | Verified | Five deployment-level actions, bare array. |
+
+### Observed on this round
+
+- **`search` is a silent no-op on three Automation list tools.** `list-templates`,
+  `list-deployments` and `list-catalog-items` each returned the **full inventory** for a needle that
+  matches nothing. The client does send it — `$search=<needle>` was observed on the wire for
+  `/blueprints`, `/deployments` and `/items` — so 9.1's services ignore the parameter. The tools
+  present `search` as a filter, so a caller asking whether something exists gets a misleading answer.
+  `list-projects` is unaffected: it sends an OData `$filter`, which 9.1 does apply (VCFO-065/072).
+- **A day-2 action's input shape remains unobserved.** A raw key-only dump of
+  `GET /deployments/{id}/actions` on both deployments shows all five actions carrying exactly
+  `actionType, description, displayName, id, name, valid` — no `inputParameters`, no `inputs`. The
+  three-way handling in `formatDeploymentActions` still must not be assumed correct.
+- **A tenant identity is read-only on the external vRO**, and nearly blind: `403 … (Edit, false)` on
+  `create-configuration`, 0 workflows and 0 packages visible. The refusal carries the correct
+  "authorization, not authentication" hint.
+
+## Event-broker: blocked on both identities, 2026-09-17 (VCFO-099)
+
+Per [VCFO-099](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/222). The subscription and event-topic tools were approved for this round and could not be run. Both
+listings were probed on both identities:
+
+| Identity | `GET /topics` | `GET /subscriptions` |
+| --- | --- | --- |
+| Provider (`VCFA_ORGANIZATION=system`) | `500` | `500` |
+| Tenant | **`403`** | **`403`** |
+
+The tenant `403` is not new — VCFO-098's live round recorded the same thing independently — but it
+was previously filed against the provider identity alone, so the matrix read as though a tenant
+session would resolve it. It does not. The account this environment offers lacks the role the
+event-broker requires, and the refusal carries the correct hint saying to check roles rather than
+credentials.
+
+**What would unblock it:** granting that account the role the event-broker service requires, then
+re-probing with `list-event-topics`. Until then `create-subscription` cannot even be composed — it
+needs an `eventTopicId` from a listing that `403`s, and a `runnableId` the tenant cannot see, since
+the tenant reads 0 workflows on the external vRO. The six tools keep their vRA 8 verification under
+VCFO-069/070 and have **no 9.x evidence of any kind**.
+
 ## Settled by this run
 
 - **VCFO-060 holds on VCF Automation 9.1.** A scaffolded `.workflow` — string, number, boolean and
@@ -383,24 +503,31 @@ request at one mid-flight and one terminal sample, so no key rests on rendered o
 
 ## Still open
 
-- **The split-host `VCFA_VRO_HOST` path was not exercised.** This sweep ran against the embedded
-  orchestrator by choice. VCFO-081's own evidence stands, but no full-surface run has been made
-  against an external vRO.
-- **The Automation-service surface needs a tenant session.** Twenty tools are blocked by the
-  provider identity. *Partly resolved:* the tenant round of 2026-09-16 above covers the catalog,
-  deployment, project and template tools. The event-broker and subscription tools are still
-  unexercised on a 9.x tenant session.
-- ~~**A deployment day-2 action has never been submitted on 9.x.**~~ **Closed by VCFO-095** on
-  2026-09-17: `Deployment.PowerOff`, `Deployment.PowerOn` and `Deployment.Delete` were all submitted on a
-  9.1 tenant session, and the `DeploymentRequest` envelope matches the one vRA 8.18 serves. See the
-  VCFO-095 section above. Still open within it: **a deployment action's input shape** (`inputParameters`
-  vs `inputs`) has never been observed on either platform, because no action offered by either lab
-  declares any inputs.
+- ~~**The split-host `VCFA_VRO_HOST` path was not exercised.**~~ **Closed by VCFO-099** on
+  2026-09-17: the full vRO surface, writes included, ran against an external vRO on a provider
+  session, with the routing observed on the wire rather than inferred. See the
+  [split-host section](#split-host-external-vro-provider-session-2026-09-17-vcfo-099).
+- **The event-broker surface has no 9.x evidence at all, and cannot get any here.** Six tools —
+  `list-event-topics`, `list-subscriptions`, `get-subscription` and the three subscription writes —
+  answer `500` on a provider session and `403` on a tenant one. This is now a measured property of
+  both identities rather than a provider-only limitation; it needs an RBAC change, not a different
+  session. See [Event-broker: blocked on both identities](#event-broker-blocked-on-both-identities-2026-09-17-vcfo-099).
 - **`import-configuration-file` remains unverifiable on any platform tested**, for the same reason
   as on vRA 8: nothing serves a genuine `.vsoconf` container.
-- **One defect found:** [#192](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/192)
-  (VCFO-087) — elements orphaned by `delete-package` with `deleteContents: false` are undeletable
-  through the server, which exposes no `force` option.
+- **A deployment action's input shape** (`inputParameters` vs `inputs`) has still never been
+  observed. VCFO-099 dumped the raw keys of all five actions on 9.1 and none carries either, which
+  makes this a property of the labs available rather than an untried check.
+- **`FAILED` and `APPROVAL_PENDING`** request statuses remain assumed members of the non-running set;
+  neither is producible benignly.
+- **`vcfa9.0` remains a verified pin *mechanism* only** — no 9.0 environment exists.
+- **Two defects VCFO-099 found, neither fixed in that round:**
+  - [#223](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/223) (VCFO-100) — `search` is a silent no-op on `list-templates`, `list-deployments` and `list-catalog-items` on
+    9.1. The client sends `$search`; the services ignore it and return the full inventory, so a
+    filtered question gets an unfiltered answer that reads as a match.
+  - [#224](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/224) (VCFO-101) — `create-template` describes `content` as optional and says an empty template is created when it
+    is omitted. On 9.1 that request answers `400`. The description is correct for vRA 8 only.
+- **One defect carried forward:** [#192](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/192)
+  (VCFO-087) — see the section below, whose characterization VCFO-099 further narrows.
 
 ## The 409 on delete (VCFO-087)
 
@@ -429,8 +556,18 @@ issue's characterizations**. It is neither deterministic nor permanent.
 The mechanism is that vRO releases a package's members asynchronously: for roughly two seconds after
 the package is deleted the element is still reported as in use. Membership in a package that still
 exists does not trip it, and no element was ever permanently stuck. `delete-action` and
-`delete-configuration` ran the identical sequence and never produced a `409` at all, so the
-`force` flag is untested on those two routes.
+`delete-configuration` ran the identical sequence in that round and never produced a `409`.
+
+**VCFO-099 narrows that last sentence.** On an external vRO on 2026-09-17 the `409` *did* fire on
+`/actions`, `/configurations` **and** `/resources`, with the same `is in use. Specify '?force=true'`
+body and the same transience: one plain retry cleared each, the slowest at 2.0 s. So the route is not
+the discriminator. What distinguished the two rounds was the package: nine zero-delay deletes after
+tearing down a package that had only just been built produced **no** `409`, while the elements of a
+package that had been exported and re-imported produced one on all three routes. Treat the `409` as
+possible on every element route, and keep the operator guidance below unchanged — retry first. **No `409` in this round
+needed `force`**: every one cleared on a plain retry. The flag path was exercised separately, on a
+`delete-workflow` that was *not* refusing — it deleted and reported that it had forced — so `force`
+overcoming a live refusal remains untested on every route.
 
 **Consequence for operators:** retry the plain delete before reaching for `force`. `force` skips
 vRO's reference check rather than establishing that nothing references the element, so using it to

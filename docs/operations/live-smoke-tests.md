@@ -202,6 +202,39 @@ Check the API version the client settles on, which is logged once per authentica
 
 `VCFA_TARGET_PLATFORM=vcfa9.1` and `vcfa9.0` pin the version and skip that probe.
 
+### Split-host smoke check (external vRO)
+
+When `VCFA_VRO_HOST` is set, confirm the split is real before reading anything into a vRO result.
+A set-but-unused variable proves nothing: both earlier tenant rounds had it set and made zero
+`/vco/api` requests. The startup banner and the per-request log lines are the evidence:
+
+```text
+[vcfa-server] VCFA_VRO_HOST=<vro-host>: vRO API requests (/vco/api) are sent to this host; authentication and the Automation services use VCFA_HOST=<vcfa-host>.
+[vro-client] GET /configurations?maxResult=100&startIndex=0&queryCount=true on <vro-host>
+[vro-client] GET /blueprints?$search=…&page=0&size=100 on <vcfa-host>
+```
+
+Every `/vco/api` path must name the vRO host and every Automation path the VCFA host. Then note
+which identity you are on, because the two are not interchangeable in this topology (VCFO-099):
+
+- A **provider** session reads *and writes* vRO on the external appliance. This is the only identity
+  that can author there.
+- A **tenant** session is read-only on it and may see almost nothing — `create-configuration` answers
+  `403 … (Edit, false)`, and the inventory can read 0 workflows and 0 packages. A `200` on an empty
+  list is not a pass; check the identity before concluding the appliance is empty.
+
+No MCP tool creates a workflow category. For a disposable one, `POST /vco/api/categories`
+`{name, type, description}` answers `201` and `DELETE /categories/{id}?deleteContents=false`
+answers `204`.
+
+### Searching the Automation services on 9.1
+
+`search` is a **silent no-op** on `list-templates`, `list-deployments` and `list-catalog-items`: the
+client sends `$search=<needle>`, 9.1 ignores it, and the full inventory comes back. A needle that
+matches nothing returns everything, which reads as a match — so confirm a name against the returned
+rows rather than trusting the result to be filtered. `list-projects` is unaffected; its `search`
+becomes an OData `$filter` that the project service does apply (VCFO-065/072, VCFO-099).
+
 ### Deployment lifecycle (9.x, tenant session)
 
 This is the only sequence in this document that **provisions and destroys real infrastructure**.
