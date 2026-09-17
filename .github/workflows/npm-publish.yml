@@ -1,3 +1,13 @@
+# Publishing uses npm trusted publishing (OIDC): the registry mints a short-lived
+# credential from the `id-token: write` token below, so no NODE_AUTH_TOKEN is needed.
+#
+# The trusted publisher registered on npmjs.com is bound to this repository AND to
+# this workflow's filename. Renaming this file, moving the publish job into another
+# workflow, or renaming/transferring the repo breaks publishing with an auth error
+# until the binding is updated under the package's "Publishing access" settings.
+#
+# `--provenance` is implied by trusted publishing; it is kept explicit for clarity.
+
 name: Publish to npm
 
 on:
