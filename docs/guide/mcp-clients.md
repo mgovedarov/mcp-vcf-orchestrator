@@ -16,7 +16,7 @@ Add the server to your VS Code `settings.json`:
         "env": {
           "VCFA_HOST": "vcfa.example.com",
           "VCFA_USERNAME": "administrator",
-          "VCFA_ORGANIZATION": "vsphere.local",
+          "VCFA_ORGANIZATION": "your-organization-here",
           "VCFA_PASSWORD": "your-password",
           "VCFA_IGNORE_TLS": "false"
           // External vRO appliance only: uncomment the next line and add a comma to the line above.
@@ -43,7 +43,7 @@ Add the server to `~/Library/Application Support/Claude/claude_desktop_config.js
       "env": {
         "VCFA_HOST": "vcfa.example.com",
         "VCFA_USERNAME": "administrator",
-        "VCFA_ORGANIZATION": "vsphere.local",
+        "VCFA_ORGANIZATION": "your-organization-here",
         "VCFA_PASSWORD": "your-password",
         "VCFA_IGNORE_TLS": "false"
       }
@@ -58,7 +58,7 @@ That file is strict JSON and does not accept comments, so the block above carrie
 {
   "VCFA_HOST": "vcfa.example.com",
   "VCFA_USERNAME": "administrator",
-  "VCFA_ORGANIZATION": "vsphere.local",
+  "VCFA_ORGANIZATION": "your-organization-here",
   "VCFA_PASSWORD": "your-password",
   "VCFA_IGNORE_TLS": "false",
   "VCFA_VRO_HOST": "vro.example.com"

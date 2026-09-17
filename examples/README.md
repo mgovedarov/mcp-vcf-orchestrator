@@ -17,10 +17,10 @@ These examples are current, import-safe patterns for using the MCP tools. They a
 Request a small inventory sample, or bound the results of a supported search:
 
 ```text
-list-workflows({ limit: 10 })
-list-catalog-items({ search: "ubuntu", limit: 5 })
-list-actions({ filter: "clone", limit: 10 })
-list-event-topics({ limit: 20 })
+list-workflows(limit: 10)
+list-catalog-items(search: "ubuntu", limit: 5)
+list-actions(filter: "clone", limit: 10)
+list-event-topics(limit: 20)
 ```
 
 Limits apply after filtering. A limit notice means more matching items exist; a total is shown only when known. Raise the limit (up to 1000), refine a supported filter/search, or omit the limit for full discovery. An unknown total may require an additional page to verify whether more results exist. A pagination-cap warning is separate from the caller's item limit.

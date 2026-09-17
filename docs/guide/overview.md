@@ -36,7 +36,7 @@ When starting in a new VCFA or vRO environment, use the server to map current st
 
 Use the built-in MCP prompts when the assistant should follow a known workflow rather than free-form instructions. For example, use `vcfa-discover-capabilities` to inventory an unfamiliar environment conversationally, `vcfa-collect-context-snapshot` to persist reusable Markdown/JSON inventory with `collect-context-snapshot`, `vcfa-discovery-first-implementation-plan` to plan a change, `vcfa-build-workflow-from-action` to wrap a verified action, and `vcfa-review-artifact-import` before importing a local artifact. When you specifically need VMware baseline context, use `vcfa-collect-context-snapshot` with `profile: vcfaBuiltIns` to focus the snapshot on workflows in subfolders below `Library` and actions in `com.vmware` modules. See [Resources And Prompts](../reference/resources-prompts.md) for prompt arguments and examples.
 
-The repository also includes a root `examples/` directory with checked, high-value flows for workflow artifacts, artifact promotion, template/catalog/subscription planning, and context collection. `npm run validate:docs` verifies those examples against current registered tool and prompt names.
+The repository also includes a root `examples/` directory with checked, high-value flows for workflow artifacts, native action wrappers, project package publishing, artifact promotion, workflow execution logs, and template/catalog/subscription planning. `npm run validate:docs` verifies those examples against current registered tool and prompt names.
 
 For repository validation, run `npm run validate`. It builds, tests, checks coverage thresholds, validates docs/examples drift, builds the VitePress site, and verifies npm package contents.
 

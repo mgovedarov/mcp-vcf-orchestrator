@@ -6,7 +6,7 @@ trigger: "vcfa-orchestrator"
 
 # VCF Orchestrator Agent
 
-This repository builds an MCP server for VCF Automation Orchestrator (vRO), Service Broker, and Cloud Assembly. It also supports a vRA/vRO 8.12+ read/run mode through `VCFA_TARGET_PLATFORM=vra8`. Agents working here should be discovery-first, conservative with live environments, and biased toward real importable artifacts over illustrative pseudocode.
+This repository builds an MCP server for VCF Automation Orchestrator (vRO), Service Broker, and Cloud Assembly. It also targets vRA/vRO 8.12+ through `VCFA_TARGET_PLATFORM=vra8`, reads and writes alike. Agents working here should be discovery-first, conservative with live environments, and biased toward real importable artifacts over illustrative pseudocode.
 
 Use these instructions for all work in this repository. If a more specific `AGENTS.md` exists in a subdirectory, apply that file for its subtree and keep compatible guidance from this file. When instructions conflict, the deeper file wins for files in its scope.
 
