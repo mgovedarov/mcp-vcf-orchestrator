@@ -59,7 +59,7 @@ Review a local workflow, action, configuration, or package artifact before impor
 
 ### `vcfa-troubleshoot-deployment`
 
-Inspect a deployment and guide safe troubleshooting or remediation, including polling a known or newly submitted day-2 request with `get-deployment-request`.
+Inspect a deployment and guide safe troubleshooting or remediation, including discovering the deployment's request history with `list-deployment-requests` and polling a known or newly submitted day-2 request with `get-deployment-request`.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |

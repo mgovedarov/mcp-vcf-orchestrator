@@ -53,9 +53,10 @@ them.
 
 - Execution: `run-workflow`, `run-workflow-and-wait`, `get-workflow-execution`,
   `get-workflow-execution-logs`, `list-workflow-executions`.
-- Deployments: `list-deployments`, `get-deployment`, `get-deployment-request`,
-  `list-deployment-actions`, `run-deployment-action`, `create-deployment`
-  (provisions infrastructure; annotated destructive), `delete-deployment`.
+- Deployments: `list-deployments`, `get-deployment`, `list-deployment-requests`,
+  `get-deployment-request`, `list-deployment-actions`, `run-deployment-action`,
+  `create-deployment` (provisions infrastructure; annotated destructive),
+  `delete-deployment`.
 - Projects: `list-projects`, `get-project` (resolve `projectId` before
   project-scoped calls).
 - Catalog: `list-catalog-items`, `get-catalog-item`.

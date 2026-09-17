@@ -24,6 +24,7 @@ vRA 8 evidence.
 
 | Tool | Status | Evidence |
 | --- | --- | --- |
+| `list-deployment-requests` | Verified under VCFO-097 | Added under VCFO-097 and driven through stdio on a tenant session on 2026-09-17, read-only, against the environment's own two deployments. See the [VCFO-097 section](#deployment-request-listing-tenant-session-2026-09-17-vcfo-097) below. |
 | `get-deployment-request` | Verified under VCFO-095 | Pending when it was added under VCFO-094. Driven through stdio on a tenant session on 2026-09-17: **`GET /deployment/api/requests/{id}` does exist on 9.1** and serves the same key set as vRA 8.18. Five real requests plus a 404 and a 400 arm. See the [VCFO-095 section](#deployment-request-lookup-tenant-session-2026-09-17-vcfo-095) below. |
 
 ## How to read the status column
@@ -245,6 +246,55 @@ then `404`. Note `INPROGRESS` carries **no underscore**.
   `schema.required` — the input contract for `create-deployment` — and the tool rendered neither, so
   an agent driving a deployment through the MCP surface had to guess the inputs.
 
+## Deployment request listing, tenant session, 2026-09-17 (VCFO-097)
+
+`list-deployment-requests` closes the gap the round below recorded: a **create** request's ID was
+returned nowhere, so the request that provisioned a deployment was readable by ID and its ID was
+undiscoverable. This round drove the new tool through the real handler, per
+[VCFO-097](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/218).
+
+**Environment:** VCF Automation 9.1 (negotiated 9.1.0), tenant session, 2026-09-17. The environment's
+own two pre-existing deployments in one project: one carrying a single create request, the other a
+create plus a `VM Power Off` submitted in an earlier session by another route.
+**Topology:** `VCFA_VRO_HOST` was set to this org's external vRO; **no `/vco/api` request was made**, so
+every route here is on `VCFA_HOST`. That is not split-host evidence.
+**Provisioning: none.** The round is entirely read-only — the listing on a deployment that already
+exists yields a real, terminal request ID at zero infrastructure cost. Nothing was created, mutated or
+deleted; `list-deployments` reported the same two deployments before and after.
+
+**Method.** A throwaway stdio client on a fresh `dist/index.js`, plus a raw-HTTP key-only dump of both
+listings so no key rests on rendered output alone.
+
+| Tool | Status | Evidence |
+| --- | --- | --- |
+| `list-deployment-requests` | Verified | Both deployments listed. The create request's ID was taken from the listing and read back with `get-deployment-request` — the loop the tool exists to close. `limit: 1` against the two-request deployment returned one row and the "showing the first 1 of 2" notice, so the route honors `size` and its `totalElements` is trustworthy. An absent deployment ID answers `404 {"message":"No value present"}`; the refusal offers both causes a 404 could have rather than asserting the deployment is gone, and names `list-deployments` and `get-deployment-request`. Captures carry no `undefined`, `[object Object]`, `NaN`, `(id: )`, `(unnamed)` or secret. |
+| `get-deployment-request` | Verified again | Fed an ID discovered from the listing rather than one returned by a write — the first time that path has been exercised. |
+
+### Observed wire shapes
+
+- `GET /deployment/api/deployments/{id}/requests` — a **Spring page**: `content`, `pageable`,
+  `totalElements`, `totalPages`, `last`, `size`, `number`, `sort`, `numberOfElements`, `first`,
+  `empty`. `totalElements` matched `content.length` on every unlimited call, and `size=1` returned one
+  element with `totalElements` still reporting the full count.
+- Each element is the object `GET /requests/{id}` serves. A **day-2** element carried `id`, `name`,
+  `requestedBy`, `actionId`, `deploymentId`, `resourceIds`, `status`, `details`, `createdAt`,
+  `updatedAt`, `approvedAt`, `totalTasks`, `completedTasks`. A **create** element carried
+  `blueprintId`, `catalogItemId` and **`inputs`** in place of `actionId`.
+- **The create element's `inputs` were withheld**, verified by grepping the rendered listing for each
+  input name the deployment was requested with. The same omission `get-deployment-request` makes, now
+  load-bearing on a listing too.
+- **Order, observed only:** the two-request deployment listed its `VM Power Off` before its `Create`,
+  i.e. newest first. One deployment on one platform is not a contract, so the tool claims no ordering.
+
+### Not exercised here
+
+- **The post-deletion `404`.** Both listings answer `404` once the deployment is gone (VCFO-095), but
+  reproducing it through this tool needs a disposable deploy/delete cycle, which this read-only round
+  deliberately did not run. The `404` handling itself was exercised against an absent deployment ID and
+  is covered by unit tests.
+- The `GET /deployment/api/requests?deploymentId=<id>` arm. It exists (VCFO-095) and the tool does not
+  send it.
+
 ## Deployment request lookup, tenant session, 2026-09-17 (VCFO-095)
 
 The tenant round above provisioned and destroyed deployments but submitted no day-2 action, so nothing
@@ -292,7 +342,10 @@ request at one mid-flight and one terminal sample, so no key rests on rendered o
   input name. This is the first platform where that deliberate omission is load-bearing: the vRA 8.18
   blueprint declared no inputs at all.
 - `GET /deployments/{id}/requests` and `GET /requests?deploymentId=` both exist and serve a **Spring
-  page**. No MCP tool exposes either, so a *create* request ID cannot be reached from the MCP surface.
+  page**. Neither was exposed by any MCP tool at the time, so a *create* request ID could not be reached
+  from the MCP surface; `list-deployment-requests` closes that gap on the deployment-scoped route
+  ([VCFO-097](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/218)) and carries its own row
+  above. The observation here stays a VCFO-095 raw-HTTP measurement.
 - **A request outlives its deployment.** After the delete both listings answer `404`, yet every request
   still reads by ID.
 - Platform differences worth recording against vRA 8.18: 9.1 offers **five** deployment-level actions

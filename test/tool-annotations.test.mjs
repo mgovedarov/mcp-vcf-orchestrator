@@ -99,6 +99,7 @@ const flatLists = [
   ["list-catalog-items", "listCatalogItems", { search: "sample" }, ["sample"], "catalog item(s)", "• sample (id: item)", true],
   ["list-projects", "listProjects", { search: "sample" }, ["sample"], "project(s)", "• sample (id: item)", true],
   ["list-deployments", "listDeployments", { search: "sample", projectId: "project" }, ["sample", "project"], "deployment(s)", "• sample (id: item)", true],
+  ["list-deployment-requests", "listDeploymentRequests", { deploymentId: "deployment" }, ["deployment"], "deployment request(s)", "• sample (id: item)", true],
   ["list-templates", "listTemplates", { search: "sample", projectId: "project" }, ["sample", "project"], "template(s)", "• sample (id: item)", true],
   ["list-event-topics", "listEventTopics", {}, [], "event topic(s)", "• sample (id: item)"],
   ["list-subscriptions", "listSubscriptions", { projectId: "project" }, ["project"], "subscription(s)", "• sample (id: item) — topic: N/A, runnable: N/A/N/A, ENABLED"],

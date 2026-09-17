@@ -5329,6 +5329,57 @@ test("getDeploymentRequest calls the global deployment request endpoint", async 
   });
 });
 
+test("listDeploymentRequests reads the deployment-scoped request listing", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return Response.json({
+      content: [
+        { id: "request-1", name: "Create", catalogItemId: "catalog-item-1" },
+      ],
+      numberOfElements: 1,
+      totalElements: 1,
+      last: true,
+    });
+  };
+
+  const client = new VroClient(config());
+  const list = await client.listDeploymentRequests("deployment 1/2");
+
+  // The deployment-scoped route is the one sent, not the equivalent
+  // /requests?deploymentId= arm (VCFO-097), and the id is path-encoded.
+  assert.equal(
+    calls[1].url,
+    "https://vcfa.example.test/deployment/api/deployments/deployment%201%2F2/requests?page=0&size=100",
+  );
+  assert.equal(calls[1].init.method, "GET");
+  assert.deepEqual(list.content, [
+    { id: "request-1", name: "Create", catalogItemId: "catalog-item-1" },
+  ]);
+  assert.equal(list.totalElements, 1);
+});
+
+test("listDeploymentRequests clamps the page size to the caller's limit", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return Response.json({
+      content: [{ id: "request-1" }, { id: "request-2" }],
+      totalElements: 2,
+      last: true,
+    });
+  };
+
+  const client = new VroClient(config());
+  const list = await client.listDeploymentRequests("deployment-1", { limit: 1 });
+
+  assert.match(calls[1].url, /\?page=0&size=1$/);
+  assert.deepEqual(list.content, [{ id: "request-1" }]);
+  assert.equal(list.limited, true);
+});
+
 test("runDeploymentAction posts action request with optional fields", async () => {
   const calls = [];
   globalThis.fetch = async (url, init) => {

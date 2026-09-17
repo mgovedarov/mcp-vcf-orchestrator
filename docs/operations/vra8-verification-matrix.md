@@ -19,6 +19,7 @@ for the other platform.
 
 | Tool | Status | Evidence |
 | --- | --- | --- |
+| `list-deployment-requests` | Pending live verification | Added under VCFO-097 on the deployment-scoped `GET /deployments/{id}/requests`. That route and its Spring-page shape were measured on this lab by raw HTTP under VCFO-095, but the MCP handler has not been driven here: **the lab was unreachable on 2026-09-17** — the host did not complete a TCP connection through the tunnel (10 s undici timeout, and 25 s of curl with no connect at all) while the 9.1 environment answered normally, so the VCFO-097 round ran on 9.1 only. The 9.1 result is not evidence for this platform. Unit tests cover the page, empty, sparse, input-withholding and `404` arms. |
 | `get-deployment-request` | Verified under VCFO-095 | Route observed by raw HTTP in the VCFO-088 round; the MCP handler itself was pending then. Driven through stdio against this lab on 2026-09-17 over five real requests — two creates, a `PowerOff`, a `PowerOn` and a `Delete` — plus a 404 and a 400 arm. See the [VCFO-095 section](#deployment-request-lookup-2026-09-17-vcfo-095) below. |
 
 ## How to read the status column
@@ -188,10 +189,11 @@ count of one, bare and `projectId`-scoped, and the pre-existing deployment was o
 - **A create request carries no `actionId`**; it carries `blueprintId` and `catalogItemId` instead, and
   its `name` is `Create`. Both keys are now modelled on `DeploymentRequest` and neither is rendered.
 - **`GET /deployments/{id}/requests` and `GET /requests?deploymentId=` both exist** and serve a Spring
-  page (`content`, `totalElements`, `pageable`, …), not a bare array. **No MCP tool exposes either**, so
-  a *create* request ID cannot be reached from the MCP surface at all — the gap the optional
-  `list-deployment-requests` companion in
-  [VCFO-094](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/212) would close.
+  page (`content`, `totalElements`, `pageable`, …), not a bare array. Neither was exposed by any MCP
+  tool at the time, so a *create* request ID could not be reached from the MCP surface at all. That gap
+  is what `list-deployment-requests` closes, on the deployment-scoped route
+  ([VCFO-097](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/218)); the observation above
+  remains a VCFO-095 raw-HTTP measurement, and the tool carries its own row.
 - **A request outlives its deployment.** After the delete both listings answer `404`, yet the create,
   both power requests and the delete each still read by ID through `get-deployment-request`.
 

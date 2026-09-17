@@ -12,6 +12,7 @@ import type {
   DeploymentActionRequestParams,
   DeploymentList,
   DeploymentRequest,
+  DeploymentRequestList,
   DiffActionFileParams,
   DiffWorkflowFileParams,
   ExportWorkflowExecutionLogsParams,
@@ -621,6 +622,13 @@ export class VroClient {
 
   listDeploymentActions(deploymentId: string): Promise<DeploymentActionList> {
     return this.deployments.listDeploymentActions(deploymentId);
+  }
+
+  listDeploymentRequests(
+    deploymentId: string,
+    options?: ListOptions,
+  ): Promise<DeploymentRequestList> {
+    return this.deployments.listDeploymentRequests(deploymentId, options);
   }
 
   runDeploymentAction(

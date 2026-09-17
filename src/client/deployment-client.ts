@@ -4,6 +4,7 @@ import type {
   DeploymentActionRequestParams,
   DeploymentList,
   DeploymentRequest,
+  DeploymentRequestList,
   ListOptions,
 } from "../types.js";
 import type { VroHttpClient } from "./core.js";
@@ -84,6 +85,35 @@ export class DeploymentClient {
     return this.http.get<DeploymentActionList>(
       `/deployments/${encodeURIComponent(deploymentId)}/actions`,
       this.http.deploymentBaseUrl,
+    );
+  }
+
+  /**
+   * A deployment's request history: every create, day-2 and delete request
+   * submitted against it, whoever submitted it and through whatever interface.
+   * This is the only route that hands out a **create** request's id -- `POST
+   * /catalog/api/items/{id}/request` answers `{deploymentId, deploymentName}`
+   * and no request id at all -- so without it the request that provisioned a
+   * deployment is readable by id and its id is undiscoverable (VCFO-097).
+   *
+   * The deployment-scoped route is sent rather than the equivalent `GET
+   * /requests?deploymentId=<id>`: both serve the same page on both platforms
+   * (VCFO-095), and this one mirrors the sibling `listDeploymentActions` above.
+   * Switching arms later is a path change here, nothing more.
+   *
+   * Answers 404 once the deployment is gone, while each request it listed
+   * still reads through `getDeploymentRequest`.
+   */
+  listDeploymentRequests(
+    deploymentId: string,
+    options?: ListOptions,
+  ): Promise<DeploymentRequestList> {
+    return getAllAutomationPages<DeploymentRequest>(
+      this.http,
+      `/deployments/${encodeURIComponent(deploymentId)}/requests`,
+      this.http.deploymentBaseUrl,
+      new URLSearchParams(),
+      { maxItems: options?.limit },
     );
   }
 

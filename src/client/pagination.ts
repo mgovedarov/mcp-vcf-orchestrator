@@ -347,10 +347,22 @@ export async function getAllAutomationPages<T>(
     pageParams.set("page", String(pageNumber));
     pageParams.set("size", String(pageSize));
 
-    const page = await http.get<AutomationPage<T>>(
+    // A bare array is accepted alongside the Spring page. Automation services
+    // are not consistent about which they serve -- `/deployments/{id}/actions`
+    // answers an array on both platforms while `/deployments/{id}/requests`
+    // answers a page (VCFO-074, VCFO-095) -- and reading `content` off an array
+    // yields nothing, so a listing that switched arms would render as an empty
+    // inventory rather than failing. `last` completes the walk in one pass,
+    // since an array carries no paging metadata to continue from. No caller can
+    // regress on this: one already receiving an array reads zero items today
+    // (VCFO-097).
+    const body = await http.get<AutomationPage<T> | T[]>(
       withQuery(path, pageParams),
       baseUrl,
     );
+    const page: AutomationPage<T> = Array.isArray(body)
+      ? { content: body, last: true }
+      : body;
     const items = page.content ?? [];
     if (page.totalElements !== undefined && page.totalElements >= 0)
       reportedTotal = page.totalElements;

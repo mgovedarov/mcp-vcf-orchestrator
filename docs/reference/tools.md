@@ -12,7 +12,7 @@ Discovery list tools automatically follow server-side pagination for both vRO `/
 
 ### Optional Inventory Limits
 
-All 13 flat inventory tools accept an optional integer `limit` from 1 to 1000: `list-workflows`, `list-actions`, `list-configurations`, `list-categories`, `list-resource-elements`, `list-packages`, `list-plugins`, `list-catalog-items`, `list-projects`, `list-deployments`, `list-templates`, `list-event-topics`, and `list-subscriptions`. The limit applies **after** any supported filters/search, preserving the existing result order. Event topics have no filter/search parameter. Omit `limit` for the full inventory; snapshots, promotion and internal discovery continue using unlimited calls. The separately scoped `list-workflows-by-category`, `list-workflow-executions`, and `list-deployment-actions` retain their existing controls.
+All 13 flat inventory tools accept an optional integer `limit` from 1 to 1000: `list-workflows`, `list-actions`, `list-configurations`, `list-categories`, `list-resource-elements`, `list-packages`, `list-plugins`, `list-catalog-items`, `list-projects`, `list-deployments`, `list-templates`, `list-event-topics`, and `list-subscriptions`. The limit applies **after** any supported filters/search, preserving the existing result order. Event topics have no filter/search parameter. Omit `limit` for the full inventory; snapshots, promotion and internal discovery continue using unlimited calls. `list-deployment-requests` takes the same `limit` with the same semantics but is not one of them: it is scoped to a single deployment rather than being a flat inventory. The separately scoped `list-workflows-by-category`, `list-workflow-executions`, and `list-deployment-actions` retain their existing controls.
 
 Both pagers request a fixed page size of `min(pageSize, limit)` (`pageSize` defaults to 100), using vRO `maxResult` or Automation `size`, unless a client-side filter is active. Local filtering retains the configured page size independently of the result limit so sparse matches do not consume the request cap one raw row at a time. Once enough matches are collected, pagination stops if the matching total is known. An unknown total may require another page, or several pages with sparse local matches, to distinguish an exact boundary from additional matches. Automation page size stays fixed to avoid shifting page offsets; repeated-page detection and the request cap remain active.
 
@@ -830,7 +830,7 @@ Observed status sequence: `PENDING` → `INITIALIZATION` → `CHECKING_APPROVAL`
 
 **Task progress is not monotonic.** The service reports a placeholder `totalTasks` at submission (`1` for a power action, `2` for a delete) and replaces it once it enumerates the tasks, so a caller polling across that transition sees `0/1` become `1/5`. The tool renders what the service served rather than smoothing it. `completedAt` has never been served by either platform, so the `Completed At:` line has never appeared in practice.
 
-A **create** request reads back through this tool too, carrying no `actionId` and a `name` of `Create`. Its ID is not reachable from the MCP surface, though: only the deployment-scoped and global request listings serve it, and no tool exposes them. A request **outlives its deployment** — after a delete the listings answer `404` while each individual request still reads by ID.
+A **create** request reads back through this tool too, carrying no `actionId` and a `name` of `Create`. Its ID is returned nowhere at submission — `POST /catalog/api/items/{id}/request` answers `{deploymentId, deploymentName}` and no request ID — so discover it with [`list-deployment-requests`](#list-deployment-requests). A request **outlives its deployment**: after a delete that listing answers `404` while each individual request still reads by ID here.
 
 For deletion, a successful request is not by itself proof that every resource is gone. Also confirm that `get-deployment` answers `404` or that `list-deployments` no longer includes the deployment.
 
@@ -838,6 +838,23 @@ For deletion, a successful request is not by itself proof that every resource is
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `requestId` | string | Yes | - | Deployment request ID returned by `run-deployment-action` or `delete-deployment`. |
+:::
+
+### `list-deployment-requests`
+
+List the requests submitted against one deployment — its create request, every day-2 action, and a queued delete — whoever submitted them and through whatever interface, including the platform UI and earlier sessions. This is the discovery route for a request ID to hand to [`get-deployment-request`](#get-deployment-request), and the **only** way to reach a create request's ID, which is returned nowhere at submission.
+
+Each row renders the request's name and ID, its status, either its `actionId` or a `create` marker, task progress, and the requester. Untyped `inputs`, `outputs`, and expanded `resources` are not rendered, the same omission [`get-deployment-request`](#get-deployment-request) makes: a create request carries the inputs the deployment was requested with, and a listing is not the place to print them. A request served without a name renders as `(unnamed)`, the convention described under `list-projects`. Rows are rendered in the order the service serves them; no ordering is claimed, because none has been measured.
+
+The route is `GET /deployment/api/deployments/{id}/requests`, which answers a Spring page on vRA 8.18 and on VCF Automation 9.1 alike, observed under VCFO-095. The equivalent `GET /deployment/api/requests?deploymentId=<id>` exists on both and is not used: the deployment-scoped read is the plain answer to a `deploymentId` argument (VCFO-097).
+
+**The listing is scoped to a deployment that still exists.** Once the deployment is gone the route answers `404`. The tool reports that without claiming which cause it was — an unknown deployment and a platform not serving the route answer the same status — and names what still works either way: every request it would have listed keeps reading by ID through `get-deployment-request`, so an ID captured earlier stays usable. Confirm the ID itself with `list-deployments`.
+
+::: details Parameters
+| Parameter | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `deploymentId` | string | Yes | - | Deployment whose requests to list (discover with `list-deployments`). |
+| `limit` | integer | No | - | Maximum requests returned (1–1000). Omit for the deployment's full request history. |
 :::
 
 ### `create-deployment`

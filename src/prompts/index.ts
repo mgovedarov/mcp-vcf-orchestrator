@@ -111,6 +111,7 @@ export function registerVcfaPrompts(server: McpServer): void {
           goalHint ? `Troubleshooting focus: ${goalHint}` : undefined,
           "",
           "Use get-deployment to inspect the deployment state, status, resources, and last operation before proposing remediation.",
+          "Use list-deployment-requests to see what has been requested against the deployment -- its create request, every day-2 action, and a queued delete -- and to obtain a request ID when one was not captured at submission.",
           "When a deployment request ID is known, use get-deployment-request to inspect its status, task progress, timestamps, details, and affected resource IDs.",
           "Use list-catalog-items or get-catalog-item when the deployment origin or catalog source is unclear.",
           "Use list-deployment-actions to identify available day-2 operations and their required inputs.",

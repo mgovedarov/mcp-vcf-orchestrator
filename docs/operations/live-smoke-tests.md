@@ -347,12 +347,17 @@ Free calls first, so a late failure still leaves the cheap findings recorded.
   status. Record task progress, timestamps and response keys without printing untyped inputs or
   outputs.
 
-**A free request to read before any write.** `GET /deployment/api/deployments/{id}/requests` and
-`GET /deployment/api/requests?deploymentId=<id>` both serve a deployment's request history — a Spring
-page on vRA 8.18 and on VCF Automation 9.1 alike (VCFO-095). Reading either for a deployment that
-already exists yields a real, terminal request ID, so `get-deployment-request` can be exercised at zero
-infrastructure cost before the round decides whether to provision anything. No MCP tool exposes those
-listings, which is also the only way to reach a **create** request's ID.
+**A free request to read before any write.** `list-deployment-requests(deploymentId: "<id>")` serves a
+deployment's request history — a Spring page on vRA 8.18 and on VCF Automation 9.1 alike (VCFO-095),
+read from `GET /deployment/api/deployments/{id}/requests`; the equivalent
+`GET /deployment/api/requests?deploymentId=<id>` exists on both and is not the route the tool sends.
+Listing a deployment that already exists yields a real, terminal request ID — including the **create**
+request's, which is returned nowhere at submission — so both that tool and `get-deployment-request` can
+be exercised at zero infrastructure cost before the round decides whether to provision anything. Run it
+against an absent deployment ID too: the `404` arm is free, and the refusal must still name
+`get-deployment-request` rather than implying the requests are gone with the deployment. The
+post-deletion `404` on a deployment that did exist needs a disposable deploy/delete cycle and belongs
+to a round that already has one.
 
 Rendered output cannot settle a wire shape: a `(unnamed)` fallback says nothing about the real key,
 and both arms of the `DeploymentActionList` union render identically. A shape question needs a

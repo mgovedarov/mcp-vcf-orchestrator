@@ -1207,3 +1207,185 @@ test("a create request renders without an action and withholds its inputs (VCFO-
   assert.doesNotMatch(text, /Completed At:/);
   assert.doesNotMatch(text, /must-not-render|hostname|password/);
 });
+
+test("list-deployment-requests renders the Spring page both platforms serve (VCFO-097)", async () => {
+  let received;
+  const config = registeredDeploymentToolConfigs({
+    listDeploymentRequests: async (...args) => {
+      received = args;
+      return {
+        // The key set VCFO-095 measured on vRA 8.18 and VCF Automation 9.1.
+        numberOfElements: 2,
+        totalElements: 2,
+        content: [
+          {
+            id: "request-create",
+            name: "Create",
+            deploymentId: "deployment-1",
+            blueprintId: "blueprint-1",
+            catalogItemId: "catalog-item-1",
+            requestedBy: "operator@example.test",
+            status: "SUCCESSFUL",
+            completedTasks: 7,
+            totalTasks: 7,
+          },
+          {
+            id: "request-power",
+            name: "Power Off",
+            actionId: "Deployment.PowerOff",
+            deploymentId: "deployment-1",
+            status: "INPROGRESS",
+            completedTasks: 1,
+            totalTasks: 4,
+          },
+        ],
+      };
+    },
+  }).get("list-deployment-requests");
+
+  assert.equal(config.annotations.readOnlyHint, true);
+  assert.equal(config.inputSchema.safeParse({}).success, false);
+
+  const result = await config.handler({ deploymentId: "deployment-1" });
+  const text = result.content[0].text;
+
+  assert.deepEqual(received, ["deployment-1", { limit: undefined }]);
+  assert.equal(result.isError, undefined);
+  assert.match(text, /^Found 2 deployment request\(s\):/);
+  // A create request is marked by what it carries, not by a missing actionId.
+  assert.match(
+    text,
+    /• Create \(id: request-create\) \[SUCCESSFUL\] — create — tasks: 7\/7 — by: operator@example\.test/,
+  );
+  assert.match(
+    text,
+    /• Power Off \(id: request-power\) \[INPROGRESS\] — action: Deployment\.PowerOff — tasks: 1\/4/,
+  );
+});
+
+test("list-deployment-requests renders a single-request history (VCFO-097)", async () => {
+  const handlers = registeredDeploymentTools({
+    // The bare-array arm is normalized in getAllAutomationPages, so the tool
+    // always sees a page; that arm is covered in test/pagination.test.mjs.
+    listDeploymentRequests: async () => ({
+      content: [{ id: "request-1", name: "Create", blueprintId: "blueprint-1" }],
+      numberOfElements: 1,
+      totalElements: 1,
+    }),
+  });
+
+  const result = await handlers.get("list-deployment-requests")({
+    deploymentId: "deployment-1",
+  });
+
+  assert.match(result.content[0].text, /Found 1 deployment request\(s\):/);
+  assert.match(result.content[0].text, /• Create \(id: request-1\) — create/);
+});
+
+test("list-deployment-requests reports an empty history against the deployment", async () => {
+  const handlers = registeredDeploymentTools({
+    listDeploymentRequests: async () => ({ content: [], totalElements: 0 }),
+  });
+
+  const result = await handlers.get("list-deployment-requests")({
+    deploymentId: "deployment-1",
+  });
+
+  assert.equal(
+    result.content[0].text,
+    "No deployment requests found for deployment deployment-1.",
+  );
+});
+
+test("list-deployment-requests withholds a create request's inputs (VCFO-097)", async () => {
+  const handlers = registeredDeploymentTools({
+    listDeploymentRequests: async () => ({
+      content: [
+        {
+          id: "request-create",
+          name: "Create",
+          catalogItemId: "catalog-item-1",
+          status: "SUCCESSFUL",
+          inputs: { hostname: "must-not-render", password: "must-not-render" },
+          outputs: { address: "must-not-render" },
+          resources: [{ id: "resource-1", name: "must-not-render" }],
+        },
+      ],
+      totalElements: 1,
+    }),
+  });
+
+  const result = await handlers.get("list-deployment-requests")({
+    deploymentId: "deployment-1",
+  });
+
+  assert.doesNotMatch(
+    result.content[0].text,
+    /must-not-render|hostname|password|address/,
+  );
+});
+
+test("list-deployment-requests renders a sparse record without inventing fields", async () => {
+  const handlers = registeredDeploymentTools({
+    listDeploymentRequests: async () => ({
+      content: [{}],
+      totalElements: 1,
+    }),
+  });
+
+  const result = await handlers.get("list-deployment-requests")({
+    deploymentId: "deployment-1",
+  });
+
+  // No actionId must not be read as "this is a create", and no field may
+  // render as undefined.
+  assert.match(result.content[0].text, /• \(unnamed\) \(id: \(unknown\)\)$/m);
+  assert.doesNotMatch(result.content[0].text, /create|undefined|NaN/);
+});
+
+test("list-deployment-requests points a 404 at get-deployment-request (VCFO-097)", async () => {
+  const handlers = registeredDeploymentTools({
+    listDeploymentRequests: async () => {
+      throw Object.assign(
+        new Error("vRO API error: 404 Not Found — GET /deployments/gone/requests"),
+        { status: 404 },
+      );
+    },
+  });
+
+  const result = await handlers.get("list-deployment-requests")({
+    deploymentId: "gone",
+  });
+
+  assert.equal(result.isError, true);
+  const text = result.content[0].text;
+  // A 404 cannot say whether the deployment or the route was absent, so the
+  // lead must not assert either one.
+  assert.match(text, /No request listing is available for deployment gone/);
+  assert.match(text, /either the deployment does not exist/);
+  // A request outlives its deployment, so the refusal must not imply the
+  // history is gone with it.
+  assert.match(text, /still reads by ID with get-deployment-request/);
+  assert.match(text, /list-deployments/);
+});
+
+test("list-deployment-requests reports a non-404 read failure plainly", async () => {
+  const handlers = registeredDeploymentTools({
+    listDeploymentRequests: async () => {
+      throw Object.assign(new Error("500 Internal Server Error"), {
+        status: 500,
+      });
+    },
+  });
+
+  const result = await handlers.get("list-deployment-requests")({
+    deploymentId: "deployment-1",
+  });
+
+  assert.equal(result.isError, true);
+  assert.match(
+    result.content[0].text,
+    /^Failed to list deployment requests: 500 Internal Server Error/,
+  );
+  assert.doesNotMatch(result.content[0].text, /get-deployment-request/);
+});
