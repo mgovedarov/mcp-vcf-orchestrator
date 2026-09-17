@@ -476,7 +476,8 @@ test("scaffoldWorkflowFile writes artifacts safely under workflow directory", as
 
 test("scaffoldWorkflowFile rejects unsafe target paths and symlink targets", async () => {
   const workflowDir = await mkdtemp(join(tmpdir(), "vcfa-scaffold-workflows-"));
-  const outsideFile = join(tmpdir(), `outside-${Date.now()}.workflow`);
+  const outsideDir = await mkdtemp(join(tmpdir(), "vcfa-outside-"));
+  const outsideFile = join(outsideDir, "outside.workflow");
   await writeFile(outsideFile, "outside");
   await symlink(outsideFile, join(workflowDir, "linked.workflow"));
 
@@ -510,6 +511,6 @@ test("scaffoldWorkflowFile rejects unsafe target paths and symlink targets", asy
     );
   } finally {
     await rm(workflowDir, { recursive: true, force: true });
-    await rm(outsideFile, { force: true });
+    await rm(outsideDir, { recursive: true, force: true });
   }
 });

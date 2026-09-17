@@ -557,7 +557,8 @@ test("preflightWorkflowFile warns about editor-incompatible shapes that still im
 
 test("preflightWorkflowFile rejects unsafe file and archive paths", async () => {
   const workflowDir = await mkdtemp(join(tmpdir(), "vcfa-preflight-"));
-  const outsideFile = join(tmpdir(), `outside-${Date.now()}.workflow`);
+  const outsideDir = await mkdtemp(join(tmpdir(), "vcfa-outside-"));
+  const outsideFile = join(outsideDir, "outside.workflow");
   await writeFile(outsideFile, buildWorkflowArtifact(workflow));
   await symlink(outsideFile, join(workflowDir, "linked.workflow"));
   await writeFile(
@@ -582,7 +583,7 @@ test("preflightWorkflowFile rejects unsafe file and archive paths", async () => 
     assert.match(unsafe.errors.join("\n"), /escapes the archive root/);
   } finally {
     await rm(workflowDir, { recursive: true, force: true });
-    await rm(outsideFile, { force: true });
+    await rm(outsideDir, { recursive: true, force: true });
   }
 });
 
@@ -939,7 +940,8 @@ test("diffActionArtifacts reports script and action-reference changes", () => {
 
 test("diffActionFile compares local action artifacts and rejects unsafe sources", async () => {
   const actionDir = await mkdtemp(join(tmpdir(), "vcfa-actions-"));
-  const outsideFile = join(tmpdir(), `outside-${Date.now()}.action`);
+  const outsideDir = await mkdtemp(join(tmpdir(), "vcfa-outside-"));
+  const outsideFile = join(outsideDir, "outside.action");
   await writeFile(join(actionDir, "base.action"), actionArchive());
   await writeFile(join(actionDir, "compare.action"), actionArchive({ name: "upper" }));
   await writeFile(outsideFile, actionArchive());
@@ -981,7 +983,7 @@ test("diffActionFile compares local action artifacts and rejects unsafe sources"
     assert.match(report.errors.join("\n"), /symbolic link/);
   } finally {
     await rm(actionDir, { recursive: true, force: true });
-    await rm(outsideFile, { force: true });
+    await rm(outsideDir, { recursive: true, force: true });
   }
 });
 
