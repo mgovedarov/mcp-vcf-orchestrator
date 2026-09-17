@@ -935,7 +935,7 @@ test("get-deployment resolves the project name the wire does not serve", async (
   let asked;
   const handlers = deploymentDetailTools(
     { projectId: "project-1" },
-    { getProject: async (id) => ((asked = id), { id, name: "amer-wld" }) },
+    { getProject: async (id) => ((asked = id), { id, name: "demo-project" }) },
   );
 
   const result = await handlers.get("get-deployment")({ id: "deployment-1" });
@@ -944,7 +944,7 @@ test("get-deployment resolves the project name the wire does not serve", async (
   // VCF Automation 9.1 carries projectId but no projectName, so without this
   // every real deployment rendered an opaque ID (VCFO-091).
   assert.equal(asked, "project-1");
-  assert.match(text, /Project: amer-wld/);
+  assert.match(text, /Project: demo-project/);
   // The ID is what the other deployment tools take as an argument, so both print.
   assert.match(text, /Project ID: project-1/);
 });

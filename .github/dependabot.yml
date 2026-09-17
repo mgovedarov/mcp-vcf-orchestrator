@@ -6,6 +6,11 @@ updates:
       interval: monthly
       time: "05:00"
       timezone: Europe/Sofia
+    # A freshly published dependency release is not proposed until it has been on the
+    # registry for a week, so a compromised publish that the ecosystem catches within
+    # days never reaches a pull request here. Security updates ignore the cooldown.
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     groups:
       npm-development:
