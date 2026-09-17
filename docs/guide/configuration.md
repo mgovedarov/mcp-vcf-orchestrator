@@ -17,7 +17,7 @@ On the default `vcfa` platform, the server authenticates by sending Basic Auth a
 https://{VCFA_HOST}/cloudapi/1.0.0/sessions
 ```
 
-When `VCFA_ORGANIZATION` is `system` (case-insensitive), the login is routed to the dedicated provider endpoint instead — the tenant endpoint rejects provider accounts with 401. A provider session cannot read the tenant-scoped Automation services (catalog, deployment, blueprint, event-broker, project) — vRO works, but those tools answer `403` or `500`; use a tenant organization for them.
+When `VCFA_ORGANIZATION` is `system` (case-insensitive), the login is routed to the dedicated provider endpoint instead — the tenant endpoint rejects provider accounts with 401. A provider session cannot read the tenant-scoped Automation services (catalog, deployment, blueprint, event-broker, project) — vRO works, but those tools answer `403` or `500`; use a tenant organization for them. The event-broker tools are the exception a tenant organization does **not** fix: on VCF Automation 9.1 both `GET /topics` and `GET /subscriptions` answer `403` on a tenant session too, because the account lacks the role the service requires (VCFO-099).
 
 The provider session request:
 
