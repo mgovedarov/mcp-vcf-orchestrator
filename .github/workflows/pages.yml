@@ -5,10 +5,13 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Least privilege: `build` runs repository code (`npm ci` lifecycle scripts and the VitePress
+# config), so it is the job least suited to holding an OIDC-mintable `id-token: write`. Only
+# `deploy` needs the Pages scopes, so they are declared there. A job-level `permissions:` block
+# REPLACES this one rather than merging with it, which is why `contents: read` is restated on
+# both jobs. (VCFO-107)
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: pages
@@ -17,6 +20,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -29,8 +34,10 @@ jobs:
           node-version: 24
           cache: npm
 
-      - name: Setup Pages
-        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      # No `actions/configure-pages` step: its only purpose here would be to discover the base
+      # path, and `docs/.vitepress/config.ts` hardcodes `base: "/mcp-vcf-orchestrator/"`. The step
+      # carried no `id:`, so its outputs were unreachable anyway, and Pages is already on
+      # `build_type: workflow`, so nothing needs enabling. (VCFO-107)
 
       - name: Install dependencies
         run: npm ci
@@ -49,6 +56,10 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     steps:
       - name: Deploy to GitHub Pages
         id: deployment

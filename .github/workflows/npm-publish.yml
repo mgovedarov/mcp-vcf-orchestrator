@@ -7,6 +7,9 @@
 # until the binding is updated under the package's "Publishing access" settings.
 #
 # `--provenance` is implied by trusted publishing; it is kept explicit for clarity.
+#
+# This workflow deliberately carries no `concurrency` block. Every other workflow that can be
+# superseded cancels in-flight runs, but a publish must never be cancelled part-way. (VCFO-108)
 
 name: Publish to npm
 
