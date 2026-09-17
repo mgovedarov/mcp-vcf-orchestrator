@@ -1,3 +1,16 @@
+# `Analyze JavaScript and TypeScript` (the job name below) is a required status check on
+# `main`, so the name is load-bearing and must not be renamed — even though `languages` now
+# also analyses `actions` and the name no longer describes the full set. Renaming the job
+# strands the old context at "Expected — waiting for status to be reported" and blocks every
+# pull request; update the branch-protection contexts first if it ever has to move. Matrixing
+# the job does the same thing, because GitHub appends the matrix value to the check name.
+#
+# For the same reason this workflow carries no `paths` filter: a path-filtered required check
+# never fires and never reports, so the merge is blocked with everything else green (VCFO-102).
+#
+# `actions` is analysed because the six workflow files are this repository's privileged
+# surface; `actions: read` below is already the permission that language needs.
+
 name: CodeQL
 
 on:
@@ -25,7 +38,7 @@ jobs:
       - name: Initialize CodeQL
         uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:
-          languages: javascript-typescript
+          languages: javascript-typescript,actions
 
       - name: Autobuild
         uses: github/codeql-action/autobuild@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
