@@ -2736,7 +2736,8 @@ test("exportWorkflowExecutionLogs validates level, file names, and existing targ
 
 test("exportWorkflowExecutionLogs rejects symbolic link targets", async () => {
   const executionLogDir = await mkdtemp(join(tmpdir(), "vcfa-execution-logs-"));
-  const outsideFile = join(tmpdir(), `execution-logs-${Date.now()}.json`);
+  const outsideDir = await mkdtemp(join(tmpdir(), "vcfa-outside-"));
+  const outsideFile = join(outsideDir, "outside.json");
   await writeFile(outsideFile, "{}");
   await symlink(outsideFile, join(executionLogDir, "linked.json"));
 
@@ -2754,7 +2755,7 @@ test("exportWorkflowExecutionLogs rejects symbolic link targets", async () => {
     );
   } finally {
     await rm(executionLogDir, { recursive: true, force: true });
-    await rm(outsideFile, { force: true });
+    await rm(outsideDir, { recursive: true, force: true });
   }
 });
 
@@ -4258,7 +4259,8 @@ test("package export rejects existing files unless overwrite is true", async () 
 
 test("package import rejects symbolic links", async () => {
   const packageDir = await mkdtemp(join(tmpdir(), "vcfa-packages-"));
-  const outsideFile = join(tmpdir(), `outside-${Date.now()}.package`);
+  const outsideDir = await mkdtemp(join(tmpdir(), "vcfa-outside-"));
+  const outsideFile = join(outsideDir, "outside.package");
   await writeFile(outsideFile, "package");
   await symlink(outsideFile, join(packageDir, "linked.package"));
 
@@ -4270,7 +4272,7 @@ test("package import rejects symbolic links", async () => {
     );
   } finally {
     await rm(packageDir, { recursive: true, force: true });
-    await rm(outsideFile, { force: true });
+    await rm(outsideDir, { recursive: true, force: true });
   }
 });
 
@@ -4580,7 +4582,8 @@ test("workflow export rejects existing files unless overwrite is true", async ()
 
 test("workflow import rejects symbolic links", async () => {
   const workflowDir = await mkdtemp(join(tmpdir(), "vcfa-workflows-"));
-  const outsideFile = join(tmpdir(), `outside-${Date.now()}.workflow`);
+  const outsideDir = await mkdtemp(join(tmpdir(), "vcfa-outside-"));
+  const outsideFile = join(outsideDir, "outside.workflow");
   await writeFile(outsideFile, "workflow");
   await symlink(outsideFile, join(workflowDir, "linked.workflow"));
 
@@ -4592,7 +4595,7 @@ test("workflow import rejects symbolic links", async () => {
     );
   } finally {
     await rm(workflowDir, { recursive: true, force: true });
-    await rm(outsideFile, { force: true });
+    await rm(outsideDir, { recursive: true, force: true });
   }
 });
 
@@ -4671,7 +4674,8 @@ test("workflow diff compares local files and rejects unsafe paths", async () => 
     tasks: [{ script: "System.log(message);" }],
   }));
   await writeFile(join(workflowDir, "bad.workflow"), "not a zip");
-  const outsideFile = join(tmpdir(), `outside-${Date.now()}.workflow`);
+  const outsideDir = await mkdtemp(join(tmpdir(), "vcfa-outside-"));
+  const outsideFile = join(outsideDir, "outside.workflow");
   await writeFile(outsideFile, buildWorkflowArtifact({
     id: "workflow-1",
     name: "Outside",
@@ -4710,7 +4714,7 @@ test("workflow diff compares local files and rejects unsafe paths", async () => 
     );
   } finally {
     await rm(workflowDir, { recursive: true, force: true });
-    await rm(outsideFile, { force: true });
+    await rm(outsideDir, { recursive: true, force: true });
   }
 });
 
@@ -4797,7 +4801,8 @@ test("action export rejects existing files unless overwrite is true", async () =
 
 test("action import rejects symbolic links", async () => {
   const actionDir = await mkdtemp(join(tmpdir(), "vcfa-actions-"));
-  const outsideFile = join(tmpdir(), `outside-${Date.now()}.action`);
+  const outsideDir = await mkdtemp(join(tmpdir(), "vcfa-outside-"));
+  const outsideFile = join(outsideDir, "outside.action");
   await writeFile(outsideFile, "action");
   await symlink(outsideFile, join(actionDir, "linked.action"));
 
@@ -4809,7 +4814,7 @@ test("action import rejects symbolic links", async () => {
     );
   } finally {
     await rm(actionDir, { recursive: true, force: true });
-    await rm(outsideFile, { force: true });
+    await rm(outsideDir, { recursive: true, force: true });
   }
 });
 
@@ -5030,7 +5035,8 @@ test("configuration import rejects symbolic links", async () => {
   const configurationDir = await mkdtemp(
     join(tmpdir(), "vcfa-configurations-"),
   );
-  const outsideFile = join(tmpdir(), `outside-${Date.now()}.vsoconf`);
+  const outsideDir = await mkdtemp(join(tmpdir(), "vcfa-outside-"));
+  const outsideFile = join(outsideDir, "outside.vsoconf");
   await writeFile(outsideFile, "configuration");
   await symlink(outsideFile, join(configurationDir, "linked.vsoconf"));
 
@@ -5042,7 +5048,7 @@ test("configuration import rejects symbolic links", async () => {
     );
   } finally {
     await rm(configurationDir, { recursive: true, force: true });
-    await rm(outsideFile, { force: true });
+    await rm(outsideDir, { recursive: true, force: true });
   }
 });
 
