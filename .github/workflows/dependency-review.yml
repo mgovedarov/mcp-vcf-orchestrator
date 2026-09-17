@@ -22,3 +22,8 @@ jobs:
           fail-on-severity: high
           license-check: true
           vulnerability-check: true
+          deny-licenses: >-
+            AGPL-3.0-only, AGPL-3.0-or-later,
+            GPL-2.0-only, GPL-2.0-or-later,
+            GPL-3.0-only, GPL-3.0-or-later,
+            SSPL-1.0, BUSL-1.1

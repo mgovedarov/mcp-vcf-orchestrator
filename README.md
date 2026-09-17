@@ -14,6 +14,7 @@ Full documentation is available in the GitHub Pages site:
 - Published site: <https://mgovedarov.github.io/mcp-vcf-orchestrator/>
 - Local docs entry point: [docs/index.md](docs/index.md)
 - vRO artifact authoring notes: [docs/vro-artifact-authoring.md](docs/vro-artifact-authoring.md)
+- Security policy and vulnerability reporting: [SECURITY.md](SECURITY.md)
 
 The docs include installation, configuration, MCP client setup, tool references, resources/prompts, how-tos, artifact lifecycle guidance, safety notes, troubleshooting, and contributor guidance.
 
