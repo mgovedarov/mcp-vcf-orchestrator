@@ -8,6 +8,10 @@
 # For the same reason this workflow carries no `paths` filter: a path-filtered required check
 # never fires and never reports, so the merge is blocked with everything else green (VCFO-102).
 #
+# The `concurrency` block below is safe against that wire: it is neither a job rename nor a
+# `paths` filter, the check context is untouched, and a superseded run's replacement is the one
+# that reports. (VCFO-108)
+#
 # `actions` is analysed because the six workflow files are this repository's privileged
 # surface; `actions: read` below is already the permission that language needs.
 
@@ -24,6 +28,10 @@ permissions:
   actions: read
   contents: read
   security-events: write
+
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   analyze:
