@@ -229,11 +229,13 @@ answers `204`.
 
 ### Searching the Automation services on 9.1
 
-`search` is a **silent no-op** on `list-templates`, `list-deployments` and `list-catalog-items`: the
-client sends `$search=<needle>`, 9.1 ignores it, and the full inventory comes back. A needle that
-matches nothing returns everything, which reads as a match — so confirm a name against the returned
-rows rather than trusting the result to be filtered. `list-projects` is unaffected; its `search`
-becomes an OData `$filter` that the project service does apply (VCFO-065/072, VCFO-099).
+`search` is a **silent no-op on the service** for `list-templates`, `list-deployments` and
+`list-catalog-items`: the client sends `$search=<needle>`, 9.1 answers `200` and ignores it, and the
+full inventory comes back. Since VCFO-100 the client matches the needle itself, against name and
+description, so the tools return the filtered rows the caller asked for; `$search` is still sent for
+a service that honors it. A needle matching nothing now yields an empty result rather than the whole
+inventory, which is the check to re-run here. `list-projects` is unaffected; its `search` becomes an
+OData `$filter` that the project service does apply (VCFO-065/072, VCFO-099).
 
 ### Deployment lifecycle (9.x, tenant session)
 

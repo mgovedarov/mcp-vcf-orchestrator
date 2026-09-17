@@ -596,12 +596,14 @@ export function registerDeploymentTools(
     {
       title: "List Deployments",
       description:
-        "List deployments in VCF Automation. Optionally filter by name/keyword search or by project ID. Use list-projects to discover project IDs.",
+        "List deployments in VCF Automation. Optionally filter by search or by project ID. Use list-projects to discover project IDs.",
       inputSchema: z.object({
         search: z
           .string()
           .optional()
-          .describe("Search deployments by name or keyword"),
+          .describe(
+            "Search deployments by name or description, as a case-insensitive substring matched client-side (VCF Automation 9.1 accepts the server-side search and ignores it)",
+          ),
         limit: listLimitSchema,
         projectId: z
           .string()
@@ -618,7 +620,7 @@ export function registerDeploymentTools(
         const items = result.content ?? [];
         if (items.length === 0) {
           return {
-            content: [{ type: "text", text: `No deployments found.${limit !== undefined ? truncationNote(result, 0, result.totalElements) : ""}` }],
+            content: [{ type: "text", text: `No deployments found.${truncationNote(result, 0, result.totalElements)}` }],
           };
         }
         const lines = items.map((d) => {
@@ -772,7 +774,7 @@ export function registerDeploymentTools(
             content: [
               {
                 type: "text",
-                text: `No deployment requests found for deployment ${deploymentId}.${limit !== undefined ? truncationNote(result, 0, result.totalElements) : ""}`,
+                text: `No deployment requests found for deployment ${deploymentId}.${truncationNote(result, 0, result.totalElements)}`,
               },
             ],
           };

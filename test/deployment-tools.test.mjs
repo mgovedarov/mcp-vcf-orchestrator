@@ -59,6 +59,26 @@ test("list-deployments surfaces a pagination truncation warning", async () => {
   assert.match(result.content[0].text, /collecting 1 of ~50 item\(s\)/);
 });
 
+// VCFO-100: once `search` filters client-side, a capped walk can collect zero
+// matches, and gating the note on a caller-supplied `limit` rendered that as a
+// bare "No deployments found." — a partial inventory reported as an empty one.
+test("list-deployments warns on an empty capped result without a limit", async () => {
+  const handlers = registeredDeploymentTools({
+    listDeployments: async () => ({
+      totalElements: 0,
+      truncated: true,
+      content: [],
+    }),
+  });
+
+  const result = await handlers.get("list-deployments")({
+    search: "zz-no-such-deployment-xyz",
+  });
+
+  assert.match(result.content[0].text, /No deployments found\./);
+  assert.match(result.content[0].text, /Results truncated/);
+});
+
 test("deployment tools list, get, create, and delete with confirmation", async () => {
   let createParams;
   let deletedId;

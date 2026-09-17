@@ -100,7 +100,7 @@ export function registerResourceTools(
         const resources = result.link ?? [];
         if (resources.length === 0) {
           return {
-            content: [{ type: "text", text: `No resource elements found.${limit !== undefined ? truncationNote(result, 0, result.total) : ""}` }],
+            content: [{ type: "text", text: `No resource elements found.${truncationNote(result, 0, result.total)}` }],
           };
         }
         const lines = resources.map((r) => {

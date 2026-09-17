@@ -33,7 +33,7 @@ export function registerSubscriptionTools(
         const topics = result.content ?? [];
         if (topics.length === 0) {
           return {
-            content: [{ type: "text", text: `No event topics found.${limit !== undefined ? truncationNote(result, 0, result.totalElements) : ""}` }],
+            content: [{ type: "text", text: `No event topics found.${truncationNote(result, 0, result.totalElements)}` }],
           };
         }
         const lines = topics.map(
@@ -87,7 +87,7 @@ export function registerSubscriptionTools(
         const subs = result.content ?? [];
         if (subs.length === 0) {
           return {
-            content: [{ type: "text", text: `No subscriptions found.${limit !== undefined ? truncationNote(result, 0, result.totalElements) : ""}` }],
+            content: [{ type: "text", text: `No subscriptions found.${truncationNote(result, 0, result.totalElements)}` }],
           };
         }
         const lines = subs.map(

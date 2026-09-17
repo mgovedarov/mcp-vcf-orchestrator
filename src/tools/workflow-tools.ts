@@ -467,7 +467,7 @@ export function registerWorkflowTools(
         const workflows = result.link ?? [];
         if (workflows.length === 0) {
           return {
-            content: [{ type: "text", text: `No workflows found.${limit !== undefined ? truncationNote(result, 0, result.total) : ""}` }],
+            content: [{ type: "text", text: `No workflows found.${truncationNote(result, 0, result.total)}` }],
             structuredContent: {
               workflows: [],
               ...(limit !== undefined && result.truncated ? { truncated: true } : {}),

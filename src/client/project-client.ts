@@ -1,5 +1,5 @@
 import type { ListOptions, Project, ProjectList } from "../types.js";
-import { matchesFilter, normalizeFilter } from "./filter.js";
+import { matchesNameOrDescription, normalizeFilter } from "./filter.js";
 import { apiErrorStatus, type VroHttpClient } from "./core.js";
 import { getAllAutomationPages } from "./pagination.js";
 
@@ -68,8 +68,7 @@ export class ProjectClient {
     }
 
     const matches = (project: Project) =>
-        matchesFilter(project.name, needle) ||
-        matchesFilter(project.description, needle);
+      matchesNameOrDescription(project, needle);
     if (options?.limit !== undefined) {
       return getAllAutomationPages<Project>(
         this.http,

@@ -457,3 +457,54 @@ export async function getAllAutomationPages<T>(
     ...(limited ? { limited } : {}),
   };
 }
+
+/**
+ * Collects a paginated Automation list and applies the search needle
+ * client-side.
+ *
+ * `$search` is a **silent no-op** on three of these routes: VCF Automation 9.1
+ * answers `/blueprints`, `/deployments` and `/items` with the full inventory
+ * whatever the needle says, with a `200` and no indication it dropped the
+ * parameter (verified in the lab, VCFO-100). A needle matching nothing
+ * therefore returned everything, which reads as a match — the worst answer a
+ * discovery tool can give. `$search` is still sent, so a service that honors it
+ * returns the same rows over a smaller payload, but the result is matched
+ * locally so the needle is never silently ignored.
+ *
+ * A silent ignore is why this filters unconditionally rather than falling back
+ * the way `ProjectClient.listProjects` does: that fallback triggers on the
+ * service *rejecting* the filter with a 400 or 500, and a `200` carrying
+ * unfiltered rows is not a rejection.
+ *
+ * Unlike `getFilteredVroList` this passes `itemFilter` whenever there is a
+ * needle rather than only under a limit: that gate exists there to avoid
+ * mapping each raw row twice, and `getAllAutomationPages` is already typed on
+ * the item, so there is nothing to map. The walker's own accounting then
+ * reports the match count on a completed walk and omits the total when a limit
+ * stopped it early, which is what `truncationNote` and `limitNote` expect.
+ *
+ * One caveat this does **not** share with `getFilteredVroList`: there,
+ * `conditions=name~<needle>` is provably a subset of the client-side name
+ * match, so post-filtering a list the server already filtered is a no-op.
+ * `$search` carries no such guarantee — it is opaque, and a platform that
+ * honors it over fields this predicate does not read (tags, or text inside a
+ * blueprint's own content) would have those rows dropped here. 9.1's certain
+ * false positive is the worse failure of the two, and no platform is known to
+ * honor `$search` on these routes at all, but the narrowing is real rather
+ * than definitionally absent.
+ */
+export async function getFilteredAutomationList<T>(
+  http: VroHttpClient,
+  path: string,
+  baseUrl: string,
+  params: URLSearchParams,
+  match: (item: T, needle: string) => boolean,
+  search: string | undefined,
+  limit: number | undefined,
+): Promise<AutomationPageResult<T>> {
+  const needle = normalizeFilter(search);
+  return getAllAutomationPages<T>(http, path, baseUrl, params, {
+    maxItems: limit,
+    ...(needle ? { itemFilter: (item: T) => match(item, needle) } : {}),
+  });
+}
