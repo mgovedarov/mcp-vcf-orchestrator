@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **The Package Check workflow no longer carries a `paths` filter, so `Verify npm package contents` reports on every pull request.** The job is a *required* status check on `main`, and GitHub does not auto-pass a path-filtered required check: a pull request touching nothing in the nine-entry allowlist never fired the workflow, so the context sat at "Expected — waiting for status to be reported" and the pull request was `BLOCKED` with every other required check green. Two harms followed. A **tests-only pull request was unmergeable by normal means**, as was one touching only `skills/`, `.claude-plugin/`, `AGENTS.md`, `CLAUDE.md`, `CHANGELOG.md` or any workflow file other than `package-check.yml` itself — which is every Dependabot action bump this repository receives, and four consecutive codeql-action bumps landed in that state. It had gone unnoticed only because `enforce_admins: false` makes admin squash-merge the established path here, turning a hard stop into a silent tax. Separately and more seriously, the allowlist **omitted files that change what gets published**, so the check that verifies package contents could be skipped by exactly the changes it exists to catch: `package.json`'s `files` list ships `CHANGELOG.md`, `LICENSE` and `NOTICE` verbatim, and `.npmignore` subtracts from the included directories (today `src/`, `*.ts`, `tsconfig.json`, `.env*`, `.npmrc`, `coverage/`, `node_modules/`), and none of the four were in the filter. The filter is dropped from the `push` trigger too, which makes the trigger block identical to `ci.yml` and `codeql.yml` — the only other workflows supplying required contexts, neither of which was ever filtered — and leaves no allowlist to keep in step with `files` and `.npmignore`. The job takes 14–18s across its six most recent runs, so running it unconditionally costs nothing worth measuring, and the workflow now carries a `concurrency` group that cancels superseded in-flight runs on the same ref, the property 3.0.0 gave the other workflows and this one was left out of. **Trigger configuration only:** `scripts/validate-package.mjs`, `npm run validate:package` and the published file set are unchanged (VCFO-102).
+
 ## 3.3.0 - 2026-09-17
 
 The first release since 3.2.0. A deployment request is now followable from submission to settlement: two new

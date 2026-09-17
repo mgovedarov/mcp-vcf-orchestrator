@@ -63,5 +63,5 @@ To check a lockfile against the overrides without network access, `npm ls --pack
 The repository uses GitHub Actions for CI, dependency review, CodeQL analysis, package dry-runs, documentation deployment, and npm publishing. Keep workflow changes narrow and prefer official GitHub/npm actions where possible.
 
 - CI runs tests across supported Node versions and runs the full validation gate on Node 24.
-- Package Check runs `npm run validate:package` for changes that affect published package contents.
+- Package Check runs `npm run validate:package` on every pull request and every push to `main`, with no `paths` filter. It is a required status check, and GitHub does not auto-pass a path-filtered required check: a pull request touching nothing in the filter never fires the workflow, so the context stays unreported and the merge is blocked. A filter also let publish-affecting files skip the check that verifies them, since `CHANGELOG.md`, `LICENSE` and `NOTICE` ship verbatim and `.npmignore` subtracts from the included directories. Do not reintroduce one to save a 15s job (VCFO-102).
 - Publish to npm runs only for published GitHub releases and expects npm trusted publishing to be configured.
