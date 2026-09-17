@@ -30,7 +30,7 @@ export function registerPluginTools(
         const plugins = result.link ?? [];
         if (plugins.length === 0) {
           return {
-            content: [{ type: "text", text: `No plugins found.${limit !== undefined ? truncationNote(result, 0, result.total) : ""}` }],
+            content: [{ type: "text", text: `No plugins found.${truncationNote(result, 0, result.total)}` }],
           };
         }
         const lines = plugins.map((p) => {

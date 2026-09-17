@@ -5,22 +5,29 @@ import type {
   ListOptions,
 } from "../types.js";
 import type { VroHttpClient } from "./core.js";
-import { getAllAutomationPages } from "./pagination.js";
+import { matchesNameOrDescription } from "./filter.js";
+import { getFilteredAutomationList } from "./pagination.js";
 
 export class CatalogClient {
   constructor(private http: VroHttpClient) {}
 
   listCatalogItems(search?: string, options?: ListOptions): Promise<CatalogItemList> {
     const params = new URLSearchParams();
-    if (search) {
-      params.set("$search", search);
+    // Trimmed so the server-side query and the client-side needle agree on
+    // what counts as a filter: a blank one is neither sent nor matched, and a
+    // padded one selects the same rows on both. See getFilteredAutomationList.
+    const trimmedSearch = search?.trim();
+    if (trimmedSearch) {
+      params.set("$search", trimmedSearch);
     }
-    return getAllAutomationPages<CatalogItem>(
+    return getFilteredAutomationList<CatalogItem>(
       this.http,
       "/items",
       this.http.catalogBaseUrl,
       params,
-      { maxItems: options?.limit },
+      matchesNameOrDescription,
+      trimmedSearch,
+      options?.limit,
     );
   }
 

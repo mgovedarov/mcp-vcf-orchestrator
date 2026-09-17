@@ -22,6 +22,8 @@ Limits reduce requests where the API supports pagination, but cannot guarantee a
 
 Name filters on `list-packages`, `list-categories`, `list-configurations` (without `categoryId`) and `list-resource-elements` are matched client-side as case-insensitive substrings, because the vRO embedded in vRA 8 ignores the `conditions` query these endpoints are sent and answers with the full inventory. The query is still sent, so a server that honors it returns the same rows over a smaller payload; only the requested page size differs, staying at the configured 100 rather than clamping to the limit. `total` then reports the number of matches, never the unfiltered inventory count, so a limit notice reads against matching rows; it is omitted only when a limit stopped the walk before the matching total was proven. `list-configurations` scoped with `categoryId` already matched locally and is unchanged: it reads one category response, so its matching total is always known. Listings called without a filter are unaffected.
 
+`search` on `list-templates`, `list-deployments` and `list-catalog-items` is matched the same way, against **name and description**, because VCF Automation 9.1 accepts the `$search` these endpoints are sent with a `200` and ignores it, answering with the full inventory. A needle matching nothing therefore used to return everything, which reads as a match. The query is still sent, so a service that honors it returns the same rows over a smaller payload, and the same page-size and `total` rules above apply — under a limit these listings now request `size=100` and walk until enough matches are collected, rather than requesting a single short page. `list-projects` is not in this group: its `search` becomes an OData `$filter` that the project service does apply, with a client-side fallback if the service rejects it. Because `$search` is opaque, a service that honored it over fields this match does not read would have those rows dropped; no platform is known to honor it on these three routes.
+
 Omitted-limit output and defaults are unchanged except for the negative-total correctness fix: `total: -1` / `totalElements: -1` means unknown, so discovery now continues instead of incorrectly stopping after the first page. Complete traversal reports the collected count. This fix also applies to full-inventory consumers.
 
 ## Two-Phase Confirmation Fields
@@ -767,12 +769,12 @@ Get details for a specific project by its ID. Beyond the name, ID, and descripti
 
 ### `list-catalog-items`
 
-List available Service Broker catalog items. Optionally search by name or keyword. A catalog item served without a name renders as `(unnamed)`, the convention described under `list-projects`.
+List available Service Broker catalog items. Optionally narrow the inventory with a search. A catalog item served without a name renders as `(unnamed)`, the convention described under `list-projects`.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
-| `search` | string | No | - | Search catalog items by name or keyword. |
+| `search` | string | No | - | Search catalog items by name or description, using a case-insensitive substring match, applied client-side. |
 | `limit` | integer | No | - | Maximum matching catalog items returned (1–1000), after search. Omit for the full inventory. |
 :::
 
@@ -792,12 +794,12 @@ When the item carries a request schema, its inputs are rendered as the input con
 
 ### `list-deployments`
 
-List deployments, optionally filtered by name or keyword and project ID. Use `list-projects` to discover project IDs. A deployment served without a name renders as `(unnamed)`, the convention described under `list-projects`. VCF Automation 9.1 does serve a name, verified live under VCFO-074, so the fallback is a guard for an unobserved shape rather than the expected rendering.
+List deployments, optionally filtered by search and project ID. Use `list-projects` to discover project IDs. A deployment served without a name renders as `(unnamed)`, the convention described under `list-projects`. VCF Automation 9.1 does serve a name, verified live under VCFO-074, so the fallback is a guard for an unobserved shape rather than the expected rendering.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
-| `search` | string | No | - | Search deployments by name or keyword. |
+| `search` | string | No | - | Search deployments by name or description, using a case-insensitive substring match, applied client-side. |
 | `limit` | integer | No | - | Maximum matching deployments returned (1–1000), after search and project selection. Omit for the full inventory. |
 | `projectId` | string | No | - | Filter deployments by project ID (discover with `list-projects`). |
 :::
@@ -935,12 +937,12 @@ On success the tool renders the `DeploymentRequest` the service queued and, when
 
 ### `list-templates`
 
-List blueprint templates in VCF Automation Cloud Assembly. Optionally filter by name or keyword and project ID.
+List blueprint templates in VCF Automation Cloud Assembly. Optionally filter by search and project ID.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
-| `search` | string | No | - | Search templates by name or keyword. |
+| `search` | string | No | - | Search templates by name or description, using a case-insensitive substring match, applied client-side. |
 | `limit` | integer | No | - | Maximum matching templates returned (1–1000), after search and project selection. Omit for the full inventory. |
 | `projectId` | string | No | - | Filter templates by project ID (discover with `list-projects`). |
 :::

@@ -28,3 +28,23 @@ export function matchesFilter(
 ): boolean {
   return value !== undefined && value.toLowerCase().includes(needle);
 }
+
+/**
+ * Case-insensitive substring match against an item's name **or** description,
+ * the predicate the Automation list clients share.
+ *
+ * Two fields rather than one, because the project-service's own server-side
+ * `$filter` already spans both (see projectSearchFilter) and the tools these
+ * back advertised `search` as matching a name *or keyword* before any of it
+ * was matched locally — a name-only predicate would have narrowed a documented
+ * contract. Keeping one predicate means `list-projects`' client-side fallback
+ * and the three `$search` listings select the same rows for the same needle.
+ */
+export function matchesNameOrDescription(
+  item: { name?: string | undefined; description?: string | undefined },
+  needle: string,
+): boolean {
+  return (
+    matchesFilter(item.name, needle) || matchesFilter(item.description, needle)
+  );
+}

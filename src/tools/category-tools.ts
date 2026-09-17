@@ -38,7 +38,7 @@ export function registerCategoryTools(
         const categories = result.link ?? [];
         if (categories.length === 0) {
           return {
-            content: [{ type: "text", text: `No ${type} categories found.${limit !== undefined ? truncationNote(result, 0, result.total) : ""}` }],
+            content: [{ type: "text", text: `No ${type} categories found.${truncationNote(result, 0, result.total)}` }],
           };
         }
         const lines = categories.map(

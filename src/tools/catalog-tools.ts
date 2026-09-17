@@ -62,12 +62,14 @@ export function registerCatalogTools(
     {
       title: "List Catalog Items",
       description:
-        "List available catalog items from the VCF Automation Service Broker. Optionally search by name or keyword.",
+        "List available catalog items from the VCF Automation Service Broker. Optionally narrow the inventory with a search.",
       inputSchema: z.object({
         search: z
           .string()
           .optional()
-          .describe("Search catalog items by name or keyword"),
+          .describe(
+            "Search catalog items by name or description, as a case-insensitive substring matched client-side (VCF Automation 9.1 accepts the server-side search and ignores it)",
+          ),
         limit: listLimitSchema,
       }),
       annotations: { readOnlyHint: true },
@@ -78,7 +80,7 @@ export function registerCatalogTools(
         const items = result.content ?? [];
         if (items.length === 0) {
           return {
-            content: [{ type: "text", text: `No catalog items found.${limit !== undefined ? truncationNote(result, 0, result.totalElements) : ""}` }],
+            content: [{ type: "text", text: `No catalog items found.${truncationNote(result, 0, result.totalElements)}` }],
           };
         }
         const lines = items.map((item) => {

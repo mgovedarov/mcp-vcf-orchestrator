@@ -4,25 +4,32 @@ import {
   TEMPLATE_CREATE_CONTENT_REQUIRED,
   type VroHttpClient,
 } from "./core.js";
-import { getAllAutomationPages } from "./pagination.js";
+import { matchesNameOrDescription } from "./filter.js";
+import { getFilteredAutomationList } from "./pagination.js";
 
 export class TemplateClient {
   constructor(private http: VroHttpClient) {}
 
   listTemplates(search?: string, projectId?: string, options?: ListOptions): Promise<TemplateList> {
     const params = new URLSearchParams();
-    if (search) {
-      params.set("$search", search);
+    // Trimmed so the server-side query and the client-side needle agree on
+    // what counts as a filter: a blank one is neither sent nor matched, and a
+    // padded one selects the same rows on both. See getFilteredAutomationList.
+    const trimmedSearch = search?.trim();
+    if (trimmedSearch) {
+      params.set("$search", trimmedSearch);
     }
     if (projectId) {
       params.set("projectId", projectId);
     }
-    return getAllAutomationPages<Template>(
+    return getFilteredAutomationList<Template>(
       this.http,
       "/blueprints",
       this.http.blueprintBaseUrl,
       params,
-      { maxItems: options?.limit },
+      matchesNameOrDescription,
+      trimmedSearch,
+      options?.limit,
     );
   }
 
