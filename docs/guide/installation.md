@@ -37,7 +37,7 @@ For local development:
 ```bash
 VCFA_HOST=vcfa.example.com \
 VCFA_USERNAME=admin \
-VCFA_ORGANIZATION=vsphere.local \
+VCFA_ORGANIZATION=your-organization-here \
 VCFA_PASSWORD=secret \
 npm start
 ```
