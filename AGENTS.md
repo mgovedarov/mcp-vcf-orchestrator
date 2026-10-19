@@ -106,9 +106,9 @@ When writing code, the main session orchestrates and hands work to the tool-neut
 |---|---|---|
 | `scout` | enumerate call sites, files, and patterns with `path:line`, no judgment | `.claude/agents/scout.md` (haiku, read-only tools) |
 | `researcher` | answer "how does X work" before changing it | `.claude/agents/researcher.md` (opus, read-only tools) |
-| `coder` | implement one issue on its own branch or worktree and open a PR | `.claude/agents/coder.md` (opus, all tools) |
+| `coder` | implement one issue on its own branch or worktree and open a PR | `.claude/agents/coder.md` (opus, all tools except the `vcf-orchestrator` MCP tools and `Agent`) |
 | `reviewer` | review the diff before a PR is opened or merged | `.claude/agents/reviewer.md` (opus, read-only tools) |
-| `issue-filer` | file bugs found along the way | `.claude/agents/issue-filer.md` (haiku, all tools) |
+| `issue-filer` | file bugs found along the way | `.claude/agents/issue-filer.md` (haiku, all tools except the `vcf-orchestrator` MCP tools and `Agent`) |
 
 - Claude Code runs these as native subagents. A tool without subagents, or a subagent that cannot start its own, reads the role file and follows it inline.
 - Roles never call the live VCFA/vRO tools; a change that needs live verification goes back to the main session, which confirms target and impact with the user first.
