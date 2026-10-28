@@ -33,7 +33,7 @@
   - accept `limit` (`listLimitSchema` in `src/tools/list-limit.ts`) and append `limitNote`;
   - always append `truncationNote`, so a page-capped walk is never reported as complete (`truncationNote` in `src/tools/truncation.ts`).
 
-  `list-workflow-executions` and `list-deployment-actions` read a single response, so they do neither. `list-workflows-by-category` renders its own category-limit note.
+  `list-workflow-executions` and `list-deployment-actions` read a single response, so they do neither. `list-workflow-executions` instead renders its own note when that response was capped by `maxResults` (`DEFAULT_EXECUTION_MAX_RESULTS` in `src/client/workflow-client.ts` is the default), and `list-workflows-by-category` renders its own category-limit note.
 - **Get tools** omit bulky content by default and print `omittedContentSummary` (sha256 and length) along with the flag that returns it, such as `includeScript` or `includeContent`.
 
 ### Confirmation Flow For Mutations
