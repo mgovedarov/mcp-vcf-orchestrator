@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, extname, join, resolve } from "node:path";
+import { basename, dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -35,7 +36,9 @@ function walk(dir, predicate = () => true) {
 // spaces while keeping their delimiters (and `${`/`}` markers, so templates
 // with substitutions stay distinguishable and brace-balanced). The masked
 // text is the same length as the original, so spans located on the masked
-// text read their values out of the original.
+// text read their values out of the original. With `keepStrings`, string and
+// template contents survive and only comments and regexes are blanked, which
+// is what a source-citation check needs: a tool name lives in a string.
 
 // Tokens after which a `/` starts a regex literal rather than a division.
 const REGEX_PRECEDING_KEYWORDS = new Set([
@@ -57,8 +60,11 @@ const REGEX_PRECEDING_KEYWORDS = new Set([
 
 const REGEX_PRECEDING_CHARS = new Set([..."=(,:[!&|?{};+-*/%~^<"]);
 
-export function maskSource(text) {
+export function maskSource(text, { keepStrings = false } = {}) {
   const out = new Array(text.length).fill(" ");
+  const keep = (index) => {
+    if (keepStrings && index < text.length) out[index] = text[index];
+  };
   // One entry per open template substitution: its unmatched `{` count.
   const substitutions = [];
   let mode = "code";
@@ -96,7 +102,9 @@ export function maskSource(text) {
     }
     if (mode === "single" || mode === "double") {
       const quote = mode === "single" ? "'" : '"';
+      keep(i);
       if (char === "\\") {
+        keep(i + 1);
         i += 1;
         continue;
       }
@@ -109,7 +117,9 @@ export function maskSource(text) {
       continue;
     }
     if (mode === "template") {
+      keep(i);
       if (char === "\\") {
+        keep(i + 1);
         i += 1;
         continue;
       }
@@ -620,60 +630,138 @@ function validateSkillReferences(registry, skills) {
 //
 // Docs and agent instructions cite source by file and symbol, never by line
 // number: a line number goes stale with the next edit to the cited file, and
-// nothing notices. So a backticked `path:line` into a source file fails, a
-// backticked repo path must exist, and "`symbol` in `path`" must name a symbol
-// the file still contains. A repo path is a file with an extension or a
-// directory with a trailing slash under a repo root: `test/minko` is a vRO
-// category path, not a citation. A path holding a placeholder (`*`, `<n>`,
-// `{id}`, `…`) is a pattern, and fenced code blocks are skipped.
+// nothing notices. So:
+// - A `path:line` or `path#L<n>` citation fails wherever it stands: in
+//   backticks, in a link target or URL, or in bare prose. The path is either a
+//   repo path or a file name with a source, config, or docs extension, so the
+//   host in `vro.example.com:443` is not one.
+// - A backticked repo path must exist. A repo path is a file with an extension
+//   or a directory with a trailing slash under a repo root: `test/minko` is a
+//   vRO category path, not a citation.
+// - A backticked bare file name with one of those extensions must name a file
+//   somewhere in the repository; `core.ts` may be any `core.ts`. Dotfiles are
+//   not checked, because the docs write `.workflow` and `.json` as extensions.
+// - "`symbol` in `path`" must name a symbol the file still contains, outside
+//   its comments in a JS or TS file. A bare file name there, with any
+//   extension, must exist, and only a root-level one has its content checked.
+// A path holding a placeholder (`*`, `<n>`, `{id}`, `…`) is a pattern, and
+// fenced code blocks are skipped.
 
-const LINE_CITATION =
-  /`([^`\s]+\.(?:ts|mts|mjs|cjs|js|json|ya?ml|md|sh)):\d[\d,-]*`/g;
+const FILE_EXTENSION = String.raw`\.(?:[mc]?[jt]s|[jt]sx|json|ya?ml|md|sh|vue|css|html|xml|txt|toml)`;
+const LINE_SUFFIX = String.raw`(?::\d+(?:[,-]\d+)*|#L\d+(?:-L?\d+)?)`;
+const LINE_CITATION = new RegExp(
+  String.raw`(?<![\w./-])[\w./-]*${FILE_EXTENSION}${LINE_SUFFIX}(?!\w)`,
+  "g",
+);
+const TRAILING_LINE_SUFFIX = new RegExp(`${LINE_SUFFIX}$`);
 const REPO_PATH =
   /^(?:src|test|scripts|docs|examples|skills|\.github|\.agents|\.claude|\.claude-plugin)\/(?:[^\s*<>{}…]*\/|[^\s*<>{}…]*\.[A-Za-z0-9]+)?$/;
+const BARE_FILE = new RegExp(String.raw`^\w[\w.-]*${FILE_EXTENSION}$`);
 const SYMBOL_IN_PATH = /`([A-Za-z_$][\w$.-]*)` in `([^`\s*<>{}…]+)`/g;
+const JS_SOURCE = /\.[mc]?[jt]sx?$/;
 
-export function sourceCitationProblems(file, text, { exists, readText }) {
-  const prose = text.replace(/^```[\s\S]*?^```/gm, "");
-  const problems = [];
-  for (const match of prose.matchAll(LINE_CITATION)) {
-    problems.push(
-      `${file}: line-number citation ${match[0]}; cite the file and a symbol instead`,
-    );
-  }
-  for (const match of prose.matchAll(/`([^`\n]+)`/g)) {
-    if (REPO_PATH.test(match[1]) && !exists(match[1])) {
-      problems.push(`${file}: cited path ${match[1]} does not exist`);
+// Blanks fenced code line by line, so a fence indented under a list item or
+// written with tildes is skipped too. As in CommonMark, a fence closes on its
+// own character repeated at least as often, alone on the line, and an
+// unclosed fence runs to the end of the file.
+function withoutFencedCode(text) {
+  let open;
+  return text
+    .split("\n")
+    .map((line) => {
+      const [, fence, rest] = /^\s*(`{3,}|~{3,})(.*)$/.exec(line) ?? [];
+      if (open) {
+        const closes =
+          fence?.[0] === open[0] && fence.length >= open.length && !rest.trim();
+        if (closes) open = undefined;
+        return "";
+      }
+      // A backtick fence's info string holds no backtick: ```a``` is inline code.
+      if (fence && !(fence[0] === "`" && rest.includes("`"))) open = fence;
+      return open ? "" : line;
+    })
+    .join("\n");
+}
+
+// A whole identifier, so a rename to `apiErrorFor` doesn't still match
+// `apiError`, nor `error` match the tail of `api-error`.
+function wholeIdentifier(symbol) {
+  const escaped = symbol.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?<![\\w$-])${escaped}(?![\\w$-])`);
+}
+
+export function sourceCitationProblems(
+  file,
+  text,
+  { exists, readText, fileNamed },
+) {
+  const prose = withoutFencedCode(text);
+  const lineCitations = new Set(prose.match(LINE_CITATION));
+  const missing = new Set();
+  const symbols = [];
+  for (const [, code] of prose.matchAll(/`([^`\n]+)`/g)) {
+    const stem = code.replace(TRAILING_LINE_SUFFIX, "");
+    if (stem !== code && REPO_PATH.test(stem)) {
+      lineCitations.add(code);
+    } else if (
+      REPO_PATH.test(code)
+        ? !exists(code)
+        : BARE_FILE.test(code) && fileNamed?.(code) === false
+    ) {
+      missing.add(code);
     }
   }
   for (const [, symbol, path] of prose.matchAll(SYMBOL_IN_PATH)) {
+    const bare = !path.includes("/") && /\.[A-Za-z0-9]+$/.test(path);
+    if (bare && fileNamed?.(path) === false) {
+      missing.add(path);
+      continue;
+    }
     const content = exists(path) ? readText(path) : undefined;
-    // A whole identifier, so a rename to `apiErrorFor` doesn't still match `apiError`.
-    const whole = new RegExp(
-      `(?<![\\w$])${symbol.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\w$-])`,
-    );
-    if (content !== undefined && !whole.test(content)) {
-      problems.push(`${file}: \`${symbol}\` is not in ${path}`);
+    if (content === undefined) continue;
+    const code = JS_SOURCE.test(path)
+      ? maskSource(content, { keepStrings: true })
+      : content;
+    if (!wholeIdentifier(symbol).test(code)) {
+      symbols.push(`${file}: \`${symbol}\` is not in ${path}`);
     }
   }
-  return problems;
-}
-
-function instructionFiles() {
   return [
-    ...walk(".agents", (path) => extname(path) === ".md"),
-    ...walk(".claude/agents", (path) => extname(path) === ".md"),
-    ...walk(".claude/skills", (path) => extname(path) === ".md"),
+    ...[...lineCitations].map(
+      (citation) =>
+        `${file}: line-number citation \`${citation}\`; cite the file and a symbol instead`,
+    ),
+    ...[...missing].map((path) => `${file}: cited path ${path} does not exist`),
+    ...symbols,
   ];
 }
 
-function validateSourceCitations(files) {
+// Every file git would commit, still on disk: tracked, or untracked and not
+// ignored. A walk from the root would also see `node_modules`, build output,
+// and `.claude/worktrees/`, whose copies of the repo make every name exist.
+function repoFiles() {
+  return execFileSync(
+    "git",
+    ["ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+    { cwd: root, encoding: "utf8" },
+  )
+    .split("\0")
+    .filter((path) => path && existsSync(join(root, path)));
+}
+
+function validateSourceCitations(markdown) {
+  const files = repoFiles();
+  const names = new Set(files.map((path) => basename(path)));
+  const instructions = files.filter((path) =>
+    /^\.(?:agents|claude)\/.*\.md$/.test(path),
+  );
   const options = {
     exists: (path) => existsSync(join(root, path)),
     readText: (path) =>
       statSync(join(root, path)).isFile() ? read(path) : undefined,
+    fileNamed: (name) => names.has(name),
   };
-  const failures = files.flatMap((file) =>
+  const failures = [...markdown, ...instructions].flatMap((file) =>
     sourceCitationProblems(file, read(file), options),
   );
   assert.deepEqual(failures, [], "Stale source citations");
@@ -692,7 +780,7 @@ if (isMain) {
   validateMarkdownLinks(files);
   validateExampleToolCalls(files, registry);
   validateSkillReferences(registry, skills);
-  validateSourceCitations([...files, ...instructionFiles()]);
+  validateSourceCitations(files);
 
   console.log(
     `Validated docs drift and examples: ${registry.tools.size} tools, ${registry.prompts.size} prompts, ${registry.resources.size} resources, ${files.length} markdown files (${skills.length} skill files).`,
