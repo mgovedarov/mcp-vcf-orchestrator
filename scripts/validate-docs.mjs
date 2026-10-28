@@ -650,7 +650,7 @@ export function sourceCitationProblems(file, text, { exists, readText }) {
     const content = exists(path) ? readText(path) : undefined;
     // A whole identifier, so a rename to `apiErrorFor` doesn't still match `apiError`.
     const whole = new RegExp(
-      `(?<![\\w$])${symbol.replace(/[.$]/g, "\\$&")}(?![\\w$-])`,
+      `(?<![\\w$])${symbol.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\w$-])`,
     );
     if (content !== undefined && !whole.test(content)) {
       problems.push(`${file}: \`${symbol}\` is not in ${path}`);

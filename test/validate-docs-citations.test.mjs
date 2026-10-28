@@ -60,6 +60,21 @@ test("a cited symbol must match a whole identifier, not a prefix of one", () => 
   ]);
 });
 
+test("a dot in a cited symbol matches only a literal dot", () => {
+  const dotted = {
+    exists: (path) => path === "src/index.ts",
+    readText: () => "serverXregisterTool(name);\n",
+  };
+  assert.deepEqual(
+    sourceCitationProblems(
+      "doc.md",
+      "Registered by `server.registerTool` in `src/index.ts`.",
+      dotted,
+    ),
+    ["doc.md: `server.registerTool` is not in src/index.ts"],
+  );
+});
+
 test("a symbol cited in a bare file name or a directory is not checked", () => {
   assert.deepEqual(
     problems("`apiError` in `core.ts`; `apiError` in `src/client/`."),
