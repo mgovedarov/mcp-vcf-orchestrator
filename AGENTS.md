@@ -6,11 +6,136 @@ trigger: "vcfa-orchestrator"
 
 # VCF Orchestrator Agent
 
-This repository builds an MCP server for VCF Automation Orchestrator (vRO), Service Broker, and Cloud Assembly. It also targets vRA/vRO 8.12+ through `VCFA_TARGET_PLATFORM=vra8`, reads and writes alike. Agents working here should be discovery-first, conservative with live environments, and biased toward real importable artifacts over illustrative pseudocode.
+## What This Is
 
-Use these instructions for all work in this repository. If a more specific `AGENTS.md` exists in a subdirectory, apply that file for its subtree and keep compatible guidance from this file. When instructions conflict, the deeper file wins for files in its scope.
+An MCP server, served over stdio, that exposes VCF Automation Orchestrator (vRO), Service Broker, and Cloud Assembly REST operations to AI assistants, and also targets vRA/vRO 8.12+ through `VCFA_TARGET_PLATFORM=vra8`, reads and writes alike. Agents working here should be discovery-first, conservative with live environments, and biased toward real importable artifacts over illustrative pseudocode.
 
-## First Principles
+Use these instructions for all work in this repository. If a more specific `AGENTS.md` exists in a subdirectory, apply that file for its subtree and keep compatible guidance from this file. When instructions conflict, the deeper file wins for files in its scope. The sections down to **Docs** cover working on the codebase; the **Operating Playbook** after them covers driving a live VCFA/vRO environment through this server's tools.
+
+## Layout
+
+| Path | Owns |
+|---|---|
+| `src/index.ts` | Entry point: `main` reads env, builds `VroClient`, calls every `register*` function, connects stdio |
+| `src/client/` | Auth, HTTP and errors (`core.ts`), one client class per domain, the `VroClient` facade (`index.ts`), artifact helpers (`files.ts`, `artifact-preflight.ts`, `workflow-artifact.ts`, `context-snapshot.ts`) |
+| `src/tools/` | One `register<Domain>Tools` module per domain, plus shared `annotations.ts`, `confirmation-guards.ts`, `truncation.ts`, `content-summary.ts` |
+| `src/resources/`, `src/prompts/` | `vcfa://` resources and `vcfa-*` prompt playbooks |
+| `src/*.ts` (rest) | `redaction.ts` (secret withholding), `resource-views.ts`, `content-metadata.ts` (the sha256-and-length stand-in for withheld content), `types.ts`, `context-directory.ts`; `vro-client.ts` is the public re-export shim |
+| `test/` | Node test runner suites `*.test.mjs`; they import `dist/`, not `src/` |
+| `scripts/` | `validate-docs.mjs` (registry, link and example drift), `validate-package.mjs` (npm file set) |
+| `docs/` | VitePress site, deployed to GitHub Pages and shipped in the npm tarball (the `files` list in `package.json`); `docs/project/` holds the internals docs |
+| `examples/` | Checked tool-call examples |
+| `skills/`, `.claude-plugin/` | The shipped Claude Code plugin (product content, not dev config; keep skills thin) |
+
+## Commands
+
+These are the declared commands and where they are defined. The gates in `.agents/gates.md` ran Install and Full local gate green on Node 22 on 2026-10-28, which covers Build, Tests, Coverage gate, Docs/examples drift, the docs build, and Package contents. The other rows are not yet verified by running.
+
+| Task | Command | Defined in |
+|---|---|---|
+| Install | `npm ci` | the install step in `.github/workflows/ci.yml` |
+| Build (`tsc` to `dist/`) | `npm run build` | `package.json` script `build` |
+| Start (stdio; needs env) | `npm start` | `package.json` script `start` |
+| Tests (builds first) | `npm test` | `package.json` script `test` |
+| One test file | `npm run build && node --test test/<file>.test.mjs` | composed from the `test` script |
+| Filter within a file | `node --test --test-name-pattern="<regex>" test/<file>.test.mjs` | Node test runner flag |
+| Coverage gate (lines 80, branches 70, functions 80) | `npm run test:coverage:check` | `package.json` script `test:coverage:check` |
+| Docs/examples drift | `npm run validate:docs` | `package.json` script `validate:docs` |
+| Package contents | `npm run validate:package` | `package.json` script `validate:package` |
+| Full local gate | `npm run validate` | `package.json` script `validate` |
+| Docs dev / build / preview | `npm run docs:dev` / `npm run docs:build` / `npm run docs:preview` | `package.json` scripts `docs:*` |
+| MCP Inspector (after build) | `npm run inspect` | `package.json` script `inspect` |
+
+- Toolchain: Node `>=22.19.0` (`engines` in `package.json`, driven by `undici` 8); `.nvmrc` pins 24. CI runs `npm test` on Node 22 and 24 and `npm run validate` on 24 (`.github/workflows/ci.yml`).
+- Use the smallest meaningful check for a change, and run `npm run validate` before broad, docs, or release-facing changes.
+- `npm run validate` must not contact a live VCFA environment. Live smoke checks stay separate: read-only list/get checks are fine against a sandbox; imports, deletes, template creation, subscription changes, deployment actions, and package imports need explicit user confirmation and disposable test assets.
+- Environment: `VCFA_HOST`, `VCFA_USERNAME`, `VCFA_ORGANIZATION`, `VCFA_PASSWORD` are required, and the process exits 1 without them (`getRequiredEnv` in `src/index.ts`). Every optional variable and default is in `docs/guide/configuration.md` and `.env.example`.
+
+## Conventions
+
+- Keep changes focused. Do not rewrite unrelated modules, generated docs, or built artifacts unless the task requires it. Use existing client helpers and patterns before adding new low-level API calls.
+- Tools register inside an exported `register<Domain>Tools(server, client)` with `server.registerTool(name, { title, description, inputSchema: z.object(...), annotations }, handler)`; model on `registerCategoryTools` in `src/tools/category-tools.ts`. `validate-docs` finds tools by that literal `.registerTool(` call.
+- Tool handlers catch every error and return `{ content: [{ type: "text", text: "Failed to <verb>: <message>" }], isError: true }`, as `list-categories` does. There is no shared error-result helper.
+- Client errors are plain `Error`s with a numeric `status` attached, message `vRO API error: <status> <reason> — <label>` plus a sanitized body and hint (`apiError` in `src/client/core.ts`). Branch on `apiErrorStatus(error)`, not on message text; there are no custom error classes.
+- Mutating tools take `confirm: z.boolean()` and return a plain, non-error instruction when it is false, as `delete-template` in `src/tools/template-tools.ts` does. `expected*` arguments are checked against live metadata with `guardExpectedFields` in `src/tools/confirmation-guards.ts`, which returns `isError: true` on a mismatch. Most tools check `confirm` first. `update-configuration` is the exception: it reads the live element and runs its guards before the `confirm` check, so a guard mismatch is an error there even when `confirm` is false. New mutating tools offer the same two-phase flow; the schema flag never replaces asking the user.
+- Annotations: read-only tools use `{ readOnlyHint: true }`; a tool that overwrites, deletes, executes, or provisions uses `DESTRUCTIVE_LIVE_WRITE` in `src/tools/annotations.ts`.
+- Every `list-*` tool that walks pages appends `truncationNote` in `src/tools/truncation.ts`, on the empty branch too. `list-workflow-executions` and `list-deployment-actions` read a single response and have no page walk to report, and `list-workflows-by-category` renders its own category-limit note. Bulky content that a `get-*` tool omits by default goes through `omittedContentSummary` in `src/tools/content-summary.ts`.
+- HTTP goes only through the npm `undici` `fetch`, `FormData`, and `Agent`, imported in `src/client/core.ts`. `requestFetch` and `createUploadForm` pick the fetch and build the form, and the `VroHttpClient` constructor builds the `VCFA_IGNORE_TLS` `Agent`. A new domain client is a class over `VroHttpClient`, constructed in `VroClient` in `src/client/index.ts`.
+- Log with `console.error` only; stdout carries the MCP stdio transport. Runtime log lines are prefixed `[vcfa-server]` or `[vro-client]`, while a startup configuration error that exits is a bare `ERROR: …` line (`missingRequiredEnv` in `src/index.ts`). Never log tokens or passwords.
+- Environment variables are read in `src/index.ts` only, plus `VCFA_CONTEXT_DIR` in `src/context-directory.ts`.
+- ESM with NodeNext: relative imports end in `.js` (`moduleResolution` in `tsconfig.json`); source files use kebab-case names such as `*-tools.ts` and `*-client.ts`.
+- Tests never contact a live VCFA environment:
+  - Clients are exercised with in-memory fakes, a stubbed `globalThis.fetch` (`test/vro-client.test.mjs`), or a loopback TLS server (`test/tls-integration.test.mjs`).
+  - `test/index-startup.test.mjs` spawns the built `dist/index.js` with a controlled environment to cover startup failures and graceful `SIGTERM` shutdown.
+- The server version is read from `package.json` (`SERVER_VERSION` in `src/index.ts`, asserted by `test/version-sync.test.mjs`); never hardcode it.
+- Adding a tool: update the relevant `src/tools/*` module, mark read-only and destructive annotations accurately, add tests, update `docs/reference/tools.md` (one drift-checked heading per tool) and the relevant how-tos. A new tool module also needs its register call in `main` in `src/index.ts` and in `registerAllToolConfigs` in `test/tool-annotations.test.mjs`.
+- Docs and instruction files cite source by file and symbol, never by line number, because a line number goes stale with the next edit to the cited file. `npm run validate:docs` enforces it.
+- Adding or changing a prompt or resource: update `src/prompts/index.ts` or `src/resources/index.ts` and `docs/reference/resources-prompts.md`. Keep checked examples in `examples/README.md` aligned with registered tool and prompt names. New docs pages get a sidebar entry in `docs/.vitepress/config.ts`.
+- The Claude Code skills must stay thin: they delegate to the `vcfa-*` prompts, `vcfa://` resources, and tools and must not re-document them. Tool/prompt/resource names referenced in a `SKILL.md` are drift-checked by `npm run validate:docs`; add any legitimate new non-tool kebab term to `KNOWN_NON_REGISTRY_TERMS` in `scripts/validate-docs.mjs`.
+- Never print secrets from configuration values, workflow and action scripts, workflow execution output parameters, tokens, passwords, or private keys. Prefer names, IDs, types, descriptions, and redacted summaries.
+- A value carrying a declared type is withheld on that type, not on its name: `isSecureAttributeValue` in `src/redaction.ts` reads both the declared type and the value envelope, and a surface that prints such a value calls `formatVroValueRedacted` rather than the unguarded `formatVroValue` — `get-configuration` is the one caller of the latter, because it runs the same check itself to reach a third branch for an attribute vRO returned no value for. The key-name heuristic in the same module is the weaker fallback, for the untyped free-form maps that carry no type at all. Neither reaches inside an untyped composite, or into log lines and exception text, which are served verbatim — say so wherever the tool description or docs claim withholding.
+
+## Gotchas
+
+- Tests pass or fail against old code → tests import `dist/`. `npm test` builds first; run `npm run build` before any direct `node --test`.
+- A multipart import sends `[object FormData]` as `text/plain`, or `VCFA_IGNORE_TLS` is ignored → Node's global `fetch`/`FormData` was used; the runtime-bundled undici is a different major. Route through `requestFetch` and `createUploadForm` in `src/client/core.ts`, which use the npm undici ones. Unit tests may still stub `globalThis.fetch`; `requestFetch` honors a swapped global.
+- `npm run validate:docs` fails with `unknown documented call` → in `README.md`, `AGENTS.md`, `CLAUDE.md`, `docs/`, `examples/`, and `skills/`, any lowercase hyphenated word followed by an opening parenthesis must be a registered tool or prompt, and the phrase "Use" + word + "with:" must name a tool (`validateExampleToolCalls` in `scripts/validate-docs.mjs`). Reword the sentence.
+- `npm run validate:docs` fails with `Stale source citations` → a Markdown file under the checked roots, `.agents/`, or `.claude/` cites a file with a line number (`:12` or `#L12`, in backticks, a link, or plain prose), names a repo path or a backticked file name that git would not commit (a gitignored file on disk does not count, and the case must match), or cites a symbol "in" a file that no longer contains it outside comments (`sourceCitationProblems` in `scripts/validate-docs.mjs`). Cite the file and a symbol that is still there. Code blocks are skipped, dotfiles such as `.nvmrc` are not checked, and gitignored files under `.claude/` are not scanned.
+- `npm run docs:build` fails with `dead link(s) found` → a page under `docs/` links outside `docs/` (for example a relative link to `AGENTS.md`). Link docs pages by `.md` path; write repo paths as inline code or full GitHub URLs. A bare angle-bracket placeholder or a double curly brace in a docs page also breaks the Vue compile.
+- `test/tool-annotations.test.mjs` fails on a new tool → a tool named `import-…`, `delete-…`, `update-…`, or `run-…` must use `DESTRUCTIVE_LIVE_WRITE` and be listed in `DESTRUCTIVE_TOOLS` (`DESTRUCTIVE_NAME_PATTERN` in `test/tool-annotations.test.mjs`).
+- A PR is blocked by a required check stuck at "Expected — Waiting for status to be reported" → a required job was renamed, matrixed, or path-filtered. Required checks match job names exactly; never add a `paths` filter to a required workflow, and update branch protection before moving a job (see the header comments in `.github/workflows/codeql.yml` and `.github/workflows/package-check.yml`).
+- CodeQL fails on a single Dependabot bump → `github/codeql-action` init, autobuild, and analyze must move together (the `codeql-action` group in `.github/dependabot.yml`).
+- A shutdown signal during startup leaves the child exiting with code `null` → signal handlers are registered before `server.connect` in `main` (`src/index.ts`); keep that order.
+- The npm publish fails at "Verify tag matches package version" → the release tag must equal `v` plus the `package.json` version (`.github/workflows/npm-publish.yml`).
+- Deleting a workflow, action, or configuration right after a package delete answers `409 Conflict` → retry the same delete first; see **Package-First Publishing** below.
+- `git fetch` fails with `cannot lock ref 'refs/remotes/origin/main'`, or because a `.lock` file exists → another worktree or role fetched at the same moment, and worktrees share refs. Wait a few seconds and run the same fetch again.
+
+## Git/PR Rules
+
+- The repository is public. Keep hostnames, IPs, organization or tenant names, and customer identifiers out of issues, PRs, commits, tests, and docs; use placeholders such as `vcfa.example.com` (precedent: the VCFO-113 entry in `CHANGELOG.md`).
+- Planning lives in GitHub Issues; `TODO.md` is deprecated and kept for history only. Use `VCFO-###` issue codes, sequential from `VCFO-001`, prefixed in titles: `[VCFO-001] Expand MCP resources and prompts for workflow/template implementation`. Take the next code from a title search across maintainers' issues and PRs, not from the issue number; the two diverge, and an outsider's title would move the sequence.
+- Branch from a freshly fetched `origin/main` as `vcfo-<NNN>-<kebab-slug>`, not from a local `main` that may lag behind; releases use `release/X.Y.Z`.
+- PR title: `[VCFO-###] <imperative sentence>`; several codes stack as `[VCFO-112][VCFO-113] …`. Maintenance without an issue uses `chore: …`. PRs are squash-merged, so the title and body become the commit.
+- PR body: the first line is `Closes #N.`, topical `##` sections follow, and the last section is `## Verification` (what ran, the results, what was not exercised).
+- `CHANGELOG.md` keeps an `## Unreleased` section at the top with `### Added` / `### Changed` / `### Fixed` / `### Dependencies` / `### Docs` / `### Tests` subsections as needed. Add an entry for every user-visible change as `- **Bold one-sentence lead.** Explanation (VCFO-###).` Releases rename the section to `## <version> - <date>`.
+- Release: a `chore: release X.Y.Z` PR bumps `CHANGELOG.md`, `package.json`, `package-lock.json`, and, when `skills/` changed, the `version` in `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`. Then tag `vX.Y.Z` and publish a GitHub Release, which runs `npm-publish.yml`.
+- GitHub Actions: CI runs on pull requests and pushes to `main`; package contents are verified on every pull request and push to `main` (no `paths` filter); docs deploy to GitHub Pages from `main` or manual dispatch; CodeQL runs on PRs, `main`, and a weekly schedule; dependency review runs on PRs; npm publishing runs only for published GitHub releases.
+- File unrelated bugs as issues (the `issue-filer` role); don't widen scope.
+
+## Working With Subagents
+
+When writing code, the main session orchestrates and hands work to the tool-neutral roles in `.agents/roles/`:
+
+| Role | Use it to | Claude Code subagent |
+|---|---|---|
+| `scout` | enumerate call sites, files, and patterns with `path:line`, no judgment | `.claude/agents/scout.md` (haiku; Read, Grep, Glob, Bash) |
+| `researcher` | answer "how does X work" before changing it | `.claude/agents/researcher.md` (opus; Read, Grep, Glob, Bash) |
+| `coder` | implement one issue on its own branch or worktree and open a PR | `.claude/agents/coder.md` (opus, all tools except the `vcf-orchestrator` MCP tools and `Agent`) |
+| `reviewer` | review the diff before a PR is opened or merged | `.claude/agents/reviewer.md` (opus; Read, Grep, Glob, Bash) |
+| `issue-filer` | file bugs found along the way | `.claude/agents/issue-filer.md` (haiku, all tools except the `vcf-orchestrator` MCP tools and `Agent`) |
+| `test-runner` | run a gate's commands and report pass/fail, never editing | `.claude/agents/test-runner.md` (haiku; Read, Grep, Glob, Bash) |
+| `remediator` | fix an open PR: update it with `main`, resolve conflicts, apply review findings and gate failures | `.claude/agents/remediator.md` (opus, all tools except the `vcf-orchestrator` MCP tools and `Agent`) |
+
+- Claude Code runs these as native subagents. A tool without subagents, or a subagent that cannot start its own, reads the role file and follows it inline.
+- `scout`, `researcher`, `reviewer`, and `test-runner` are read-only by their role files, not by their tool lists. Each keeps Bash, which can write, push, and comment.
+- `coder` and `remediator` don't file issues. They return `BUG:` lines, and the main session hands them to `issue-filer` one at a time, because each filing takes the next `VCFO-###` code.
+- Roles never call the live VCFA/vRO tools; a change that needs live verification goes back to the main session, which confirms target and impact with the user first.
+- The orchestrator verifies what a role claims (for example by reading `gh pr diff <n>`) instead of trusting its summary.
+
+## Agent Commands
+
+Shared procedures live in `.agents/commands/` (`issue.md`, `process-issues.md`). In Claude Code, `/issue <brief>` runs the first in the `issue-filer` subagent. `/process-issues [limit]` runs the processing loop in the main session, and only when you invoke it.
+The loop reads issues through `.agents/sources/github-issues.md` and gates every PR with `.agents/gates.md`.
+
+## Docs
+
+System internals (architecture, client layer, MCP surface, glossary): `docs/project/README.md`. User guides and references are the rest of `docs/`, published to GitHub Pages.
+
+## Operating Playbook
+
+How to drive a live VCFA/vRO environment through this server's tools, prompts, and resources.
+
+### First Principles
 
 - Read existing code and docs before planning or editing. Prefer repo-specific guidance over generic MCP, VCFA, vRO, or TypeScript advice.
 - Preserve existing patterns. Add abstractions only when they reduce real duplication or match an established local pattern.
@@ -19,7 +144,7 @@ Use these instructions for all work in this repository. If a more specific `AGEN
 - Keep local artifact work inside configured artifact directories. Do not bypass path safety with absolute paths, traversal, symlinks, or ad hoc filesystem writes.
 - Prefer deterministic, reviewable workflows: discover, export or snapshot, author locally, preflight, diff, prepare promotion, confirm, import, verify.
 
-## Source Of Truth
+### Source Of Truth
 
 Read the relevant source or docs before changing behavior:
 
@@ -37,11 +162,9 @@ Read the relevant source or docs before changing behavior:
 - Checked examples: `examples/README.md`
 - Claude Code plugin and skills: `.claude-plugin/` and `skills/<name>/SKILL.md`
 
-The Claude Code skills must stay thin: they delegate to the `vcfa-*` prompts, `vcfa://` resources, and tools and must not re-document them. Tool/prompt/resource names referenced in a `SKILL.md` are drift-checked by `npm run validate:docs`; add any legitimate new non-tool kebab term to `KNOWN_NON_REGISTRY_TERMS` in `scripts/validate-docs.mjs`.
-
 If the docs and source disagree, inspect the source, update the docs or examples, and run the docs validation gate.
 
-## Current MCP Tool Surface
+### Current MCP Tool Surface
 
 Use the exact registered tool names. Start with list/get tools unless the user has already provided verified IDs and contracts.
 
@@ -79,7 +202,7 @@ One configuration write body still differs by platform in that mode: `PUT /confi
 
 On the default `vcfa` platform, the client auto-negotiates the VCF Cloud API version (`9.1.0` preferred, then `9.0.0`) via the unauthenticated `GET /api/versions` discovery document; `VCFA_TARGET_PLATFORM=vcfa9.1` or `vcfa9.0` pins it. Logins with `VCFA_ORGANIZATION=system` (case-insensitive) are routed to `/cloudapi/1.0.0/sessions/provider` for provider/system administrators; tenant logins use `/cloudapi/1.0.0/sessions` with the organization name (URL slug), not its display name. A provider session reads vRO normally but cannot read the tenant-scoped Automation services — project-service answers `403` and the catalog, deployment, blueprint and event-broker services answer `500`, and the error carries a hint naming `VCFA_ORGANIZATION` (VCFO-085). The event-broker tools are a separate case: they are **not** reachable on a tenant session either, where both listings answer `403` because the account lacks the role that service requires, so `list-event-topics`, `list-subscriptions`, `get-subscription` and the three subscription writes have no 9.x verification at all and need an RBAC change rather than a different session (VCFO-099). When `VCFA_VRO_HOST` is set (an external vRO appliance, on `vcfa` or `vra8`), only the vRO `/vco/api` base moves to that host; the login endpoints, the `/api/versions` probe, and the Automation services stay on `VCFA_HOST`, the Automation-issued token is reused verbatim, and every request log line and `vRO API error` then ends with ` on <host>` naming the appliance that answered — the JSON path and the binary export/import paths alike (VCFO-081).
 
-## Current MCP Prompts And Resources
+### Current MCP Prompts And Resources
 
 Prefer server-provided prompts for larger VCFA/vRO tasks because they encode the repository's discovery and safety playbooks.
 
@@ -123,7 +246,7 @@ A live-object resource withholds what its matching `get-*` tool withholds, so a 
 
 Use `collect-context-snapshot` in unfamiliar or large environments. Use `profile: "vcfaBuiltIns"` when the task needs a VMware built-in baseline from Library workflows and `com.vmware` actions. Increase `maxItemsPerDomain` when the default limit would skip relevant objects.
 
-## Artifact Lifecycle
+### Artifact Lifecycle
 
 For workflow, action, configuration, resource, and package work, follow this sequence unless the user explicitly requests a narrower read-only review:
 
@@ -145,11 +268,12 @@ Configured artifact directories:
 - `VCFA_CONFIGURATION_DIR`
 - `VCFA_RESOURCE_DIR`
 - `VCFA_PACKAGE_DIR`
+- `VCFA_EXECUTION_LOG_DIR`
 - `VCFA_CONTEXT_DIR`
 
 Artifact file arguments should be plain file names under the matching configured directory. Do not pass paths, absolute paths, or traversal segments.
 
-## Package-First Publishing
+### Package-First Publishing
 
 Reusable project content should move through the stable project package flow by default.
 
@@ -165,7 +289,7 @@ Use direct artifact imports such as `import-workflow-file`, `import-action-file`
 
 Deleting a package with `deleteContents: false` leaves its members behind, and on 9.x vRO releases them asynchronously. For roughly two seconds afterwards a plain `delete-workflow`, `delete-action`, or `delete-configuration` can answer `409 Conflict` reporting the element as in use. **Retry the same delete first** — that is what clears it. `force: true` exists for an element that is genuinely referenced and should be the second step, never the first: it skips vRO's reference check rather than showing nothing depends on the element, so forcing a merely-transient refusal can destroy a reference that mattered. The 409 carries a hint saying exactly this (VCFO-087).
 
-## Workflow Authoring Rules
+### Workflow Authoring Rules
 
 Before authoring or importing workflow artifacts, read `docs/vro-artifact-authoring.md` and the relevant pattern resources.
 
@@ -178,7 +302,7 @@ Before authoring or importing workflow artifacts, read `docs/vro-artifact-author
 - Only the input types in the supported input-form mapping table in `docs/vro-artifact-authoring.md` can be scaffolded (`string`, `boolean`, `number`, `SecureString`, `Date`, `Properties`, `Any`, reference types, and `Array` of supported types); other types fail scaffold/preflight instead of becoming `string` fields. Preflight also cross-checks `input_form_` fields/schema against the inputs declared in `workflow-content` (field with no input = error, input with no field = warning, dataType mismatch = warning).
 - Keep scriptable task code readable and defensive. Runtime errors often reference workflow item line numbers.
 
-## Template, Subscription, Catalog, And Deployment Rules
+### Template, Subscription, Catalog, And Deployment Rules
 
 - For Cloud Assembly templates, inspect existing templates with `list-templates` and `get-template` (set `includeContent: true` to read the YAML) before drafting YAML. Reuse discovered resource types, inputs, image/flavor/network conventions, constraints, and catalog patterns. Do not invent provider-specific YAML.
 - Confirm the target `projectId` with `list-projects` or `get-project` and the template content before calling `create-template` with `confirm: true`. Always pass `content`: it is schema-optional, but only vRA 8 creates an empty template without it — VCF Automation 9.1 answers an opaque `400`, and a minimal `formatVersion: 1` document is the smallest accepted one.
@@ -186,44 +310,6 @@ Before authoring or importing workflow artifacts, read `docs/vro-artifact-author
 - For deployments, inspect `get-deployment` and `list-deployment-actions` before proposing remediation. `get-deployment` renders the inputs the deployment was requested with, which is what distinguishes two deployments of one catalog item requested against different blueprint versions; an input whose name reads as credential material is withheld, but that check is name-based, so treat the block as potentially sensitive output. Use `list-deployment-requests` to see what has been requested against the deployment and to obtain a request ID that was not captured at submission — including the create request's, which the catalog request never returns; that listing answers `404` once the deployment is gone, while each request it listed still reads by ID. When a request ID is known, use `get-deployment-request` for its status and task progress; a deployment's own status does not track non-delete day-2 actions. Do not run `run-deployment-action` until the user confirms the action, inputs, target deployment, and expected impact. Poll the returned request ID afterwards, and for a delete also verify that the deployment is absent.
 - For extensibility subscriptions, inspect `list-event-topics`, `list-subscriptions`, and `get-subscription` (set `includeConstraints: true` to read constraints) first. During testing, disabling or updating a subscription may be safer than deleting it.
 
-## Code And Documentation Changes
-
-- Keep changes focused. Do not rewrite unrelated modules, generated docs, or built artifacts unless the task requires it.
-- Use existing client helpers and patterns before adding new low-level API calls.
-- When adding a tool, update the relevant `src/tools/*` module, mark read-only and destructive annotations accurately, add tests, update `docs/reference/tools.md`, and update relevant how-to docs.
-- When adding or changing a prompt or resource, update `src/prompts/index.ts` or `src/resources/index.ts` and `docs/reference/resources-prompts.md`.
-- Keep checked examples in `examples/README.md` aligned with registered tool and prompt names.
-- For docs pages, update `docs/.vitepress/config.ts` when adding sidebar entries.
-- Never print secrets from configuration values, workflow and action scripts, workflow execution output parameters, tokens, passwords, or private keys. Prefer names, IDs, types, descriptions, and redacted summaries.
-- A value carrying a declared type is withheld on that type, not on its name: `isSecureAttributeValue` in `src/redaction.ts` reads both the declared type and the value envelope, and a surface that prints such a value calls `formatVroValueRedacted` rather than the unguarded `formatVroValue` — `get-configuration` is the one caller of the latter, because it runs the same check itself to reach a third branch for an attribute vRO returned no value for. The key-name heuristic in the same module is the weaker fallback, for the untyped free-form maps that carry no type at all. Neither reaches inside an untyped composite, or into log lines and exception text, which are served verbatim — say so wherever the tool description or docs claim withholding.
-
-## Validation
-
-Use the smallest meaningful validation for the change, and run the full gate for broad behavior, docs, or release-facing changes.
-
-- Dev server: `npm start`
-- Build: `npm run build`
-- Unit tests: `npm test`
-- Coverage gate: `npm run test:coverage:check`
-- Docs/examples drift: `npm run validate:docs`
-- Docs dev server: `npm run docs:dev`
-- Docs build: `npm run docs:build`
-- Docs preview: `npm run docs:preview`
-- Package contents: `npm run validate:package`
-- Full local gate: `npm run validate`
-- MCP inspector after build: `npm run inspect`
-
-`npm run validate` should not contact a live VCFA environment. Keep live smoke checks separate. Read-only list/get checks are appropriate in sandbox environments; imports, deletes, template creation, subscription changes, deployment actions, and package imports require explicit confirmation and disposable test assets.
-
-## GitHub Actions
-
-Current repository workflows run CI on pull requests and pushes to `main`, validate package contents when package-relevant files change, deploy docs to GitHub Pages from `main` or manual dispatch, run CodeQL on PRs, `main`, and a weekly schedule, review dependency changes on PRs, and publish to npm only for published GitHub releases.
-
-## GitHub Issue Convention
-
-- Use `VCFO-###` for repository issue codes, starting at `VCFO-001` and incrementing sequentially.
-- Prefix issue titles with the code, for example `[VCFO-001] Expand MCP resources and prompts for workflow/template implementation`.
-
-## Completion Expectations
+### Completion Expectations
 
 For code or artifact changes, report what changed, how it was verified, and any remaining risk. If required discovery cannot find a category, workflow, action, project, template, parameter, return type, package, or schema detail, stop and report the missing fact instead of filling the gap from memory.

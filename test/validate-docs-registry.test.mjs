@@ -162,6 +162,18 @@ test("maskSource blanks comments, strings, and regexes but keeps structure", () 
   assert.equal(brackets, "()");
 });
 
+test("maskSource with keepLiterals blanks only comments", () => {
+  const source =
+    'const re = /"x"/g; // drop "me"\nconst s = "a\\"b";\nconst t = `k${s}`; /* gone */';
+  const masked = maskSource(source, { keepLiterals: true });
+  assert.equal(masked.length, source.length);
+  assert.ok(!masked.includes("drop"));
+  assert.ok(!masked.includes("gone"));
+  assert.ok(masked.includes('const re = /"x"/g;'));
+  assert.ok(masked.includes('const s = "a\\"b";'));
+  assert.ok(masked.includes("const t = `k${s}`;"));
+});
+
 test("live registry matches the documented counts shape", () => {
   const registry = collectRegistry();
   assert.ok(registry.tools.size > 0, "expected registered tools");

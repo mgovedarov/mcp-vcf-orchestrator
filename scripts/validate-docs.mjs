@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { dirname, extname, join, resolve } from "node:path";
+import { basename, dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import MarkdownIt from "markdown-it";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -35,7 +37,10 @@ function walk(dir, predicate = () => true) {
 // spaces while keeping their delimiters (and `${`/`}` markers, so templates
 // with substitutions stay distinguishable and brace-balanced). The masked
 // text is the same length as the original, so spans located on the masked
-// text read their values out of the original.
+// text read their values out of the original. With `keepLiterals`, string,
+// template, and regex contents survive and only comments are blanked, which is
+// what a source-citation check needs: a tool name lives in a string, and a
+// token the code matches may live in a regex.
 
 // Tokens after which a `/` starts a regex literal rather than a division.
 const REGEX_PRECEDING_KEYWORDS = new Set([
@@ -57,8 +62,11 @@ const REGEX_PRECEDING_KEYWORDS = new Set([
 
 const REGEX_PRECEDING_CHARS = new Set([..."=(,:[!&|?{};+-*/%~^<"]);
 
-export function maskSource(text) {
+export function maskSource(text, { keepLiterals = false } = {}) {
   const out = new Array(text.length).fill(" ");
+  const keep = (index) => {
+    if (keepLiterals && index < text.length) out[index] = text[index];
+  };
   // One entry per open template substitution: its unmatched `{` count.
   const substitutions = [];
   let mode = "code";
@@ -96,7 +104,9 @@ export function maskSource(text) {
     }
     if (mode === "single" || mode === "double") {
       const quote = mode === "single" ? "'" : '"';
+      keep(i);
       if (char === "\\") {
+        keep(i + 1);
         i += 1;
         continue;
       }
@@ -109,7 +119,9 @@ export function maskSource(text) {
       continue;
     }
     if (mode === "template") {
+      keep(i);
       if (char === "\\") {
+        keep(i + 1);
         i += 1;
         continue;
       }
@@ -128,7 +140,9 @@ export function maskSource(text) {
       continue;
     }
     if (mode === "regex" || mode === "regexClass") {
+      keep(i);
       if (char === "\\") {
+        keep(i + 1);
         i += 1;
         continue;
       }
@@ -137,7 +151,7 @@ export function maskSource(text) {
       } else if (mode === "regexClass" && char === "]") {
         mode = "regex";
       } else if (mode === "regex" && char === "/") {
-        while (/[a-z]/iu.test(text[i + 1] ?? "")) i += 1; // flags
+        while (/[a-z]/iu.test(text[i + 1] ?? "")) keep(++i); // flags
         backToCode(")"); // a regex literal is an operand
       }
       continue;
@@ -155,6 +169,7 @@ export function maskSource(text) {
       continue;
     }
     if (char === "/" && regexCanStart()) {
+      keep(i);
       mode = "regex";
       continue;
     }
@@ -616,6 +631,207 @@ function validateSkillReferences(registry, skills) {
   );
 }
 
+// --- Source citations ---------------------------------------------------------
+//
+// Docs and agent instructions cite source by file and symbol, never by line
+// number: a line number goes stale with the next edit to the cited file, and
+// nothing notices. The Markdown is tokenized with markdown-it, which VitePress
+// renders with too, so a code block of any kind (fenced, indented, or inside a
+// list or blockquote) is skipped, and a code span is exactly what CommonMark
+// calls one. Then:
+// - A `path:line` or `path#L<n>` citation fails wherever it stands: in a code
+//   span, in a link target or URL, or in bare prose. The path is a repo path,
+//   or a file name with a source, config, or docs extension that some file in
+//   the repository has, so neither `vro.example.com:443` nor
+//   `jump.example.sh:22` is one.
+// - A repo path in a code span must exist. A repo path is a file with an
+//   extension or a directory with a trailing slash under a repo root:
+//   `test/minko` is a vRO category path, not a citation.
+// - A bare file name in a code span with one of those extensions must name a
+//   file somewhere in the repository; `core.ts` may be any `core.ts`. Dotfiles
+//   are not checked, because the docs write `.workflow` and `.json` as
+//   extensions.
+// - "`symbol` in `path`", even wrapped across a line, must name a symbol the
+//   file still contains, outside its comments in a JS or TS file. A bare file
+//   name there must exist by the same rule, and only a root-level one has its
+//   content checked; a dotted name without one of those extensions, such as
+//   the vRO module `com.vmware.library`, is not a file.
+// A path exists when git would commit it (`repoIndex`), and a path holding a
+// placeholder (`*`, `<n>`, `{id}`, `…`) is a pattern.
+
+const FILE_EXTENSION = String.raw`\.(?:[mc]?[jt]s|[jt]sx|json|ya?ml|md|sh|vue|css|html|xml|txt|toml)`;
+const LINE_SUFFIX = String.raw`(?::\d+(?:[,-]\d+)*|#L\d+(?:-L?\d+)?)`;
+const LINE_CITATION = new RegExp(
+  String.raw`(?<![\w./-])[\w./-]*${FILE_EXTENSION}${LINE_SUFFIX}(?!\w)`,
+  "g",
+);
+const TRAILING_LINE_SUFFIX = new RegExp(`${LINE_SUFFIX}$`);
+const REPO_PATH =
+  /^(?:src|test|scripts|docs|examples|skills|\.github|\.agents|\.claude|\.claude-plugin)\/(?:[^\s*<>{}…]*\/|[^\s*<>{}…]*\.[A-Za-z0-9]+)?$/;
+const BARE_FILE = new RegExp(String.raw`^\w[\w.-]*${FILE_EXTENSION}$`);
+const CITED_SYMBOL = /^[A-Za-z_$][\w$.-]*$/;
+const CITED_PATH = /^[^`\s*<>{}…]+$/;
+// Two code spans, written \0<n>\0 in an inline run, joined by "in". The second
+// span is a lookahead, so it can also start the next pair.
+const SPAN_IN_SPAN = /\0(\d+)\0\s+in\s+(?=\0(\d+)\0)/g;
+const JS_SOURCE = /\.[mc]?[jt]sx?$/;
+
+// `html: true` as in VitePress: an HTML block is raw, so its backticks are not
+// code spans, though its text still counts as prose for line citations.
+const markdownParser = new MarkdownIt({ html: true });
+
+// The prose and code spans of a Markdown text, outside code blocks. Each inline
+// run is one string with its code spans written \0<n>\0 and line breaks kept,
+// so "`symbol` in `path`" still reads as one phrase when it wraps.
+function markdownPieces(text) {
+  const env = {};
+  const prose = [];
+  const spans = [];
+  const runs = [];
+  for (const token of markdownParser.parse(text, env)) {
+    if (token.type === "html_block") prose.push(token.content);
+    if (token.type !== "inline") continue;
+    let run = "";
+    for (const child of token.children ?? []) {
+      if (child.type === "code_inline") {
+        run += `\0${spans.push(child.content) - 1}\0`;
+      } else if (child.type === "text" || child.type === "html_inline") {
+        run += child.content;
+      } else if (child.type === "softbreak" || child.type === "hardbreak") {
+        run += "\n";
+      }
+      const target = child.attrGet("href") ?? child.attrGet("src");
+      if (target) prose.push(target);
+    }
+    runs.push(run);
+  }
+  for (const { href } of Object.values(env.references ?? {})) prose.push(href);
+  return { prose: [...prose, ...runs, ...spans], spans, runs };
+}
+
+// A whole identifier, so a rename to `apiErrorFor` doesn't still match
+// `apiError`, nor `error` match the tail of `api-error`.
+function wholeIdentifier(symbol) {
+  const escaped = symbol.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?<![\\w$-])${escaped}(?![\\w$-])`);
+}
+
+export function sourceCitationProblems(
+  file,
+  text,
+  { exists, readText, fileNamed },
+) {
+  const { prose, spans, runs } = markdownPieces(text);
+  const lineCitations = new Set();
+  for (const string of prose) {
+    for (const [citation] of string.matchAll(LINE_CITATION)) {
+      const stem = citation.replace(TRAILING_LINE_SUFFIX, "");
+      // `//host:port` is a URL's authority, and a bare name is a file only
+      // when the repository has a file by that name.
+      if (/^\/\/[^/]*$/.test(stem)) continue;
+      if (!stem.includes("/") && fileNamed?.(stem) === false) continue;
+      lineCitations.add(citation);
+    }
+  }
+  const missing = new Set();
+  const symbols = [];
+  for (const code of spans) {
+    const stem = code.replace(TRAILING_LINE_SUFFIX, "");
+    if (stem !== code && REPO_PATH.test(stem)) {
+      lineCitations.add(code);
+    } else if (
+      REPO_PATH.test(code)
+        ? !exists(code)
+        : BARE_FILE.test(code) && fileNamed?.(code) === false
+    ) {
+      missing.add(code);
+    }
+  }
+  for (const run of runs) {
+    for (const [, symbolIndex, pathIndex] of run.matchAll(SPAN_IN_SPAN)) {
+      const symbol = spans[symbolIndex];
+      const path = spans[pathIndex];
+      if (!CITED_SYMBOL.test(symbol) || !CITED_PATH.test(path)) continue;
+      if (BARE_FILE.test(path) && fileNamed?.(path) === false) {
+        missing.add(path);
+        continue;
+      }
+      const content = exists(path) ? readText(path) : undefined;
+      if (content === undefined) continue;
+      const code = JS_SOURCE.test(path)
+        ? maskSource(content, { keepLiterals: true })
+        : content;
+      if (!wholeIdentifier(symbol).test(code)) {
+        symbols.push(`${file}: \`${symbol}\` is not in ${path}`);
+      }
+    }
+  }
+  return [
+    ...[...lineCitations].map(
+      (citation) =>
+        `${file}: line-number citation \`${citation}\`; cite the file and a symbol instead`,
+    ),
+    ...[...missing].map((path) => `${file}: cited path ${path} does not exist`),
+    ...symbols,
+  ];
+}
+
+// Every file git would commit, still on disk: tracked, or untracked and not
+// ignored. A walk from the root would also see `node_modules`, build output,
+// and `.claude/worktrees/`, whose copies of the repo make every name exist.
+export function repoFiles(cwd = root) {
+  let listing;
+  try {
+    listing = execFileSync(
+      "git",
+      ["ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+      { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+    );
+  } catch (error) {
+    const cause = error.stderr?.trim() || error.message;
+    throw new Error(
+      `The source-citation check lists the repository's files with git ls-files, so run it in a git checkout with git on PATH (${cause})`,
+    );
+  }
+  return listing
+    .split("\0")
+    .filter((path) => path && existsSync(join(cwd, path)));
+}
+
+// The citation check's view of the repository, built from `repoFiles` alone:
+// a gitignored path that happens to be on disk does not exist, so a local run
+// agrees with CI, and neither does a different spelling of a file's case on a
+// case-insensitive disk.
+export function repoIndex(files, readFile) {
+  const tracked = new Set(files);
+  const directories = new Set(
+    files.flatMap((path) => {
+      const parts = path.split("/").slice(0, -1);
+      return parts.map((_, i) => `${parts.slice(0, i + 1).join("/")}/`);
+    }),
+  );
+  const names = new Set(files.map((path) => basename(path)));
+  return {
+    exists: (path) =>
+      tracked.has(path) ||
+      directories.has(path.endsWith("/") ? path : `${path}/`),
+    readText: (path) => (tracked.has(path) ? readFile(path) : undefined),
+    fileNamed: (name) => names.has(name),
+  };
+}
+
+function validateSourceCitations(markdown) {
+  const files = repoFiles();
+  const instructions = files.filter((path) =>
+    /^\.(?:agents|claude)\/.*\.md$/.test(path),
+  );
+  const options = repoIndex(files, read);
+  const failures = [...markdown, ...instructions].flatMap((file) =>
+    sourceCitationProblems(file, read(file), options),
+  );
+  assert.deepEqual(failures, [], "Stale source citations");
+}
+
 const isMain =
   process.argv[1] &&
   import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
@@ -629,6 +845,7 @@ if (isMain) {
   validateMarkdownLinks(files);
   validateExampleToolCalls(files, registry);
   validateSkillReferences(registry, skills);
+  validateSourceCitations(files);
 
   console.log(
     `Validated docs drift and examples: ${registry.tools.size} tools, ${registry.prompts.size} prompts, ${registry.resources.size} resources, ${files.length} markdown files (${skills.length} skill files).`,

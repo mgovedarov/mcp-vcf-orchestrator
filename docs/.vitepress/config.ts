@@ -64,6 +64,17 @@ export default defineConfig({
           { text: "Contributing", link: "/operations/contributing" },
         ],
       },
+      {
+        text: "Project Internals",
+        items: [
+          { text: "Overview", link: "/project/README" },
+          { text: "Architecture", link: "/project/architecture" },
+          { text: "Client Layer", link: "/project/client-layer" },
+          { text: "MCP Surface", link: "/project/mcp-surface" },
+          { text: "Glossary", link: "/project/glossary" },
+          { text: "Agent Workflow", link: "/project/agent-workflow" },
+        ],
+      },
     ],
     socialLinks: [
       {
