@@ -124,7 +124,7 @@ When writing code, the main session orchestrates and hands work to the tool-neut
 
 ## Agent Commands
 
-Shared procedures live in `.agents/commands/` (`issue.md`, `process.md`). In Claude Code, `/issue <brief>` runs the first in the `issue-filer` subagent. `/process [limit]` runs the processing loop in the main session, and only when you invoke it.
+Shared procedures live in `.agents/commands/` (`issue.md`, `process-issues.md`). In Claude Code, `/issue <brief>` runs the first in the `issue-filer` subagent. `/process-issues [limit]` runs the processing loop in the main session, and only when you invoke it.
 The loop reads issues through `.agents/sources/github-issues.md` and gates every PR with `.agents/gates.md`.
 
 ## Docs

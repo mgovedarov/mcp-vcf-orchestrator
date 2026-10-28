@@ -1,4 +1,4 @@
-# Command: process
+# Command: process-issues
 
 Run the processing loop. It takes open issues from the source, implements them through the roles, gates and reviews each PR, lands the PRs, writes back, and reports.
 
