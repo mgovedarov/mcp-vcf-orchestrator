@@ -4,7 +4,7 @@ How the server is built, for contributors and coding agents. The working rules (
 
 ## What The System Does
 
-A Node.js MCP server that an MCP client starts as a child process and talks to over stdio. It logs in to VCF Automation (or vRA 8) and maps 80 tools, 18 resources, and 12 prompts onto REST calls against vRO (`/vco/api`) and the Automation services: catalog, deployment, blueprint, project, and event broker. Exported and authored artifacts live as local files under the configured artifact directories. There is no database.
+A Node.js MCP server that an MCP client starts as a child process and talks to over stdio. It logs in to VCF Automation (or vRA 8) and maps its MCP tools, resources, and prompts onto REST calls against vRO (`/vco/api`) and the Automation services: catalog, deployment, blueprint, project, and event broker. The [Tool Reference](../reference/tools.md) and [Resources and Prompts](../reference/resources-prompts.md) list them, and `validate:docs` keeps those lists in step with the code. Exported and authored artifacts live as local files under the configured artifact directories. There is no database.
 
 ## Components
 
@@ -13,7 +13,7 @@ MCP client ──stdio──> src/index.ts (env, VroClient, register*, StdioServ
                           │
        ┌──────────────────┼────────────────────────┐
   src/tools/*.ts    src/resources/index.ts    src/prompts/index.ts
-  (80 tools)        (vcfa:// URIs)            (static vcfa-* playbooks)
+  (MCP tools)       (vcfa:// URIs)            (static vcfa-* playbooks)
        └────────┬─────────┘
                 ▼
   src/client/index.ts   VroClient facade, one *-client.ts per domain

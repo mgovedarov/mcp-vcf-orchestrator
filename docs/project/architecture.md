@@ -21,15 +21,15 @@
 
 ### Startup (`src/index.ts`)
 
-1. Reads the server version from `package.json` (`src/index.ts:27-30`).
-2. `main()` reads and validates the environment (`src/index.ts:106-128`):
-   - Missing `VCFA_HOST`, `VCFA_USERNAME`, `VCFA_ORGANIZATION`, or `VCFA_PASSWORD` exits 1 (`src/index.ts:35-45`).
+1. Reads the server version from `package.json` (`SERVER_VERSION` in `src/index.ts`).
+2. `main` reads and validates the environment:
+   - Missing `VCFA_HOST`, `VCFA_USERNAME`, `VCFA_ORGANIZATION`, or `VCFA_PASSWORD` exits 1 (`missingRequiredEnv` in `src/index.ts`).
    - `VCFA_HOST` may carry a path. `VCFA_VRO_HOST` may not.
-   - `VCFA_TARGET_PLATFORM` must be `vcfa`, `vcfa9.0`, `vcfa9.1`, or `vra8` (`src/index.ts:246-257`).
-3. Builds `VroClient`. No network call happens yet; login is lazy (`src/client/core.ts:788-805`).
-4. Creates the `McpServer` with its instructions. Then it calls the 14 `register…Tools` functions, then `registerVcfaResources`, then `registerVcfaPrompts` (`src/index.ts:199-214`).
-5. Registers the SIGINT and SIGTERM handlers **before** connecting. Each handler closes the server, then the client's dispatcher, then exits 0 (`src/index.ts:216-238`).
-6. Connects `StdioServerTransport` (`src/index.ts:240-243`). A fatal error exits 1 (`src/index.ts:259-262`).
+   - `VCFA_TARGET_PLATFORM` must be `vcfa`, `vcfa9.0`, `vcfa9.1`, or `vra8` (`normalizeTargetPlatform` in `src/index.ts`).
+3. Builds `VroClient`. No network call happens yet; login is lazy (`ensureAuthenticated` in `src/client/core.ts`).
+4. Creates the `McpServer` with its instructions. Then it calls every `register…Tools` function, then `registerVcfaResources`, then `registerVcfaPrompts`.
+5. Registers the SIGINT and SIGTERM handlers **before** connecting. Each handler closes the server, then the client's dispatcher, then exits 0 (`shutdown` in `src/index.ts`).
+6. Connects `StdioServerTransport`. A fatal error from `main` exits 1.
 
 ### Layers
 
@@ -47,14 +47,14 @@
   See [MCP Surface](./mcp-surface.md).
 - **Discovery:**
   - Resources serve docs, patterns, snapshots, and live objects. Live objects are fetched through the facade and reduced by `resource-views.ts`.
-  - Prompts are static playbooks and take no client (`src/prompts/index.ts:34`).
+  - Prompts are static playbooks and take no client (`registerVcfaPrompts` in `src/prompts/index.ts`).
 
 ### Dependency Direction
 
 - Tools import the client only as a type (`import type { VroClient } from "../vro-client.js"`), so every network call goes through the facade. Tools do import pure helpers from client modules, for example the preflight report formatter and `apiErrorStatus`.
 - Client modules import only `../types.js` and `../content-metadata.js`. They never import tools, resources, or `redaction.ts`.
 - `redaction.ts` depends on the configuration and parameter client modules. Tools and `resource-views.ts` use it.
-- The context snapshot avoids a cycle by taking a structural client interface. The facade passes itself (`src/client/index.ts:481-484`).
+- The context snapshot avoids a cycle by taking a structural client interface. The facade passes itself (`collectContextSnapshot` in `src/client/index.ts`).
 - The only importer of `src/client/index.ts` is `src/vro-client.ts`.
 
 ### Runtime State
@@ -67,14 +67,14 @@
 | To add | Touch |
 | --- | --- |
 | A tool in an existing domain | That domain's `src/tools/*-tools.ts`, plus `docs/reference/tools.md` and tests. Rules: the Conventions section of `AGENTS.md` |
-| A new tool module | `src/index.ts:199-212`. The full checklist is in the Conventions section of `AGENTS.md` |
-| A client domain | A class over `VroHttpClient` (model: `src/client/template-client.ts`), a field and constructor line in `src/client/index.ts:80-110`, and delegating facade methods |
-| An Automation service | The `AutomationService` type, the vRA 8 write-refusal map, and the base-URL map in `src/client/core.ts:17-49,733-746`. The maps are exhaustive on purpose, so each new service forces a write-support decision |
+| A new tool module | Its register call in `main` in `src/index.ts`. The full checklist is in the Conventions section of `AGENTS.md` |
+| A client domain | A class over `VroHttpClient` (model: `src/client/template-client.ts`), a field and a constructor line on `VroClient` in `src/client/index.ts`, and delegating facade methods |
+| An Automation service | The `AutomationService` type, the vRA 8 write-refusal map `UNSUPPORTED_AUTOMATION_WRITE`, and the base-URL map `automationBaseUrls`, all in `src/client/core.ts`. The maps are exhaustive on purpose, so each new service forces a write-support decision |
 | A resource or prompt | `src/resources/index.ts` or `src/prompts/index.ts`, plus `docs/reference/resources-prompts.md` |
 
 ## Gotchas
 
-- Startup makes no network call. A wrong password or an unreachable host shows up only on the first tool call (`src/client/core.ts:788-805`).
-- `VCFA_ARTIFACT_DIR` defaults to `artifacts/` under the process working directory (`src/index.ts:32,118`). The same server started from a different directory reads and writes a different artifact tree.
-- `README.md` and `docs/vro-artifact-authoring.md` are read at runtime and served as `vcfa://docs/readme` and `vcfa://docs/artifact-authoring` (`src/resources/index.ts:21-25`). Edits to them change what agents receive.
+- Startup makes no network call. A wrong password or an unreachable host shows up only on the first tool call (`ensureAuthenticated` in `src/client/core.ts`).
+- `VCFA_ARTIFACT_DIR` defaults to `artifacts/` under the process working directory (`DEFAULT_ARTIFACT_DIR` in `src/index.ts`). The same server started from a different directory reads and writes a different artifact tree.
+- `README.md` and `docs/vro-artifact-authoring.md` are read at runtime and served as `vcfa://docs/readme` and `vcfa://docs/artifact-authoring` (`README_URL` and `ARTIFACT_AUTHORING_URL` in `src/resources/index.ts`). Edits to them change what agents receive.
 - Working gotchas such as test builds and signal-handler order are in the Gotchas section of `AGENTS.md`.

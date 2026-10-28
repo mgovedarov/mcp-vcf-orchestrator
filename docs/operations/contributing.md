@@ -29,7 +29,7 @@ Resources and prompts are registered in the resource and prompt modules. Keep co
 
 When adding or changing a prompt, update the prompt reference with a collapsible parameters section directly under the prompt.
 
-`npm run validate:docs` compares registered tool, prompt, and resource names against the reference docs. It also checks documented tool-call examples for stale tool names and top-level argument names.
+`npm run validate:docs` compares registered tool, prompt, and resource names against the reference docs. It also checks documented tool-call examples for stale tool names and top-level argument names, and checks source citations: docs cite a file and a symbol, never a line number, every cited repo path must exist, and a symbol cited in a file must still be in that file.
 
 ## Artifact Work
 

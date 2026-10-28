@@ -7,4 +7,4 @@ disable-model-invocation: true
 
 Read and follow `.agents/commands/process.md`, orchestrating from this main session. Run limit: $ARGUMENTS (default 10).
 
-In Claude Code, each role is the subagent of the same name. Start every `coder` with `isolation: "worktree"`, and start a wave's coders in one message so they run in parallel.
+In Claude Code, each role is the subagent of the same name. Start every `coder` with `isolation: "worktree"`. Start a wave's coders in parallel, at most 3 per message, which is the concurrency limit in `process.md`. Start the next one as each returns.

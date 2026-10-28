@@ -7,7 +7,7 @@ Implement one GitHub issue on its own branch or worktree, then open a PR.
 - Input: one issue number. Read the issue and every `path:line` it cites before editing.
 - To understand unfamiliar code before changing it, use `scout` or `researcher`: as subagents if your tool lets you start them, otherwise by following `.agents/roles/scout.md` or `.agents/roles/researcher.md` inline.
 - Work in your own worktree, on a branch named as `AGENTS.md` (Git/PR Rules) describes. Never work on `main` or in the main working copy. Keep scratch files inside that worktree and delete them before committing.
-- Start the branch from a freshly fetched `origin/main`, whatever commit your worktree was created on: run `git fetch origin main`, then `git switch -c vcfo-<NNN>-<slug> origin/main`. A local `main` or the harness's base can lag behind PRs merged earlier in the run, and your issue may build on them.
+- Start the branch from a freshly fetched `origin/main`, whatever commit your worktree was created on: run `git fetch origin main`, then `git switch -c vcfo-<NNN>-<slug> --no-track origin/main`. A local `main` or the harness's base can lag behind PRs merged earlier in the run, and your issue may build on them. Without `--no-track` the branch would track `main`, and a plain `git push` refuses it. Push it with `git push -u origin vcfo-<NNN>-<slug>`.
 - Stay inside the issue and don't widen scope. Don't file issues yourself. Report each bug you find along the way as a `BUG: <brief>` line in your return, and the orchestrator files it through `issue-filer`, one at a time.
 - Follow the Conventions and Gotchas in `AGENTS.md`, including:
   - the tool shape;

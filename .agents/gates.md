@@ -7,6 +7,7 @@ Two tiers. `test-runner` runs a gate when the orchestrator asks; `coder` and `re
 - Run every command in the foreground, one at a time, in order, with the timeout shown. macOS has no `timeout` command, so set the timeout on the shell tool.
 - Run the build and test commands inside the worktree under test, never in the main working copy. Each gate step says where it runs. The final gate's setup and cleanup (`git fetch`, `git worktree add`, `git worktree remove`, `rm -f`) run in the main repository, because the worktree doesn't exist yet or is being removed. They only touch `.git` and the temp dir.
 - A failing command stops the gate. Report it and skip the rest, except the trailing cleanup (`git worktree remove`, `rm -f`), which always runs so that nothing is left behind.
+- One retry is allowed. A `git fetch` that fails with `cannot lock ref`, or because a `.lock` file exists, collided with a fetch in another worktree or role, since worktrees share refs. Wait 5 s and run it once more. Any other failure, or a second lock failure, stops the gate.
 - Never run the final gate per item. It runs once per wave, on the combined result.
 - No gate contacts a live VCFA/vRO environment or needs Docker or credentials.
 

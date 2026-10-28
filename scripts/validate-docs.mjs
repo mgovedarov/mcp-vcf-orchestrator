@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import assert from "node:assert/strict";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -616,6 +616,69 @@ function validateSkillReferences(registry, skills) {
   );
 }
 
+// --- Source citations ---------------------------------------------------------
+//
+// Docs and agent instructions cite source by file and symbol, never by line
+// number: a line number goes stale with the next edit to the cited file, and
+// nothing notices. So a backticked `path:line` into a source file fails, a
+// backticked repo path must exist, and "`symbol` in `path`" must name a symbol
+// the file still contains. A repo path is a file with an extension or a
+// directory with a trailing slash under a repo root: `test/minko` is a vRO
+// category path, not a citation. A path holding a placeholder (`*`, `<n>`,
+// `{id}`, `…`) is a pattern, and fenced code blocks are skipped.
+
+const LINE_CITATION =
+  /`([^`\s]+\.(?:ts|mts|mjs|cjs|js|json|ya?ml|md|sh)):\d[\d,-]*`/g;
+const REPO_PATH =
+  /^(?:src|test|scripts|docs|examples|skills|\.github|\.agents|\.claude|\.claude-plugin)\/(?:[^\s*<>{}…]*\/|[^\s*<>{}…]*\.[A-Za-z0-9]+)?$/;
+const SYMBOL_IN_PATH = /`([A-Za-z_$][\w$.-]*)` in `([^`\s*<>{}…]+)`/g;
+
+export function sourceCitationProblems(file, text, { exists, readText }) {
+  const prose = text.replace(/^```[\s\S]*?^```/gm, "");
+  const problems = [];
+  for (const match of prose.matchAll(LINE_CITATION)) {
+    problems.push(
+      `${file}: line-number citation ${match[0]}; cite the file and a symbol instead`,
+    );
+  }
+  for (const match of prose.matchAll(/`([^`\n]+)`/g)) {
+    if (REPO_PATH.test(match[1]) && !exists(match[1])) {
+      problems.push(`${file}: cited path ${match[1]} does not exist`);
+    }
+  }
+  for (const [, symbol, path] of prose.matchAll(SYMBOL_IN_PATH)) {
+    const content = exists(path) ? readText(path) : undefined;
+    // A whole identifier, so a rename to `apiErrorFor` doesn't still match `apiError`.
+    const whole = new RegExp(
+      `(?<![\\w$])${symbol.replace(/[.$]/g, "\\$&")}(?![\\w$-])`,
+    );
+    if (content !== undefined && !whole.test(content)) {
+      problems.push(`${file}: \`${symbol}\` is not in ${path}`);
+    }
+  }
+  return problems;
+}
+
+function instructionFiles() {
+  return [
+    ...walk(".agents", (path) => extname(path) === ".md"),
+    ...walk(".claude/agents", (path) => extname(path) === ".md"),
+    ...walk(".claude/skills", (path) => extname(path) === ".md"),
+  ];
+}
+
+function validateSourceCitations(files) {
+  const options = {
+    exists: (path) => existsSync(join(root, path)),
+    readText: (path) =>
+      statSync(join(root, path)).isFile() ? read(path) : undefined,
+  };
+  const failures = files.flatMap((file) =>
+    sourceCitationProblems(file, read(file), options),
+  );
+  assert.deepEqual(failures, [], "Stale source citations");
+}
+
 const isMain =
   process.argv[1] &&
   import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
@@ -629,6 +692,7 @@ if (isMain) {
   validateMarkdownLinks(files);
   validateExampleToolCalls(files, registry);
   validateSkillReferences(registry, skills);
+  validateSourceCitations([...files, ...instructionFiles()]);
 
   console.log(
     `Validated docs drift and examples: ${registry.tools.size} tools, ${registry.prompts.size} prompts, ${registry.resources.size} resources, ${files.length} markdown files (${skills.length} skill files).`,

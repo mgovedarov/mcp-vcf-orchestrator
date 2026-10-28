@@ -22,7 +22,7 @@
 
 ### Docs
 
-- **The docs site gains a Project Internals section for contributors and coding agents.** Five pages under `docs/project/`, an overview, architecture, client layer, MCP surface, and glossary, cover how the server starts, logs in on each target platform, routes requests to the VCFA and vRO hosts, builds errors and hints, registers tools, resources, and prompts, and withholds secrets. They cite `path:line` throughout, and like the rest of `docs/` they ship in the npm tarball. `AGENTS.md` is reorganized around them: layout, commands with their definitions, conventions and gotchas with citations, and the Git and PR rules. `CLAUDE.md` now imports it rather than keeping a second copy.
+- **The docs site gains a Project Internals section for contributors and coding agents.** Five pages under `docs/project/`, an overview, architecture, client layer, MCP surface, and glossary, cover how the server starts, logs in on each target platform, routes requests to the VCFA and vRO hosts, builds errors and hints, registers tools, resources, and prompts, and withholds secrets. They cite source by file and symbol rather than by line, and like the rest of `docs/` they ship in the npm tarball. `npm run validate:docs` now fails on a line-number citation, a cited repo path that no longer exists, or a symbol cited in a file that no longer contains it, so the citations cannot rot silently. `AGENTS.md` is reorganized around them: layout, commands with their definitions, conventions and gotchas with citations, and the Git and PR rules. `CLAUDE.md` now imports it rather than keeping a second copy.
 
 ### Tests
 

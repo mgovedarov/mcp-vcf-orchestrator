@@ -24,7 +24,7 @@ Start the loop only when the user invokes it. Never start it on your own, for ex
 2. **Triage.** Read the candidates in order and classify each one:
    - `actionable`;
    - `human-needed`: ambiguous, needs a design call, or needs live verification;
-   - `blocked`: waits on another open issue.
+   - `blocked`: waits on an open issue that this run won't land, because it is outside this run's actionable items or is itself human-needed or blocked. An item that depends on an actionable item of this run is actionable, and step 3 puts it in a later wave.
 
    Stop once the run limit is reached in actionable items. Human-needed and blocked items don't count toward the limit, so they can't crowd out the newer issues behind them. Use `researcher` when classifying needs a code read. Write back every item that isn't actionable, as the source's Write-back section describes.
 3. **Plan units.** An item's footprint is the set of files and dirs it says it will change. That is usually in `## Proposed implementation`; older issues use `## Suggested fix` or `## Proposed change`, or have no sections at all. A path cited only as evidence is not part of the footprint. If the issue names no paths, have `scout` list them.
@@ -38,12 +38,18 @@ Start the loop only when the user invokes it. Never start it on your own, for ex
 5. **Review.** For each PR, read `gh pr diff <n>` yourself, then send the PR to `reviewer`.
    - Send findings to `remediator` when the verdict is `changes-requested` or a required CI check is red; for a red check, include the excerpt from `gh run view <run-id> --log-failed`. Then review again.
    - If the PR is still not clean after 2 remediation rounds, mark its items human-needed and leave the PR open.
-6. **Final gate.** Have `test-runner` run the final gate's local part from `.agents/gates.md` on the combined tip of the wave's clean PRs, in landing order. On red, send the excerpt to `remediator` for the PR at fault, then run the gate again. This counts toward that PR's rounds.
+6. **Final gate.** Have `test-runner` run the final gate's local part from `.agents/gates.md` on the combined tip of the wave's clean PRs, in landing order. On red, find the PR at fault:
+   - If the excerpt points at one PR's changes, send it to that PR's `remediator`, then run the gate again. This counts toward that PR's rounds.
+   - If no single PR is at fault, because each passed its own per-item gate and the failure appears only in the combination, drop the last PR in landing order and run the gate again. Repeat until it is green, then land the green set. Handle each dropped PR as a wave of its own, starting at this step: with the PRs it clashed with now on `main`, the failure is that PR's own.
 7. **Land.** Merge the wave's clean PRs one at a time, in dependency order. For each PR:
    - Get the head SHA from `gh pr view <n> --json headRefOid` and read `behind_by` from `gh api repos/mgovedarov/mcp-vcf-orchestrator/compare/main...<sha>`.
    - If `behind_by` is above 0, run `gh pr update-branch <n>`. Re-check `behind_by` on every poll: right after a merge, GitHub reports `UNKNOWN`, not `BEHIND`.
    - If the update conflicts, send the PR to `remediator`. A fix that only touches `CHANGELOG.md` and `docs/reference/tools.md` doesn't count as a round, and the PR goes straight back to waiting for `CLEAN`. A wider fix sends it back to step 5.
-   - Wait until `gh pr view <n> --json mergeStateStatus` reads `CLEAN`. Right after an update, `gh pr checks --watch` reports the old head's runs. A failing required check sends the PR back to step 5.
+   - Wait until `gh pr view <n> --json mergeStateStatus` reads `CLEAN`, for at most 30 minutes after the PR's last push. Right after an update, `gh pr checks --watch` reports the old head's runs, so poll `gh pr checks <n>` instead. While waiting:
+     - A failing required check sends the PR back to step 5.
+     - `UNSTABLE` means a check outside the six required contexts failed. That is usually `CodeQL`, which reports new code-scanning alerts. Send the alerts from `gh api 'repos/mgovedarov/mcp-vcf-orchestrator/code-scanning/alerts?ref=refs/pull/<n>/merge&state=open'` back to step 5, as for a red required check. Never merge past it.
+     - `DIRTY` is a conflict. Handle it like a conflicting update.
+     - Any other state when the time is up, such as `BLOCKED` with every required check green, means merges are blocked. Stop and give the user the remaining PRs in merge order.
    - Run `gh pr merge <n> --squash`, then confirm the merge with `gh pr view <n> --json state,mergedAt`. Don't pass `--delete-branch`: the repository already deletes the head branch on merge, and the flag's local delete can fail while the unit's worktree still holds the branch, which turns a successful merge into a failed command.
    - A permission denial on the merge, or on the command after it, proves nothing about the merge, so check the PR's state before retrying. If merges stay blocked, stop and give the user the remaining PRs in merge order.
    - Remove the unit's worktree and delete its local branch with `git branch -D`; git calls a squash-merged branch unmerged.
