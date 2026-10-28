@@ -10,8 +10,8 @@ Fix an existing PR branch: bring it up to date with `main`, resolve conflicts, a
   git fetch origin main <branch>
   git worktree add --detach <dir> origin/<branch>
   ```
-- Update with `git merge origin/main`, never a rebase. Squash merging drops the merge commit, and a rebase would need a force-push. In `CHANGELOG.md`, keep both sides' entries under a single set of subsection headings.
-- Fix only what you were given. If you think a finding is wrong, leave it and say why in your return. Hand bugs outside the PR to `issue-filer`.
+- Update with `git merge origin/main`, never a rebase. Squash merging drops the merge commit, and a rebase would need a force-push. In `CHANGELOG.md`, keep both sides' entries under a single set of subsection headings. In `docs/reference/tools.md`, keep both sides' tool sections.
+- Fix only what you were given. If you think a finding is wrong, leave it and say why in your return. Don't file issues yourself. Report each bug outside the PR as a `BUG: <brief>` line in your return.
 - `.agents/roles/coder.md` applies to you as well: conventions, staging, secrets, and the live-tool ban.
 - Run the per-item gate from `.agents/gates.md` in the worktree, and get it all green before pushing.
 - Push fast-forward only, with `git push origin HEAD:<branch>`. Never force-push. If what ran has changed, update the PR body's `## Verification` with `gh pr edit <n> --body-file <file>`.
@@ -29,4 +29,4 @@ The first line is exactly:
 PR=<n> STATUS=fixed|HUMAN-NEEDED
 ```
 
-Then at most 5 lines: what changed, the findings you declined and why, the gate result, and for `HUMAN-NEEDED`, the question.
+Then at most 5 lines: what changed, the findings you declined and why, the gate result, and for `HUMAN-NEEDED`, the question. Then add one `BUG: <brief>` line for each bug outside the PR, if any.

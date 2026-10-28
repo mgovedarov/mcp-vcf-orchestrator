@@ -5,8 +5,8 @@ Two tiers. `test-runner` runs a gate when the orchestrator asks; `coder` and `re
 ## Rules
 
 - Run every command in the foreground, one at a time, in order, with the timeout shown. macOS has no `timeout` command, so set the timeout on the shell tool.
-- Run inside the worktree under test, never in the main working copy.
-- A failing command stops the gate. Report it and skip the rest, except a trailing `git worktree remove`, which always runs so that no worktree is left behind.
+- Run the build and test commands inside the worktree under test, never in the main working copy. Each gate step says where it runs. The final gate's setup and cleanup (`git fetch`, `git worktree add`, `git worktree remove`, `rm -f`) run in the main repository, because the worktree doesn't exist yet or is being removed. They only touch `.git` and the temp dir.
+- A failing command stops the gate. Report it and skip the rest, except the trailing cleanup (`git worktree remove`, `rm -f`), which always runs so that nothing is left behind.
 - Never run the final gate per item. It runs once per wave, on the combined result.
 - No gate contacts a live VCFA/vRO environment or needs Docker or credentials.
 
@@ -24,14 +24,14 @@ Run it in the unit's worktree before opening a PR and again after every fix. It 
 
 Both parts must be green before anything lands on `main`.
 
-1. **Local, on the combined tip** of the wave's PR branches, merged in landing order in a throwaway worktree. `<dir>` is a new path under the temp dir. Write it out literally, because shell variables don't survive from one command to the next:
+1. **Local, on the combined tip** of the wave's PR branches, merged in landing order in a throwaway worktree. `<dir>` is a new path under the temp dir. Write it out literally, because shell variables don't survive from one command to the next. Set up from the main repository:
    ```sh
    git fetch origin main <branch>...
    git worktree add --detach <dir> origin/main
-   printf 'CHANGELOG.md merge=union\n' > <dir>.attrs
+   printf 'CHANGELOG.md merge=union\ndocs/reference/tools.md merge=union\n' > <dir>.attrs
    git -C <dir> -c core.attributesFile=<dir>.attrs merge --no-edit origin/<branch>   # once per branch
    ```
-   Every PR appends to `CHANGELOG.md`, so the `union` driver keeps both sides there. A conflict anywhere else is a FAIL. Then run per-item steps 1–3 in `<dir>`, and finish with `git worktree remove --force <dir>`.
+   PRs in one wave each add their own `CHANGELOG.md` entries and `docs/reference/tools.md` sections, and the plan doesn't count those files as overlap. The `union` driver keeps both sides in both files. A conflict anywhere else is a FAIL. Then run per-item steps 1–3 in `<dir>`. Finish from the main repository with `git worktree remove --force <dir>` and `rm -f <dir>.attrs`.
 2. **CI, per PR, before its merge.** All six required contexts must be green on a head that is up to date with `main`, which `strict: true` enforces: `Test on Node 22`, `Test on Node 24`, `Validate docs, coverage, and package`, `Verify npm package contents`, `Review dependency changes`, `Analyze JavaScript and TypeScript`. The Node 24 leg, dependency review, and CodeQL are CI-only. After the wave's last merge, the push CI on `main` must be green too. Each round takes about 2 min, mostly CodeQL.
 
 ## Strict vs lax

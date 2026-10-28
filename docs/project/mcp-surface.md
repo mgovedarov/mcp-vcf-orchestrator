@@ -29,9 +29,11 @@
 
   Read-only example: `src/tools/category-tools.ts:8-69`.
 - A handler wraps its work in `try`, and the `catch` returns a text result starting `Failed to …` with `isError: true` (`src/tools/category-tools.ts:56-66`).
-- **List tools:**
+- **List tools** that walk pages:
   - accept `limit` (`src/tools/list-limit.ts:5-13`) and append `limitNote`;
   - always append `truncationNote`, so a page-capped walk is never reported as complete (`src/tools/truncation.ts:1-12`).
+
+  `list-workflow-executions` and `list-deployment-actions` read a single response, so they do neither. `list-workflows-by-category` renders its own category-limit note.
 - **Get tools** omit bulky content by default and print `omittedContentSummary` (sha256 and length) along with the flag that returns it, such as `includeScript` or `includeContent`.
 
 ### Confirmation Flow For Mutations
@@ -39,7 +41,7 @@
 1. Without `confirm: true`, the handler returns a plain instruction and does nothing. That result is not an error (`src/tools/template-tools.ts:258-267`).
 2. If any `expected*` argument is present, the handler reads the live target and compares. On a mismatch, `guardExpectedFields` returns `isError: true` with "No live mutation was performed" (`src/tools/confirmation-guards.ts:19-52`).
 3. Only then does the write run.
-4. `appendGuardGuidance` adds the two-phase hint to results that did not use guards.
+4. On success, `update-action` and the five direct import tools append the two-phase hint with `appendGuardGuidance`, whether or not guards were passed (`src/tools/confirmation-guards.ts:85-87`).
 
 User-facing description: [Safety](../operations/safety.md#two-phase-target-confirmation).
 

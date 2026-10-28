@@ -20,7 +20,7 @@ Use these instructions for all work in this repository. If a more specific `AGEN
 | `src/client/` | Auth, HTTP and errors (`core.ts`), one client class per domain, the `VroClient` facade (`index.ts`), artifact helpers (`files.ts`, `artifact-preflight.ts`, `workflow-artifact.ts`, `context-snapshot.ts`) |
 | `src/tools/` | One `register<Domain>Tools` module per domain, plus shared `annotations.ts`, `confirmation-guards.ts`, `truncation.ts`, `content-summary.ts` |
 | `src/resources/`, `src/prompts/` | `vcfa://` resources and `vcfa-*` prompt playbooks |
-| `src/*.ts` (rest) | `redaction.ts` (secret withholding), `resource-views.ts`, `types.ts`, `context-directory.ts`; `vro-client.ts` is the public re-export shim |
+| `src/*.ts` (rest) | `redaction.ts` (secret withholding), `resource-views.ts`, `content-metadata.ts` (the sha256-and-length stand-in for withheld content), `types.ts`, `context-directory.ts`; `vro-client.ts` is the public re-export shim |
 | `test/` | Node test runner suites `*.test.mjs`; they import `dist/`, not `src/` |
 | `scripts/` | `validate-docs.mjs` (registry, link and example drift), `validate-package.mjs` (npm file set) |
 | `docs/` | VitePress site, deployed to GitHub Pages and shipped in the npm tarball (`package.json:12`); `docs/project/` holds the internals docs |
@@ -58,8 +58,8 @@ These are the declared commands and where they are defined. The gates in `.agent
 - Client errors are plain `Error`s with a numeric `status` attached, message `vRO API error: <status> — <label>` plus a sanitized body and hint (`src/client/core.ts:1301-1313`). Branch on `apiErrorStatus(error)` (`core.ts:249-253`), not on message text; there are no custom error classes.
 - Mutating tools take `confirm: z.boolean()` and return a plain, non-error instruction when it is false (`src/tools/template-tools.ts:258-267`). `expected*` arguments are checked against live metadata with `guardExpectedFields`, which returns `isError: true` on a mismatch (`src/tools/confirmation-guards.ts:19-52`). New mutating tools offer the same two-phase flow; the schema flag never replaces asking the user.
 - Annotations: read-only tools use `{ readOnlyHint: true }`; a tool that overwrites, deletes, executes, or provisions uses `DESTRUCTIVE_LIVE_WRITE` (`src/tools/annotations.ts:18-21`).
-- Every `list-*` result appends `truncationNote`, on the empty branch too (`src/tools/truncation.ts:1-12`). Bulky content that a `get-*` tool omits by default goes through `omittedContentSummary` (`src/tools/content-summary.ts:8-15`).
-- HTTP goes only through the npm `undici` `fetch`, `FormData`, and `Agent` wired in `src/client/core.ts:168-210`. A new domain client is a class over `VroHttpClient`, constructed in the facade (`src/client/index.ts:95-110`).
+- Every `list-*` tool that walks pages appends `truncationNote`, on the empty branch too (`src/tools/truncation.ts:1-12`). `list-workflow-executions` and `list-deployment-actions` read a single response and have no page walk to report, and `list-workflows-by-category` renders its own category-limit note. Bulky content that a `get-*` tool omits by default goes through `omittedContentSummary` (`src/tools/content-summary.ts:8-15`).
+- HTTP goes only through the npm `undici` `fetch`, `FormData`, and `Agent`, imported at `src/client/core.ts:3`. `requestFetch` and `createUploadForm` pick the fetch and build the form (`src/client/core.ts:168-210`), and the constructor builds the `VCFA_IGNORE_TLS` `Agent` (`src/client/core.ts:719-721`). A new domain client is a class over `VroHttpClient`, constructed in the facade (`src/client/index.ts:95-110`).
 - Log with `console.error` only, prefixed `[vcfa-server]` or `[vro-client]`; stdout carries the MCP stdio transport (`src/index.ts:240-243`). Never log tokens or passwords.
 - Environment variables are read in `src/index.ts` only, plus `VCFA_CONTEXT_DIR` in `src/context-directory.ts:13`.
 - ESM with NodeNext: relative imports end in `.js` (`tsconfig.json:4-5`); source files use kebab-case names such as `*-tools.ts` and `*-client.ts`.
@@ -76,7 +76,7 @@ These are the declared commands and where they are defined. The gates in `.agent
 ## Gotchas
 
 - Tests pass or fail against old code → tests import `dist/`. `npm test` builds first; run `npm run build` before any direct `node --test`.
-- A multipart import sends `[object FormData]` as `text/plain`, or `VCFA_IGNORE_TLS` is ignored → Node's global `fetch`/`FormData` was used; the runtime-bundled undici is a different major. Use the npm undici ones in `src/client/core.ts:168-210`. Unit tests may still stub `globalThis.fetch`; `requestFetch` honors a swapped global.
+- A multipart import sends `[object FormData]` as `text/plain`, or `VCFA_IGNORE_TLS` is ignored → Node's global `fetch`/`FormData` was used; the runtime-bundled undici is a different major. Route through `requestFetch` and `createUploadForm` (`src/client/core.ts:168-210`), which use the npm undici ones. Unit tests may still stub `globalThis.fetch`; `requestFetch` honors a swapped global.
 - `npm run validate:docs` fails with `unknown documented call` → in `README.md`, `AGENTS.md`, `CLAUDE.md`, `docs/`, `examples/`, and `skills/`, any lowercase hyphenated word followed by an opening parenthesis must be a registered tool or prompt, and the phrase "Use" + word + "with:" must name a tool (`scripts/validate-docs.mjs:529-562`). Reword the sentence.
 - `npm run docs:build` fails with `dead link(s) found` → a page under `docs/` links outside `docs/` (for example a relative link to `AGENTS.md`). Link docs pages by `.md` path; write repo paths as inline code or full GitHub URLs. A bare angle-bracket placeholder or a double curly brace in a docs page also breaks the Vue compile.
 - `test/tool-annotations.test.mjs` fails on a new tool → a tool named `import-…`, `delete-…`, `update-…`, or `run-…` must use `DESTRUCTIVE_LIVE_WRITE` and be listed in `DESTRUCTIVE_TOOLS` (`test/tool-annotations.test.mjs:58-61,197-206`).
@@ -90,7 +90,7 @@ These are the declared commands and where they are defined. The gates in `.agent
 
 - The repository is public. Keep hostnames, IPs, organization or tenant names, and customer identifiers out of issues, PRs, commits, tests, and docs; use placeholders such as `vcfa.example.com` (precedent: `CHANGELOG.md:25`, VCFO-113).
 - Planning lives in GitHub Issues; `TODO.md` is deprecated and kept for history only. Use `VCFO-###` issue codes, sequential from `VCFO-001`, prefixed in titles: `[VCFO-001] Expand MCP resources and prompts for workflow/template implementation`. Take the next code from a title search across issues and PRs, not from the issue number; the two diverge.
-- Branch from `main` as `vcfo-<NNN>-<kebab-slug>`; releases use `release/X.Y.Z`.
+- Branch from a freshly fetched `origin/main` as `vcfo-<NNN>-<kebab-slug>`, not from a local `main` that may lag behind; releases use `release/X.Y.Z`.
 - PR title: `[VCFO-###] <imperative sentence>`; several codes stack as `[VCFO-112][VCFO-113] …`. Maintenance without an issue uses `chore: …`. PRs are squash-merged, so the title and body become the commit.
 - PR body: the first line is `Closes #N.`, topical `##` sections follow, and the last section is `## Verification` (what ran, the results, what was not exercised).
 - `CHANGELOG.md` keeps an `## Unreleased` section at the top with `### Added` / `### Changed` / `### Fixed` / `### Dependencies` / `### Docs` / `### Tests` subsections as needed. Add an entry for every user-visible change as `- **Bold one-sentence lead.** Explanation (VCFO-###).` (`CHANGELOG.md:3-25`). Releases rename the section to `## <version> - <date>`.
@@ -104,15 +104,17 @@ When writing code, the main session orchestrates and hands work to the tool-neut
 
 | Role | Use it to | Claude Code subagent |
 |---|---|---|
-| `scout` | enumerate call sites, files, and patterns with `path:line`, no judgment | `.claude/agents/scout.md` (haiku, read-only tools) |
-| `researcher` | answer "how does X work" before changing it | `.claude/agents/researcher.md` (opus, read-only tools) |
+| `scout` | enumerate call sites, files, and patterns with `path:line`, no judgment | `.claude/agents/scout.md` (haiku; Read, Grep, Glob, Bash) |
+| `researcher` | answer "how does X work" before changing it | `.claude/agents/researcher.md` (opus; Read, Grep, Glob, Bash) |
 | `coder` | implement one issue on its own branch or worktree and open a PR | `.claude/agents/coder.md` (opus, all tools except the `vcf-orchestrator` MCP tools and `Agent`) |
-| `reviewer` | review the diff before a PR is opened or merged | `.claude/agents/reviewer.md` (opus, read-only tools) |
+| `reviewer` | review the diff before a PR is opened or merged | `.claude/agents/reviewer.md` (opus; Read, Grep, Glob, Bash) |
 | `issue-filer` | file bugs found along the way | `.claude/agents/issue-filer.md` (haiku, all tools except the `vcf-orchestrator` MCP tools and `Agent`) |
-| `test-runner` | run a gate's commands and report pass/fail, never editing | `.claude/agents/test-runner.md` (haiku, read-only tools) |
+| `test-runner` | run a gate's commands and report pass/fail, never editing | `.claude/agents/test-runner.md` (haiku; Read, Grep, Glob, Bash) |
 | `remediator` | fix an open PR: update it with `main`, resolve conflicts, apply review findings and gate failures | `.claude/agents/remediator.md` (opus, all tools except the `vcf-orchestrator` MCP tools and `Agent`) |
 
 - Claude Code runs these as native subagents. A tool without subagents, or a subagent that cannot start its own, reads the role file and follows it inline.
+- `scout`, `researcher`, `reviewer`, and `test-runner` are read-only by their role files, not by their tool lists. Each keeps Bash, which can write, push, and comment.
+- `coder` and `remediator` don't file issues. They return `BUG:` lines, and the main session hands them to `issue-filer` one at a time, because each filing takes the next `VCFO-###` code.
 - Roles never call the live VCFA/vRO tools; a change that needs live verification goes back to the main session, which confirms target and impact with the user first.
 - The orchestrator verifies what a role claims (for example by reading `gh pr diff <n>`) instead of trusting its summary.
 

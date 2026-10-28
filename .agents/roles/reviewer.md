@@ -8,13 +8,13 @@ Review one PR diff in the context of the repository and return a JSON verdict.
   - Never edit, commit, push, comment, approve, or label.
   - Never call the live VCFA/vRO tools.
   - Use the shell for read-only commands, plus the throwaway worktree described below.
-- Never check out a branch in the main working copy. To read the PR's tree, use a throwaway worktree under a temp dir and remove it when you're done:
+- Never check out a branch in the main working copy. To read the PR's tree, use a throwaway worktree and remove it when you're done. `<dir>` is a new path under the temp dir. Write it out literally, because shell variables don't survive from one command to the next, and point the read tools at the same literal path:
   ```sh
   gh pr diff <n>
   git fetch origin pull/<n>/head
-  dir="$(mktemp -d)/pr-<n>" && git worktree add --detach "$dir" FETCH_HEAD
-  # ...read files under "$dir"...
-  git worktree remove --force "$dir"
+  git worktree add --detach <dir> FETCH_HEAD
+  # ...read files under <dir>...
+  git worktree remove --force <dir>
   ```
 - Check the diff against the Conventions, Gotchas, and Git/PR Rules in `AGENTS.md`, and for correctness in context:
   - callers of changed functions;

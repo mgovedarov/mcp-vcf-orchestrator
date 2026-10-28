@@ -30,7 +30,7 @@ A seed brief: the bug, gap, or idea, plus any evidence the reporter has.
    - `## Acceptance criteria`: observable outcomes, as bullets.
    - `## Scope`: what the evidence covers, what it does not establish, and what is out of scope.
 6. **Labels.** Use only labels that `gh label list` shows; most issues carry none. Add one only when it clearly fits, for example `bug`, `enhancement`, `documentation`, `vcfa`, or `vRO`.
-7. **File.** Write the body to a file in a temp dir. Run `gh issue create --title "<title>" --body-file <file>`, then delete the file.
+7. **File.** Re-run the step 4 command first. If the highest code has moved since step 4, take the next code after it and fix the title, because another filing took yours. Write the body to a file in a temp dir. Run `gh issue create --title "<title>" --body-file <file>`, then delete the file.
 
 ## Output
 

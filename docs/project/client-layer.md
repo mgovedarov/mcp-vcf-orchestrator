@@ -22,12 +22,13 @@
   - The client sends Basic credentials to `/cloudapi/1.0.0/sessions`.
   - An organization of `system`, in any case, goes to the provider endpoint `/sessions/provider` instead (`src/client/core.ts:555-571`).
   - The bearer token comes back in a response header.
-  - Login redirects are not followed, because the body carries the password (`src/client/core.ts:980-985`).
+  - Login redirects are not followed. Fetch strips the Basic header on a cross-origin redirect, so a followed redirect could only reach an SSO page and answer `200` with HTML (`src/client/core.ts:1007-1022`).
 - **API version.** A pinned version wins. Otherwise the client probes the unauthenticated `GET /api/versions` and prefers `9.1.0`, then `9.0.0` (`src/client/core.ts:850-890`).
 - **`vra8`:**
   - A CSP login with the organization as the vIDM domain returns a refresh token.
   - `/iaas/api/login` exchanges that refresh token for the bearer token (`src/client/core.ts:573-589`).
   - Renewal reuses the cached refresh token and repeats only the exchange (`src/client/core.ts:911-935`).
+  - Login redirects are not followed here either. The CSP login body carries the password, and a `307` or `308` would resend it to the new origin (`src/client/core.ts:976-985`).
 - **Lazy, shared login.** The first request triggers login, and concurrent requests share the one in-flight attempt (`src/client/core.ts:788-805`).
 - **Retry.** `authenticatedFetch` retries once after re-authenticating. That happens on `401`, and on `vra8` also on a `403` that carries `WWW-Authenticate` (`src/client/core.ts:1085-1089`). A `vcfa` `403` is never retried.
 
@@ -40,7 +41,7 @@
 ### Requests
 
 - All requests use the npm `undici` `fetch` and `FormData`, never Node's global ones (`src/client/core.ts:168-210`).
-- `VCFA_IGNORE_TLS=true` gives the client its own `Agent` instead of touching process-wide TLS settings.
+- `VCFA_IGNORE_TLS=true` gives the client its own `Agent` instead of touching process-wide TLS settings (`src/client/core.ts:719-721`).
 - Timeouts are 30 s by default (`src/client/core.ts:517-519`) and 60 s for binary export and import (`src/client/workflow-client.ts:924-927`).
 - Domain clients call `http.get`, `post`, `put`, or `del` with an optional Automation base URL. Binary paths use `authenticatedFetch`, `apiError`, and `requestLabel` directly.
 - **vRA 8 gating.** On `vra8`, a non-GET request to an Automation service whose writes are not lab-verified throws before any network call (`src/client/core.ts:1204-1217`). The refusal text lives in the map at `src/client/core.ts:29-42`.

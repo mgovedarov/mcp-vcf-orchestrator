@@ -4,15 +4,15 @@ Issues live in the public repo `mgovedarov/mcp-vcf-orchestrator` and are read wi
 
 ## Select
 
-In scope: open issues titled `[VCFO-###] …`, oldest first. Skip any issue labeled `question`, `help wanted`, `wontfix`, `duplicate`, or `invalid`. Replace `10` with the run limit:
+In scope: open issues titled `[VCFO-###] …`, oldest first. Skip any issue labeled `question`, `help wanted`, `wontfix`, `duplicate`, or `invalid`. The query lists every candidate. Don't cut the list to the run limit here: in-flight and blocked issues sit at the front of an oldest-first list, so a cut made before they are dropped can fill the whole run with items it will never process.
 
 ```sh
 gh issue list --state open --limit 100 \
   --search 'in:title VCFO sort:created-asc -label:question -label:"help wanted" -label:wontfix -label:duplicate -label:invalid' \
-  --json number,title,labels -q '[.[] | select(.title | test("^\\[VCFO-[0-9]+\\]"))] | .[:10]'
+  --json number,title,labels -q '[.[] | select(.title | test("^\\[VCFO-[0-9]+\\]"))]'
 ```
 
-Also skip any issue that an open PR already closes. That issue is in flight. An issue whose PR was closed without merging comes back.
+Then drop every issue that an open PR already closes. That issue is in flight. An issue whose PR was closed without merging comes back.
 
 ```sh
 gh pr list --state open --limit 100 --json number,closingIssuesReferences -q '[.[] | {pr: .number, closes: [.closingIssuesReferences[].number]}]'
