@@ -29,7 +29,7 @@ Use these instructions for all work in this repository. If a more specific `AGEN
 
 ## Commands
 
-Not yet verified by running; these are the declared commands and where they are defined.
+These are the declared commands and where they are defined. The gates in `.agents/gates.md` ran Install and Full local gate green on Node 22 on 2026-10-28, which covers Build, Tests, Coverage gate, Docs/examples drift, the docs build, and Package contents. The other rows are not yet verified by running.
 
 | Task | Command | Defined in |
 |---|---|---|
@@ -109,6 +109,8 @@ When writing code, the main session orchestrates and hands work to the tool-neut
 | `coder` | implement one issue on its own branch or worktree and open a PR | `.claude/agents/coder.md` (opus, all tools except the `vcf-orchestrator` MCP tools and `Agent`) |
 | `reviewer` | review the diff before a PR is opened or merged | `.claude/agents/reviewer.md` (opus, read-only tools) |
 | `issue-filer` | file bugs found along the way | `.claude/agents/issue-filer.md` (haiku, all tools except the `vcf-orchestrator` MCP tools and `Agent`) |
+| `test-runner` | run a gate's commands and report pass/fail, never editing | `.claude/agents/test-runner.md` (haiku, read-only tools) |
+| `remediator` | fix an open PR: update it with `main`, resolve conflicts, apply review findings and gate failures | `.claude/agents/remediator.md` (opus, all tools except the `vcf-orchestrator` MCP tools and `Agent`) |
 
 - Claude Code runs these as native subagents. A tool without subagents, or a subagent that cannot start its own, reads the role file and follows it inline.
 - Roles never call the live VCFA/vRO tools; a change that needs live verification goes back to the main session, which confirms target and impact with the user first.
@@ -116,7 +118,8 @@ When writing code, the main session orchestrates and hands work to the tool-neut
 
 ## Agent Commands
 
-Shared procedures live in `.agents/commands/` (`issue.md`). In Claude Code, `/issue <brief>` runs it in the `issue-filer` subagent.
+Shared procedures live in `.agents/commands/` (`issue.md`, `process.md`). In Claude Code, `/issue <brief>` runs the first in the `issue-filer` subagent. `/process [limit]` runs the processing loop in the main session, and only when you invoke it.
+The loop reads issues through `.agents/sources/github-issues.md` and gates every PR with `.agents/gates.md`.
 
 ## Docs
 
