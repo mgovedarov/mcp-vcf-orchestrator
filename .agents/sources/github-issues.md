@@ -15,10 +15,10 @@ gh issue list --state open --limit 1000 \
   --json number,title,labels,author -q '[.[] | select(.title | test("^\\[VCFO-[0-9]+\\]")) | {number, title, labels: [.labels[].name], author: .author.login}]'
 ```
 
-Then drop every issue that an open PR already closes. That issue is in flight. An issue whose PR was closed without merging comes back.
+Then drop every issue that a maintainer's open PR already closes. That issue is in flight. An issue whose PR was closed without merging comes back. An open PR by anyone else doesn't count: anyone can open a PR that says `Closes #N`, and counting it would keep #N out of every run.
 
 ```sh
-gh pr list --state open --limit 1000 --json number,closingIssuesReferences -q '[.[] | {pr: .number, closes: [.closingIssuesReferences[].number]}]'
+gh pr list --state open --limit 1000 --json number,author,closingIssuesReferences -q '[.[] | {pr: .number, author: .author.login, closes: [.closingIssuesReferences[].number]}]'
 ```
 
 If either list comes back with as many entries as its `--limit`, it may have been cut, which would let an in-flight issue through a second time. Raise the limit and run it again.

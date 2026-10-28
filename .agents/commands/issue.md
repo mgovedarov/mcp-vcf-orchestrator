@@ -13,11 +13,11 @@ A seed brief: the bug, gap, or idea, plus any evidence the reporter has.
    - Replace hostnames, IPs, organization or tenant names, usernames, and customer identifiers with placeholders such as `vcfa.example.com`.
    - Never include tokens, passwords, or configuration attribute values.
 3. **Duplicates.** Run `gh issue list --state open --limit 300 --json number,title`, then `gh issue list --state all --search "<keywords> in:title" --json number,title,state`. On a match, stop and return `DUPLICATE <n> <title>`.
-4. **Code.** The next code is the highest `VCFO-###` in any issue or PR title, plus one:
+4. **Code.** The next code is the highest `VCFO-###` in a title of an issue or PR that a maintainer (a user with push access) opened, plus one:
    ```sh
-   { gh issue list --state all --limit 1000 --json title -q '.[].title'; gh pr list --state all --limit 1000 --json title -q '.[].title'; } | grep -oE 'VCFO-[0-9]+' | sort -t- -k2 -n | tail -1
+   { gh issue list --state all --limit 1000 --json title,author -q '.[] | "\(.author.login) \(.title)"'; gh pr list --state all --limit 1000 --json title,author -q '.[] | "\(.author.login) \(.title)"'; } | grep -E -f <(gh api 'repos/mgovedarov/mcp-vcf-orchestrator/collaborators?permission=push' --paginate --jq '.[] | "^\(.login) "') | grep -oE 'VCFO-[0-9]+' | sort -t- -k2 -n | tail -1
    ```
-   Codes don't follow issue numbers, so never derive a code from `#<n>`.
+   Codes don't follow issue numbers, so never derive a code from `#<n>`. Anyone can open an issue or PR on this public repo, so a title by anyone else doesn't count: a `[VCFO-99999]` title would otherwise move the sequence.
 5. **Write.** House style follows the repo's best issues (#230, #220, #223):
    - Title: `[VCFO-###] <the problem stated as a fact>`
    - `## Summary`: 2-4 sentences on what happens today and why it matters.

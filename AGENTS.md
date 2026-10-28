@@ -93,7 +93,7 @@ These are the declared commands and where they are defined. The gates in `.agent
 ## Git/PR Rules
 
 - The repository is public. Keep hostnames, IPs, organization or tenant names, and customer identifiers out of issues, PRs, commits, tests, and docs; use placeholders such as `vcfa.example.com` (precedent: the VCFO-113 entry in `CHANGELOG.md`).
-- Planning lives in GitHub Issues; `TODO.md` is deprecated and kept for history only. Use `VCFO-###` issue codes, sequential from `VCFO-001`, prefixed in titles: `[VCFO-001] Expand MCP resources and prompts for workflow/template implementation`. Take the next code from a title search across issues and PRs, not from the issue number; the two diverge.
+- Planning lives in GitHub Issues; `TODO.md` is deprecated and kept for history only. Use `VCFO-###` issue codes, sequential from `VCFO-001`, prefixed in titles: `[VCFO-001] Expand MCP resources and prompts for workflow/template implementation`. Take the next code from a title search across maintainers' issues and PRs, not from the issue number; the two diverge, and an outsider's title would move the sequence.
 - Branch from a freshly fetched `origin/main` as `vcfo-<NNN>-<kebab-slug>`, not from a local `main` that may lag behind; releases use `release/X.Y.Z`.
 - PR title: `[VCFO-###] <imperative sentence>`; several codes stack as `[VCFO-112][VCFO-113] …`. Maintenance without an issue uses `chore: …`. PRs are squash-merged, so the title and body become the commit.
 - PR body: the first line is `Closes #N.`, topical `##` sections follow, and the last section is `## Verification` (what ran, the results, what was not exercised).
