@@ -11,6 +11,7 @@ import type {
   WorkflowsByCategoryResult,
 } from "../types.js";
 import { formatPreflightReport } from "../client/artifact-preflight.js";
+import { DEFAULT_EXECUTION_MAX_RESULTS } from "../client/workflow-client.js";
 import {
   filterWorkflowExecutionLogsByMinimumLevel,
   formatWorkflowExecutionLogEntry,
@@ -1133,8 +1134,7 @@ export function registerWorkflowTools(
     "list-workflow-executions",
     {
       title: "List Workflow Executions",
-      description:
-        "List past and current executions for a specific workflow. Use this to find an execution ID before calling get-workflow-execution.",
+      description: `List past and current executions for a specific workflow. Use this to find an execution ID before calling get-workflow-execution. Returns at most maxResults executions (default ${DEFAULT_EXECUTION_MAX_RESULTS}); when the list was cut off, or reached maxResults so more may exist, the output says so and structuredContent.limited is true.`,
       inputSchema: z.object({
         workflowId: z.string().describe("The workflow ID"),
         maxResults: z
@@ -1142,7 +1142,9 @@ export function registerWorkflowTools(
           .int()
           .positive()
           .optional()
-          .describe("Maximum number of executions to return (default: 20)"),
+          .describe(
+            `Maximum number of executions to return (default: ${DEFAULT_EXECUTION_MAX_RESULTS})`,
+          ),
         status: z
           .enum([
             "running",
@@ -1180,15 +1182,32 @@ export function registerWorkflowTools(
           return line;
         });
         const total = result.total ?? executions.length;
+        const shown = executions.length;
+        // vRO's `total` may be the full match count or only the page size, so
+        // a page that reached maxResults counts as limited even when
+        // total equals shown (VCFO-119).
+        const totalExceedsShown = total > shown;
+        const limited =
+          totalExceedsShown ||
+          shown >= (maxResults ?? DEFAULT_EXECUTION_MAX_RESULTS);
+        const header = !limited
+          ? `Found ${total} execution(s):`
+          : totalExceedsShown
+            ? `Showing ${shown} of ${total} execution(s):`
+            : `Showing ${shown} execution(s); more may exist:`;
+        const note = limited
+          ? `\n\n⚠️ Results limited: showing the first ${shown}${totalExceedsShown ? ` of ${total}` : "; more may exist"}. Raise maxResults or filter by status to see more.`
+          : "";
         return {
           content: [
             {
               type: "text",
-              text: `Found ${total} execution(s):\n\n${lines.join("\n")}`,
+              text: `${header}\n\n${lines.join("\n")}${note}`,
             },
           ],
           structuredContent: {
             total,
+            limited,
             executions: executions.map(structuredWorkflowExecution),
           },
         };

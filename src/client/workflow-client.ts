@@ -55,6 +55,13 @@ const LOG_SEVERITY_RANK: Record<string, number> = {
 
 const DEFAULT_MAX_CATEGORIES = 50;
 
+/**
+ * Page size `listWorkflowExecutions` requests when the caller passes no
+ * `maxResults`. Exported so `list-workflow-executions` can tell a capped
+ * result from a complete one without repeating the number (VCFO-119).
+ */
+export const DEFAULT_EXECUTION_MAX_RESULTS = 20;
+
 const LOG_WRAPPER_KEYS = new Set(["attributes", "attribute", "log", "entry"]);
 
 const CATEGORY_PARENT_ID_KEYS = [
@@ -737,7 +744,9 @@ export class WorkflowClient {
     workflowId: string,
     options?: { maxResults?: number; status?: string },
   ): Promise<WorkflowExecutionList> {
-    const params: string[] = [`maxResults=${options?.maxResults ?? 20}`];
+    const params: string[] = [
+      `maxResults=${options?.maxResults ?? DEFAULT_EXECUTION_MAX_RESULTS}`,
+    ];
     if (options?.status) {
       params.push(`conditions=state~${encodeURIComponent(options.status)}`);
     }

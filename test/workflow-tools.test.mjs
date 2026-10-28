@@ -1038,8 +1038,11 @@ test("list-workflow-executions returns structured execution summaries", async ()
     options: { maxResults: 5, status: "FAILED" },
   });
   assert.match(result.content[0].text, /FAILED \(id: execution-1\)/);
+  assert.match(result.content[0].text, /^Found 1 execution\(s\):/);
+  assert.doesNotMatch(result.content[0].text, /Results limited/);
   assert.deepEqual(result.structuredContent, {
     total: 1,
+    limited: false,
     executions: [
       {
         id: "execution-1",
@@ -1050,6 +1053,96 @@ test("list-workflow-executions returns structured execution summaries", async ()
       },
     ],
   });
+});
+
+function executionRows(count) {
+  return Array.from({ length: count }, (_, i) => ({
+    id: `execution-${i + 1}`,
+    state: "COMPLETED",
+  }));
+}
+
+function executionListHandlers(response) {
+  return registeredWorkflowTools({
+    listWorkflowExecutions: async () => response,
+  });
+}
+
+test("list-workflow-executions flags a result cut off below the reported total", async () => {
+  const handlers = executionListHandlers({
+    total: 57,
+    relations: { link: executionRows(3) },
+  });
+
+  const result = await handlers.get("list-workflow-executions")({
+    workflowId: "workflow-1",
+    maxResults: 3,
+  });
+
+  const text = result.content[0].text;
+  assert.match(text, /^Showing 3 of 57 execution\(s\):/);
+  assert.match(
+    text,
+    /Results limited: showing the first 3 of 57\. Raise maxResults or filter by status to see more\./,
+  );
+  assert.equal(result.structuredContent.total, 57);
+  assert.equal(result.structuredContent.limited, true);
+  assert.equal(result.structuredContent.executions.length, 3);
+});
+
+test("list-workflow-executions flags a full default page even when total equals the rows shown", async () => {
+  // vRO's total may be only the page size; a page that reached the default
+  // maxResults of 20 may have more rows behind it.
+  const handlers = executionListHandlers({
+    total: 20,
+    relations: { link: executionRows(20) },
+  });
+
+  const result = await handlers.get("list-workflow-executions")({
+    workflowId: "workflow-1",
+  });
+
+  const text = result.content[0].text;
+  assert.match(text, /^Showing 20 execution\(s\); more may exist:/);
+  assert.match(
+    text,
+    /Results limited: showing the first 20; more may exist\. Raise maxResults or filter by status to see more\./,
+  );
+  assert.equal(result.structuredContent.total, 20);
+  assert.equal(result.structuredContent.limited, true);
+});
+
+test("list-workflow-executions flags a page that reached an explicit maxResults with no total", async () => {
+  const handlers = executionListHandlers({
+    relations: { link: executionRows(5) },
+  });
+
+  const result = await handlers.get("list-workflow-executions")({
+    workflowId: "workflow-1",
+    maxResults: 5,
+  });
+
+  assert.match(result.content[0].text, /^Showing 5 execution\(s\); more may exist:/);
+  assert.equal(result.structuredContent.total, 5);
+  assert.equal(result.structuredContent.limited, true);
+});
+
+test("list-workflow-executions leaves a complete short result and the empty result unflagged", async () => {
+  const complete = await executionListHandlers({
+    total: 4,
+    relations: { link: executionRows(4) },
+  }).get("list-workflow-executions")({ workflowId: "workflow-1" });
+
+  assert.match(complete.content[0].text, /^Found 4 execution\(s\):/);
+  assert.doesNotMatch(complete.content[0].text, /Results limited/);
+  assert.equal(complete.structuredContent.limited, false);
+
+  const empty = await executionListHandlers({
+    total: 0,
+    relations: { link: [] },
+  }).get("list-workflow-executions")({ workflowId: "workflow-1" });
+
+  assert.equal(empty.content[0].text, "No executions found.");
 });
 
 test("get-workflow-execution-logs exports when fileName is provided", async () => {

@@ -229,6 +229,14 @@ The failure and timeout results print log excerpts and the workflow's own except
 
 List past and current executions for a specific workflow. Use this to find an execution ID before calling `get-workflow-execution`.
 
+The tool reads one response of at most `maxResults` executions and does not page further, so the list can be partial. It marks a partial list in three places:
+
+- **Header.** It reads `Showing N of M execution(s):` when the response reports a `total` above the rows returned. When the rows returned reached `maxResults`, it reads `Showing N execution(s); more may exist:`, even if `total` equals that count.
+- **Note.** The text ends with `Results limited: showing the first N of M` (or `showing the first N; more may exist`) and a pointer to raise `maxResults` or filter by `status`.
+- **Structured content.** `structuredContent.limited` is `true`.
+
+The second header covers a gap in what is known: it is not established whether vRO's `total` is the number of matching executions or only the size of the returned page, so a full page is treated as possibly incomplete. A result with fewer rows than `maxResults` and no larger `total` keeps the `Found N execution(s):` header and carries `limited: false`. An empty result still reads `No executions found.`.
+
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
