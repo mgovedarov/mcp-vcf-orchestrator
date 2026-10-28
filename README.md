@@ -231,6 +231,17 @@ npm run docs:dev
 
 `npm run validate` builds the project, runs unit tests, enforces conservative coverage thresholds, validates docs/examples drift, builds the VitePress docs, and dry-runs npm packaging with package-content checks.
 
+## Agent Workflow
+
+Maintainers can file and work through `VCFO-###` issues with Claude Code subagents. Two project commands are available in a checkout of this repository. The `vcfa-orchestrator` plugin does not include them.
+
+```text
+/issue <the bug, gap, or idea, plus any evidence>
+/process-issues [max issues, default 10]
+```
+
+`/issue` files one sanitized issue in the house style. `/process-issues` triages open issues, implements them in worktrees, gates and reviews each PR, and squash-merges the clean ones into `main`. The procedures and roles live in `.agents/`. See [docs/project/agent-workflow.md](docs/project/agent-workflow.md) for prerequisites, the agents, and what each one returns.
+
 ## Safety
 
 Use read-only discovery tools before live writes. Create, update, import, delete, run, and deployment day-2 action operations require explicit confirmation (`confirm: true`). Local artifact export and snapshot tools write files under configured artifact directories, are not advertised as read-only, and reject unsafe paths. They do not require confirmation; `overwrite` defaults to `false`.

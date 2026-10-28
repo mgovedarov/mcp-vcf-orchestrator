@@ -72,6 +72,7 @@ export default defineConfig({
           { text: "Client Layer", link: "/project/client-layer" },
           { text: "MCP Surface", link: "/project/mcp-surface" },
           { text: "Glossary", link: "/project/glossary" },
+          { text: "Agent Workflow", link: "/project/agent-workflow" },
         ],
       },
     ],

@@ -41,5 +41,6 @@ MCP client ──stdio──> src/index.ts (env, VroClient, register*, StdioServ
 | [Client Layer](./client-layer.md) | Platform targets and login, hosts and base URLs, HTTP, errors and hints, artifact file safety |
 | [MCP Surface](./mcp-surface.md) | Tool registration, confirmation guards, annotations, results, resources, prompts, redaction |
 | [Glossary](./glossary.md) | VCF Automation, vRO, and repository terms |
+| [Agent Workflow](./agent-workflow.md) | The `/issue` and `/process-issues` commands and the subagents behind them |
 
 Related pages that these pages link to rather than repeat: [Configuration](../guide/configuration.md), [Safety](../operations/safety.md), [Contributing](../operations/contributing.md), [Troubleshooting](../operations/troubleshooting.md), [Artifact Lifecycle](../artifacts/lifecycle.md).
