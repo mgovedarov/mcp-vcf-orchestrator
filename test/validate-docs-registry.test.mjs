@@ -162,14 +162,14 @@ test("maskSource blanks comments, strings, and regexes but keeps structure", () 
   assert.equal(brackets, "()");
 });
 
-test("maskSource with keepStrings blanks only comments and regexes", () => {
+test("maskSource with keepLiterals blanks only comments", () => {
   const source =
-    'const re = /"x"/; // drop "me"\nconst s = "a\\"b";\nconst t = `k${s}`; /* gone */';
-  const masked = maskSource(source, { keepStrings: true });
+    'const re = /"x"/g; // drop "me"\nconst s = "a\\"b";\nconst t = `k${s}`; /* gone */';
+  const masked = maskSource(source, { keepLiterals: true });
   assert.equal(masked.length, source.length);
   assert.ok(!masked.includes("drop"));
   assert.ok(!masked.includes("gone"));
-  assert.ok(!masked.includes('"x"'));
+  assert.ok(masked.includes('const re = /"x"/g;'));
   assert.ok(masked.includes('const s = "a\\"b";'));
   assert.ok(masked.includes("const t = `k${s}`;"));
 });

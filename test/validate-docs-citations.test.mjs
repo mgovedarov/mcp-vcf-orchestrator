@@ -1,20 +1,24 @@
 import assert from "node:assert/strict";
-import { basename } from "node:path";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import test from "node:test";
-import { sourceCitationProblems } from "../scripts/validate-docs.mjs";
+import {
+  repoFiles,
+  repoIndex,
+  sourceCitationProblems,
+} from "../scripts/validate-docs.mjs";
 
 const files = {
-  "src/client/core.ts": "export async function apiError() {}\n",
+  "src/client/core.ts":
+    "export async function apiError() {}\nconst VERSION = /<Version>(\\d+)<\\/Version>/g;\n",
   "src/tools/template-tools.ts":
     '// legacyHelper was folded into the handler.\nserver.registerTool("delete-template", {});\nconst label = "api-error";\n',
+  ".github/workflows/ci.yml": "name: CI\n",
   "package.json": '{ "engines": { "node": ">=22" } }\n',
 };
 
-const repo = {
-  exists: (path) => path in files || path === "src/client/",
-  readText: (path) => files[path],
-  fileNamed: (name) => Object.keys(files).some((path) => basename(path) === name),
-};
+const repo = repoIndex(Object.keys(files), (path) => files[path]);
 
 function problems(text) {
   return sourceCitationProblems("doc.md", text, repo);
@@ -29,6 +33,10 @@ test("a line-number citation into a source file fails", () => {
 
 test("a host with a port is not a line-number citation", () => {
   assert.deepEqual(problems("Set `vro.example.com:443` as the host."), []);
+  assert.deepEqual(
+    problems("Jump through `jump.example.sh:22` or https://docs.example.md:8443/x."),
+    [],
+  );
 });
 
 test("a cited repo path must exist", () => {
@@ -151,18 +159,28 @@ test("a bare file name must name a file somewhere in the repository", () => {
   );
 });
 
-test("a bare file a symbol is cited in must exist, whatever its extension", () => {
-  assert.deepEqual(problems("Read `foo` in `tsconfig.jsn`."), [
-    "doc.md: cited path tsconfig.jsn does not exist",
+test("a bare file a symbol is cited in must exist", () => {
+  assert.deepEqual(problems("Read `foo` in `tsconfg.json`."), [
+    "doc.md: cited path tsconfg.json does not exist",
   ]);
   assert.deepEqual(problems("Called by `server.connect` in `main`."), []);
 });
 
-test("a cited symbol must be in code or a string, not only in a comment", () => {
+test("a dotted name without a file extension is not a cited file", () => {
+  assert.deepEqual(
+    problems(
+      "Call `getAll` in `com.vmware.library`, set `VCFA_VRO_HOST` in `vro.example.com`, and keep `VCFA_PASSWORD` in `.env`.",
+    ),
+    [],
+  );
+});
+
+test("a cited symbol must be in code, a string, or a regex, not only in a comment", () => {
   assert.deepEqual(
     problems("Registered as `delete-template` in `src/tools/template-tools.ts`."),
     [],
   );
+  assert.deepEqual(problems("Matched as `Version` in `src/client/core.ts`."), []);
   assert.deepEqual(
     problems("Built by `legacyHelper` in `src/tools/template-tools.ts`."),
     ["doc.md: `legacyHelper` is not in src/tools/template-tools.ts"],
@@ -173,4 +191,67 @@ test("a cited symbol does not match the tail of a kebab-case name", () => {
   assert.deepEqual(problems("Labeled `error` in `src/tools/template-tools.ts`."), [
     "doc.md: `error` is not in src/tools/template-tools.ts",
   ]);
+});
+
+test("a symbol cited across a line break is still checked", () => {
+  assert.deepEqual(problems("Built by `buildError` in\n`src/client/core.ts`."), [
+    "doc.md: `buildError` is not in src/client/core.ts",
+  ]);
+});
+
+test("a double-backtick code span does not hide the citations after it", () => {
+  assert.deepEqual(problems("Use ``a ` b`` then `src/client/gone.ts`."), [
+    "doc.md: cited path src/client/gone.ts does not exist",
+  ]);
+});
+
+test("code in a blockquote fence or an indented block is skipped", () => {
+  assert.deepEqual(problems("> ```\n> `src/client/core.ts:3`\n> ```\n"), []);
+  assert.deepEqual(problems("Run:\n\n    cat src/client/core.ts:12\n"), []);
+});
+
+test("a reference-style link definition is checked like a link", () => {
+  assert.deepEqual(problems("See [core].\n\n[core]: src/client/core.ts:12\n"), [
+    "doc.md: line-number citation `src/client/core.ts:12`; cite the file and a symbol instead",
+  ]);
+});
+
+test("repoIndex knows only the files git lists, in their exact case", () => {
+  const index = repoIndex(["src/client/core.ts"], () => "text");
+  assert.equal(index.exists("src/client/core.ts"), true);
+  assert.equal(index.exists("src/client/"), true);
+  assert.equal(index.exists("src/client"), true);
+  assert.equal(index.exists("src/Client/core.ts"), false);
+  assert.equal(index.exists(".claude/worktrees/"), false);
+  assert.equal(index.readText("src/client/core.ts"), "text");
+  assert.equal(index.readText("src/client/"), undefined);
+  assert.equal(index.fileNamed("core.ts"), true);
+  assert.equal(index.fileNamed("Core.ts"), false);
+});
+
+test("repoFiles lists what git would commit and nothing it ignores", () => {
+  const listed = repoFiles();
+  assert.ok(listed.includes("package.json"));
+  assert.ok(listed.includes("scripts/validate-docs.mjs"));
+  assert.ok(!listed.some((path) => /^(?:node_modules|dist)\//.test(path)));
+});
+
+test("repoFiles explains that it needs a git checkout", () => {
+  const dir = mkdtempSync(join(tmpdir(), "citations-"));
+  const saved = {
+    GIT_DIR: process.env.GIT_DIR,
+    GIT_CEILING_DIRECTORIES: process.env.GIT_CEILING_DIRECTORIES,
+  };
+  // Keep git from finding a repository above the temp dir.
+  delete process.env.GIT_DIR;
+  process.env.GIT_CEILING_DIRECTORIES = dirname(dir);
+  try {
+    assert.throws(() => repoFiles(dir), /run it in a git checkout with git on PATH/);
+  } finally {
+    for (const [name, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

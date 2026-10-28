@@ -29,7 +29,7 @@ Resources and prompts are registered in the resource and prompt modules. Keep co
 
 When adding or changing a prompt, update the prompt reference with a collapsible parameters section directly under the prompt.
 
-`npm run validate:docs` compares registered tool, prompt, and resource names against the reference docs. It also checks documented tool-call examples for stale tool names and top-level argument names, and checks source citations: docs cite a file and a symbol, never a line number (`:12` or `#L12`, whether in backticks, a link, or plain prose), every cited repo path and backticked file name must exist, and a symbol cited in a file must still be in that file outside its comments. Fenced code blocks, indented or not, are skipped.
+`npm run validate:docs` compares registered tool, prompt, and resource names against the reference docs. It also checks documented tool-call examples for stale tool names and top-level argument names, and checks source citations: docs cite a file and a symbol, never a line number (`:12` or `#L12`, whether in backticks, a link, or plain prose), every cited repo path and backticked file name must be one git would commit, in the same case, and a symbol cited in a file must still be in that file outside its comments. The Markdown is parsed as CommonMark, as VitePress renders it, so code blocks of every kind are skipped and a citation wrapped across a line is still checked.
 
 ## Artifact Work
 
