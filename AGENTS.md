@@ -113,6 +113,7 @@ When writing code, the main session orchestrates and hands work to the tool-neut
 | `coder` | implement one issue on its own branch or worktree and open a PR | `.claude/agents/coder.md` (opus, all tools except the `vcf-orchestrator` MCP tools and `Agent`) |
 | `reviewer` | review the diff before a PR is opened or merged | `.claude/agents/reviewer.md` (opus; Read, Grep, Glob, Bash) |
 | `issue-filer` | file bugs found along the way | `.claude/agents/issue-filer.md` (haiku, all tools except the `vcf-orchestrator` MCP tools and `Agent`) |
+| `branch-janitor` | after merges, remove stale agent worktrees and delete merged local and remote branches, on evidence only | `.claude/agents/branch-janitor.md` (haiku; Read, Grep, Glob, Bash) |
 | `test-runner` | run a gate's commands and report pass/fail, never editing | `.claude/agents/test-runner.md` (haiku; Read, Grep, Glob, Bash) |
 | `remediator` | fix an open PR: update it with `main`, resolve conflicts, apply review findings and gate failures | `.claude/agents/remediator.md` (opus, all tools except the `vcf-orchestrator` MCP tools and `Agent`) |
 
@@ -124,7 +125,7 @@ When writing code, the main session orchestrates and hands work to the tool-neut
 
 ## Agent Commands
 
-Shared procedures live in `.agents/commands/` (`issue.md`, `process-issues.md`). In Claude Code, `/issue <brief>` runs the first in the `issue-filer` subagent. `/process-issues [limit]` runs the processing loop in the main session, and only when you invoke it.
+Shared procedures live in `.agents/commands/` (`issue.md`, `process-issues.md`). In Claude Code, `/issue <brief>` runs the first in the `issue-filer` subagent. `/process-issues [limit]` runs the processing loop in the main session, and only when you invoke it. `/branch-janitor [keep]` runs `.agents/roles/branch-janitor.md` in its subagent, for cleanup after merging by hand; the loop runs it as its last step.
 The loop reads issues through `.agents/sources/github-issues.md` and gates every PR with `.agents/gates.md`.
 
 ## Docs

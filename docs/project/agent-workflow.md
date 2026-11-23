@@ -13,7 +13,7 @@ These are development tools for a checkout of this repository. They are not part
 | `.agents/roles/` | One tool-neutral file per role |
 | `.agents/gates.md` | The per-item and final test gates |
 | `.agents/sources/github-issues.md` | How the loop selects, reads, and writes back issues |
-| `.claude/skills/` | The two slash commands, each pointing at its command file |
+| `.claude/skills/` | The slash commands, each pointing at its command or role file |
 | `.claude/agents/` | One Claude Code subagent per role, each pointing at its role file |
 
 ## Prerequisites
@@ -24,7 +24,7 @@ These are development tools for a checkout of this repository. They are not part
 
 ## Commands
 
-Both run only when you type them. The model never starts either one on its own.
+They run only when you type them. The model never starts one on its own.
 
 ### `/issue`
 
@@ -60,6 +60,7 @@ Works open issues end to end, orchestrated from the main session. The argument i
 | Review | Sends each PR to `reviewer`, and its findings or a red CI check to `remediator`, for at most 2 rounds |
 | Final gate | Has `test-runner` run the gate on the wave's PRs merged together |
 | Land | **Squash-merges each clean PR into `main`**, one at a time, once GitHub reports it mergeable |
+| Clean up | Has `branch-janitor` remove leftover worktrees and merged branches, keeping the branches of PRs left open |
 | Report | Reports in at most 20 lines: what landed with PR links, what is human-needed or blocked and why, what was skipped, and the gate results |
 
 What the loop leaves on an issue:
@@ -70,6 +71,17 @@ What the loop leaves on an issue:
 - **Merged:** the PR's `Closes #N.` closes it.
 
 Never run two loops at once: an open PR is the only claim on an issue.
+
+### `/branch-janitor`
+
+Cleans up after merges, in the `branch-janitor` subagent. The loop runs it as its last step; run it yourself after merging PRs by hand. The argument names branches to keep regardless.
+
+```text
+/branch-janitor
+/branch-janitor vcfo-123-some-slug
+```
+
+It prunes stale remote-tracking refs, removes clean agent worktrees whose work has landed, deletes merged local and remote branches, and switches the main checkout back to an up-to-date `main` when that is safe. Because PRs are squash-merged, it treats a branch as merged only when its tip is on `main` or inside the head of a merged PR. It keeps everything else: branches with an open PR, local branches with commits that are not on `main`, `dependabot/*`, worktrees with modified tracked files, and locked worktrees. It never force-pushes, never discards changes, and never touches untracked files. It returns a short summary of what it removed and kept, with each deleted branch's SHA so the branch can be restored.
 
 ## Agents
 
@@ -84,8 +96,9 @@ The commands call these, and you can also ask a session for one by name, for exa
 | `remediator` | Fix an open PR: update it with `main`, resolve conflicts, apply findings and gate failures | opus | `PR=<n> STATUS=fixed`, or `STATUS=HUMAN-NEEDED` |
 | `test-runner` | Run a gate's commands without editing anything | haiku | `PASS` or `FAIL` per command, then `RESULT=green` or `RESULT=red` |
 | `issue-filer` | File one issue | haiku | The same lines as `/issue` |
+| `branch-janitor` | Remove stale worktrees and merged branches after merges | haiku | `WORKTREES`, `LOCAL`, `REMOTE`, `MAIN-CHECKOUT`, `BLOCKED` |
 
-`scout`, `researcher`, `reviewer`, and `test-runner` have Read, Grep, Glob, and Bash only. `coder`, `remediator`, and `issue-filer` have every tool except the `vcf-orchestrator` MCP tools and `Agent`. The return contract for each role is at the end of its file in `.agents/roles/`.
+`scout`, `researcher`, `reviewer`, and `test-runner` have Read, Grep, Glob, and Bash only, and so does `branch-janitor`, which uses Bash for its git deletes. `coder`, `remediator`, and `issue-filer` have every tool except the `vcf-orchestrator` MCP tools and `Agent`. The return contract for each role is at the end of its file in `.agents/roles/`.
 
 ## Gates
 

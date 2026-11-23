@@ -233,14 +233,15 @@ npm run docs:dev
 
 ## Agent Workflow
 
-Maintainers can file and work through `VCFO-###` issues with Claude Code subagents. Two project commands are available in a checkout of this repository. The `vcfa-orchestrator` plugin does not include them.
+Maintainers can file and work through `VCFO-###` issues with Claude Code subagents. Three project commands are available in a checkout of this repository. The `vcfa-orchestrator` plugin does not include them.
 
 ```text
 /issue <the bug, gap, or idea, plus any evidence>
 /process-issues [max issues, default 10]
+/branch-janitor [branches to keep]
 ```
 
-`/issue` files one sanitized issue in the house style. `/process-issues` triages open issues, implements them in worktrees, gates and reviews each PR, and squash-merges the clean ones into `main`. The procedures and roles live in `.agents/`. See [docs/project/agent-workflow.md](docs/project/agent-workflow.md) for prerequisites, the agents, and what each one returns.
+`/issue` files one sanitized issue in the house style. `/process-issues` triages open issues, implements them in worktrees, gates and reviews each PR, and squash-merges the clean ones into `main`. `/branch-janitor` removes merged branches and stale worktrees afterwards. The procedures and roles live in `.agents/`. See [docs/project/agent-workflow.md](docs/project/agent-workflow.md) for prerequisites, the agents, and what each one returns.
 
 ## Safety
 

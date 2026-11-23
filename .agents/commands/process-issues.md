@@ -56,8 +56,10 @@ Start the loop only when the user invokes it. Never start it on your own, for ex
    - Remove the unit's worktree and delete its local branch with `git branch -D`; git calls a squash-merged branch unmerged.
 
    After the wave, confirm the push CI on `main` is green. Then start the next wave at step 4.
-8. **Write back and report.** Confirm that each merged item's issue closed. Then report in at most 20 lines:
+8. **Clean up.** After the last wave, start `branch-janitor` (`.agents/roles/branch-janitor.md`). Pass as `KEEP` the head branch of every PR this run left open and of every unit still running. Step 7 already removed each landed unit's worktree and branch; the janitor sweeps up what a failed or interrupted step left behind. Its summary goes into the report.
+9. **Write back and report.** Confirm that each merged item's issue closed. Then report in at most 20 lines:
    - items done, with PR links;
    - items that are human-needed or blocked, with reasons;
    - items skipped by the filter;
-   - per-item and final gate results.
+   - per-item and final gate results;
+   - the `branch-janitor` summary.
