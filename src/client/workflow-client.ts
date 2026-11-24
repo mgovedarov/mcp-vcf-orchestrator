@@ -41,7 +41,7 @@ import {
   rejectSymlink,
   resolveFileInDirectory,
 } from "./files.js";
-import { applyListLimit, getAllVroPages } from "./pagination.js";
+import { applyListLimit, getAllVroPages, knownTotal } from "./pagination.js";
 import { toVroParameters } from "./parameters.js";
 import { buildWorkflowArtifact } from "./workflow-artifact.js";
 
@@ -773,9 +773,12 @@ export class WorkflowClient {
       .filter((item) => item.id)
       // Hold the cap even on a build that ignores `maxResult` (VCFO-122).
       .slice(0, maxResults);
-    // vRO 9.1.1 returns no total here, so the fallback is the capped row count.
+    // vRO 9.1.1 reports `relations.total` as the full count of matching
+    // executions, with `conditions` applied. A missing or `-1` total stays
+    // unknown rather than falling back to the row count, so the tool can tell
+    // a complete page from a cut-off one (VCFO-125).
     return {
-      total: raw.total ?? raw.relations?.total ?? items.length,
+      total: knownTotal(raw.total) ?? knownTotal(raw.relations?.total),
       relations: { link: items },
     };
   }

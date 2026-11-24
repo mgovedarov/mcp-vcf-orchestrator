@@ -235,11 +235,11 @@ List past and current executions for a specific workflow. Use this to find an ex
 
 The tool reads one response and does not page further, so the list can be partial. It sends the page size to vRO as `maxResult` and also cuts the rows to `maxResults` itself, so it never returns more than `maxResults` executions even from a vRO build that ignores the page size. It marks a partial list in three places:
 
-- **Header.** It reads `Showing N of M execution(s):` when the response reports a `total` above the rows returned. When the rows returned reached `maxResults`, it reads `Showing N execution(s); more may exist:`, even if `total` equals that count.
+- **Header.** It reads `Showing N of M execution(s):` when the response reports a `total` above the rows returned. When vRO sends no count and the rows returned reached `maxResults`, it reads `Showing N execution(s); more may exist:`.
 - **Note.** The text ends with `Results limited: showing the first N of M` (or `showing the first N; more may exist`) and a pointer to raise `maxResults` or filter by `status`.
 - **Structured content.** `structuredContent.limited` is `true`.
 
-The second header is the one vRO 9.1.1 produces: that build returns no `total` for executions, so the tool counts the rows it returned, and a page that reached `maxResults` is treated as possibly incomplete. The first header applies only to a build that reports a `total` above the rows returned. A result with fewer rows than `maxResults` and no larger `total` keeps the `Found N execution(s):` header and carries `limited: false`. An empty result still reads `No executions found.`.
+vRO 9.1.1 reports `relations.total` as the full count of matching executions, with the `status` filter applied, so on that build a reported count decides the result on its own: a `total` above the rows returned gives the first header, and a `total` equal to them is a complete list even when it equals `maxResults`. The second header applies only when vRO sends no count (or the `-1` unknown-count sentinel), where a page that reached `maxResults` is treated as possibly incomplete; `structuredContent.total` is then the row count. A complete result keeps the `Found N execution(s):` header and carries `limited: false`. An empty result still reads `No executions found.`.
 
 ::: details Parameters
 | Parameter | Type | Required | Default | Description |

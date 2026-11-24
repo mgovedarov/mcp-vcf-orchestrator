@@ -118,7 +118,7 @@ function pageItems<T>(page: VroPage<T>, itemKeys: readonly string[]): T[] {
  * endpoints (e.g. vRA 8's `/workflows`) send `-1` as an "unknown count"
  * sentinel, which must be treated the same as no total at all.
  */
-function knownTotal(reportedTotal: number | undefined): number | undefined {
+export function knownTotal(reportedTotal: number | undefined): number | undefined {
   return reportedTotal !== undefined && reportedTotal >= 0
     ? reportedTotal
     : undefined;
