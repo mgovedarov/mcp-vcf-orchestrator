@@ -744,9 +744,10 @@ export class WorkflowClient {
     workflowId: string,
     options?: { maxResults?: number; status?: string },
   ): Promise<WorkflowExecutionList> {
-    const params: string[] = [
-      `maxResults=${options?.maxResults ?? DEFAULT_EXECUTION_MAX_RESULTS}`,
-    ];
+    const maxResults = options?.maxResults ?? DEFAULT_EXECUTION_MAX_RESULTS;
+    // vRO names the page size `maxResult`, singular, as on the other paged
+    // calls; it ignores `maxResults` on this endpoint (VCFO-122).
+    const params: string[] = [`maxResult=${maxResults}`];
     if (options?.status) {
       params.push(`conditions=state~${encodeURIComponent(options.status)}`);
     }
@@ -769,7 +770,10 @@ export class WorkflowClient {
           "started-by": a["startedBy"] ?? a["started-by"],
         } as WorkflowExecution;
       })
-      .filter((item) => item.id);
+      .filter((item) => item.id)
+      // Hold the cap even on a build that ignores `maxResult` (VCFO-122).
+      .slice(0, maxResults);
+    // vRO 9.1.1 returns no total here, so the fallback is the capped row count.
     return {
       total: raw.total ?? raw.relations?.total ?? items.length,
       relations: { link: items },
