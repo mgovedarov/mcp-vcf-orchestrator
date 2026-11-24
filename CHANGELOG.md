@@ -25,9 +25,6 @@
 ### Fixed
 
 - **An execution output with no value now reads `(no value)` instead of `undefined`.** `get-workflow-execution` and `run-workflow-and-wait` printed an output parameter that carried no value as the bare word `undefined`, for example the event-broker `__metadata_targetId` of a subscription-triggered run. A caller could not tell that from a string reading `undefined`, and the verification sweep treats the word as a defect signal. On VCF Automation 9.1.1 such a parameter arrives with no `value` key at all. The no-value check that `get-configuration` already had is now shared through `formatVroValueRedacted`, so all three tools treat a missing `value`, a top-level `null` and an empty envelope `{}` as no value. The secure-type check still runs first, so a secure output reads `[redacted]` either way. An envelope holding `""`, `0`, `false` or `null` prints that value as before, and `get-configuration` output is unchanged (VCFO-123).
-
-### Fixed
-
 - **`list-workflow-executions` now applies its `maxResults` cap, 20 by default, instead of returning a workflow's whole execution history.** The client sent the page size as `maxResults`, which vRO ignores on the executions endpoint, so every execution came back and the `limited` flag from VCFO-119 fired whenever the row count merely reached the requested cap. It now sends the singular `maxResult` that vRO honours there, as on its other paged calls, and also cuts the rows to `maxResults` itself, so the cap holds on a build that ignores the parameter. vRO returns no `total` for executions, so `limited` comes from the page reaching the cap, which is now accurate. A unit test asserts the wire name `maxResult` and the absence of `maxResults` (VCFO-122).
 
 ### Dependencies
