@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 3.3.1 - 2026-11-24
+
+The first release since 3.3.0. It adds no tools and changes no tool arguments: `list-workflow-executions` now honours its `maxResults` cap and says accurately when a list was cut off, execution outputs with no value read `(no value)` and credential-named event-broker headers are withheld, and the rest is repository hardening, contributor documentation and dependency updates. The two `### Added` entries are repository governance files that do not ship in the npm package.
 
 ### Added
 
@@ -31,6 +33,7 @@
 ### Dependencies
 
 - **`markdown-it` 15 is a new development dependency.** `scripts/validate-docs.mjs` tokenizes Markdown with it for the source-citation check rather than approximating code spans and fences with regular expressions. It is a devDependency only, so the published package and its install footprint are unchanged; the lockfile gains it and six transitive packages (VCFO-117).
+- **Runtime dependencies moved forward through Dependabot.** Locked versions since 3.3.0: `@modelcontextprotocol/sdk` 1.30.0 → 1.32.2, `undici` 8.10.0 → 8.12.3, `zod` 4.5.4 → 4.6.7 and `fast-xml-parser` 5.11.1 → 5.12.0, plus the transitive `hono` 4.13.7 → 4.13.18, `@hono/node-server` 2.1.1 → 2.1.6, `body-parser` 2.3.0 → 2.4.0, `proxy-addr` 2.0.7 → 2.0.8, `ip-address` 10.7.0 → 10.7.5 and `fast-uri` 3.1.7 → 3.1.9. The declared ranges in `package.json` are unchanged. GitHub Actions bumps (`codeql-action`, `setup-node`, `upload-artifact`, `download-artifact`, `deploy-pages`) and development-only bumps landed alongside them.
 
 ### Docs
 
