@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 3.3.2 - 2026-11-24
+
+The first release to reach npm since 3.3.0. Version 3.3.1 was tagged but never published: its publish job failed on the tarball path fixed below. So 3.3.2 ships everything listed under 3.3.1 plus that fix, with no other change.
 
 ### Fixed
 
@@ -8,7 +10,7 @@
 
 ## 3.3.1 - 2026-11-24
 
-The first release since 3.3.0. It adds no tools and changes no tool arguments: `list-workflow-executions` now honours its `maxResults` cap and says accurately when a list was cut off, execution outputs with no value read `(no value)` and credential-named event-broker headers are withheld, and the rest is repository hardening, contributor documentation and dependency updates. The two `### Added` entries are repository governance files that do not ship in the npm package.
+**Not published to npm:** the publish job failed, and this content ships in 3.3.2. The first release since 3.3.0. It adds no tools and changes no tool arguments: `list-workflow-executions` now honours its `maxResults` cap and says accurately when a list was cut off, execution outputs with no value read `(no value)` and credential-named event-broker headers are withheld, and the rest is repository hardening, contributor documentation and dependency updates. The two `### Added` entries are repository governance files that do not ship in the npm package.
 
 ### Added
 
