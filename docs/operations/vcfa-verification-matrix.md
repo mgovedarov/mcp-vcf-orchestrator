@@ -20,6 +20,11 @@ vRO surface with writes against an **external** vRO over the split-host `VCFA_VR
 remaining Automation-service gaps on a **tenant** session — 276 further calls through the real
 handlers, plus a few raw-HTTP key-only probes, both environments restored. Its sections are below; the rows above keep their own scope.
 
+**A third round, VCFO-120 (2026-11-24), re-measures a VCF Automation 9.1.1 target** from an All Apps
+tenant organization and a provider session: 9.1.1 still negotiates API version `9.1.0`, the tenant
+surface matches 9.1.0, and the provider can no longer read this lab's external vRO. See the
+[9.1.1 section](#vcf-automation-9-1-1-all-apps-organization-2026-11-24-vcfo-120) below.
+
 This matrix covers `vcfa` only. For `VCFA_TARGET_PLATFORM=vra8`, see the
 [vRA 8 Verification Matrix](./vra8-verification-matrix.md) — its "Verified" column is evidence for
 vRA 8.18 / vRO 8.18.1 and must not be read as 9.x evidence, just as this one must not be read as
@@ -489,6 +494,118 @@ needs an `eventTopicId` from a listing that `403`s, and a `runnableId` the tenan
 the tenant reads 0 workflows on the external vRO. The six tools keep their vRA 8 verification under
 VCFO-069/070 and have **no 9.x evidence of any kind**.
 
+## VCF Automation 9.1.1, All Apps organization, 2026-11-24 (VCFO-120)
+
+Per [VCFO-120](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/280). Every row above was
+measured on VCF Automation 9.1.0. This round re-ran the read surface and a narrow set of disposable
+writes on a **9.1.1** target, from both an **All Apps** tenant organization and a provider session.
+
+**Environment:** VCF Automation 9.1.1 (negotiated 9.1.0), 2026-11-24. External vRO 9.1.1.0, build
+25679743, whose `/vco/api/about` reports `api-version 9.1.0.0`, plus the appliance-embedded vRO, whose
+plugins report v9.1.1.0.
+**Identities:** an Organization Administrator of an All Apps organization — `GET /cloudapi/1.0.0/orgs`
+shows `isClassicTenant: false` and `isProviderConsumptionOrg: false`, and the maintainer confirmed the
+organization type — and a provider session (`VCFA_ORGANIZATION=system`).
+**Topology:** the tenant rows ran with `VCFA_VRO_HOST` set to the external vRO
+(`vro.example.com`). The provider rows name which orchestrator they reached. Authentication and every
+Automation service stayed on `VCFA_HOST` (`vcfa.example.com`) throughout.
+**Restoration:** the one disposable blueprint and the one disposable configuration element were
+deleted, and both inventories were re-listed at their starting counts.
+
+### API version negotiation
+
+`GET /api/versions` answers only `Accept: */*`, which is what the client sends;
+`Accept: application/json` answers `406 NOT_ACCEPTABLE`. The advertisement:
+
+| Version | `deprecated` |
+| --- | --- |
+| `40.0` | true |
+| `9.0.0` | false |
+| `40.1` | true |
+| `9.1.0` | false |
+| `9.1.1` | false |
+| `10.0.0.0-alpha-…` | false |
+
+The server logged `Negotiated VCF Cloud API version 9.1.0 via GET /api/versions` and no warning. The
+four-part alpha entry does not match the three-part capture in `negotiateApiVersion`
+(`src/client/core.ts`), because the capture is anchored on the closing tag. A tenant
+`POST /cloudapi/1.0.0/sessions` answers `200` with both `version=9.1.0` and `version=9.1.1`, so
+**`VCFA_KNOWN_API_VERSIONS` needs no `9.1.1` entry**: 9.1.1 advertises and accepts `9.1.0`. Unit
+tests in `test/vro-client.test.mjs` now pin this advertisement, a `9.1.1`-only one, which falls back
+to `9.0.0` with a warning, and a `9.1.1` plus `9.1.0` one.
+
+Alongside: `/cloudapi/1.0.0/sessions/current` answers `200`, `/cloudapi/1.0.0/site/about` answers
+`404`, and `/cloudapi/1.0.0/site/settings` answers `403` to the tenant. The catalog and
+project-service `/about` documents still advertise only `2019-01-15`.
+
+### Tenant session, external vRO
+
+| Tool | Status | Evidence |
+| --- | --- | --- |
+| `list-categories` | Verified | 136 workflow categories, 3 configuration categories, 41 resource categories, 0 action categories. |
+| `list-workflows`, `get-workflow` | Verified | One workflow visible: the tenant sees only its own organization's content, not the built-in library. |
+| `list-workflows-by-category` | Verified | `Library` resolves to 0 workflows under a 5-category cap, and the category-limit note is shown. |
+| `list-workflow-executions` | Verified, with a defect | Lists the workflow's executions, but the `maxResults` cap is not applied. See [#292](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/292) below. |
+| `get-workflow-execution` | Verified, with a defect | A failed execution of a workflow triggered by an event-broker subscription: error text and outputs rendered. An output with no value renders as `undefined`. See [#293](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/293) below. |
+| `get-workflow-execution-logs` | Verified | Exported to a file: 3 entries fetched, 2 of them at level `error`. |
+| `export-workflow-file`, `preflight-workflow-file`, `diff-workflow-file` | Verified | Exported; preflight passed; the live-versus-exported diff reports no meaningful changes. |
+| `list-configurations`, `get-configuration` | Verified | One element; its `SecureString` attribute renders `[redacted]`. |
+| `list-actions`, `list-resource-elements`, `list-packages` | Verified, empty | None owned by this organization. |
+| `list-plugins` | Refused by the platform | `403`, with the correct "authorization, not authentication" hint. |
+| `create-configuration` | Refused by the platform | `403 … (Edit, false)`: the tenant is read-only on the external vRO, as on 9.1.0 under VCFO-099. |
+| `export-configuration-file` | Unsupported | `406` with the existing guidance, as on 9.1.0. |
+
+### Tenant session, Automation services
+
+| Tool | Status | Evidence |
+| --- | --- | --- |
+| `list-projects`, `get-project` | Verified | The search `DEFAULT` matches case-insensitively. `get-project` renders the 9.x role arrays: administrators, advanced users, users and auditors. |
+| `list-catalog-items`, `get-catalog-item` | Verified | Two Supervisor VM blueprint items; inputs render with their patterns. |
+| `list-deployments`, `get-deployment` | Verified | Deployment inputs render. |
+| `list-deployment-actions` | Verified | Five actions, bare array, as on 9.1.0. |
+| `list-deployment-requests`, `get-deployment-request` | Verified | Three requests, including a `CCI.Supervisor.Resource.VirtualMachine.PowerOff` day-2 request; the lookup by ID renders. |
+| `list-templates`, `get-template` | Verified | Two DRAFT templates; a no-match search returns zero rows, so the VCFO-100 client-side filter holds. Content is omitted behind a sha256 summary. |
+| `create-template` | Verified | `confirm: false` refuses. With `content: "formatVersion: 1"` a DRAFT blueprint is created. Without `content`, the same `400 Unknown Server Validation Error` as 9.1.0, with the VCFO-101 guidance appended. |
+| `delete-template` | Verified | A wrong `expectedName` and a wrong `expectedStatus` each refuse; with all four guards matching, the disposable blueprint is deleted. Inventory back at two. |
+| `list-event-topics`, `list-subscriptions`, `get-subscription` | Blocked by identity | `403`, unchanged from VCFO-099, even though this organization's own workflow is invoked by a subscription. |
+
+### Provider session
+
+| Target | Status | Evidence |
+| --- | --- | --- |
+| Embedded vRO, reads | Verified | 548 workflows, 598 actions, 135 workflow categories, 2 configuration elements, 11 resource elements, 25 packages, 22 plugins; a filtered `list-workflows` works. The same inventory as the 9.1.0 sweep. |
+| Embedded vRO, writes | Verified | A disposable configuration element: `create-configuration`, `get-configuration`, `update-configuration` with the value changed and read back, `delete-configuration` refused on a wrong `expectedName`, then deleted. Back at two elements. |
+| External vRO | Environment change | **Every authenticated object read answers `500` with the orchestrator's HTML error page**: categories, workflows, actions, configurations, resources, packages and plugins alike. Only `/vco/api/about` answers `200`. Reproduced by raw HTTP outside the client, so it is not a client defect; under VCFO-099 the provider had full read and write access there. The client renders it as `[HTML body: 500 — no further detail]`, with no hint. |
+| Automation services | Blocked by identity | Project-service `403`; catalog, deployment, blueprint, topic and subscription listings `500`, each carrying the existing tenant-scope hint. The same pattern as 9.1.0 under VCFO-085. |
+
+### Observed
+
+- **9.1.1 changes nothing the client negotiates.** It keeps advertising `9.1.0`, accepts it on the
+  session request, and its external vRO still reports `api-version 9.1.0.0`.
+- **An All Apps organization behaves like the 9.1.0 tenant on every surface exercised.** The vRO
+  refusals, the Automation read shapes, the `create-template` content constraint and the event-broker
+  `403` all match the VCFO-099 tenant measurements.
+- **The provider can no longer read the external vRO in this lab.** The `500` comes from the
+  appliance, not from the client, and the embedded orchestrator still serves the provider normally.
+  The client's rendering of that `500` carries no hint pointing at the identity or the appliance.
+
+### Defects found in this round
+
+- [#292](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/292) (VCFO-122):
+  `list-workflow-executions` sends `maxResults`, which vRO 9.1.1 ignores, so the default cap of 20
+  never applies. Measured: `maxResults=2` is ignored and `maxResult=2` is honored; `startIndex` is
+  ignored; `conditions=state~failed` is honored; the response carries no `total`.
+- [#293](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/293) (VCFO-123): execution output
+  parameters that carry no value render as the bare word `undefined`.
+
+### Not exercised here
+
+- `create-deployment`, `delete-deployment` and `run-deployment-action` on 9.1.1: the catalog items
+  need a free static IP, and none was chosen.
+- The subscription writes: the event-broker refuses both identities.
+- The package family, the artifact imports and `run-workflow`.
+- Writes on the external vRO: the tenant is read-only there, and the provider cannot read it.
+
 ## Settled by this run
 
 - **VCFO-060 holds on VCF Automation 9.1.** A scaffolded `.workflow` — string, number, boolean and
@@ -520,7 +637,7 @@ VCFO-069/070 and have **no 9.x evidence of any kind**.
   `list-event-topics`, `list-subscriptions`, `get-subscription` and the three subscription writes —
   answer `500` on a provider session and `403` on a tenant one. This is now a measured property of
   both identities rather than a provider-only limitation; it needs an RBAC change, not a different
-  session. See [Event-broker: blocked on both identities](#event-broker-blocked-on-both-identities-2026-09-17-vcfo-099).
+  session. See [Event-broker: blocked on both identities](#event-broker-blocked-on-both-identities-2026-09-17-vcfo-099). VCFO-120 measured the same tenant `403` from an All Apps organization on 9.1.1.
 - **`import-configuration-file` remains unverifiable on any platform tested**, for the same reason
   as on vRA 8: nothing serves a genuine `.vsoconf` container.
 - **A deployment action's input shape** (`inputParameters` vs `inputs`) has still never been
@@ -529,6 +646,15 @@ VCFO-069/070 and have **no 9.x evidence of any kind**.
 - **`FAILED` and `APPROVAL_PENDING`** request statuses remain assumed members of the non-running set;
   neither is producible benignly.
 - **`vcfa9.0` remains a verified pin *mechanism* only** — no 9.0 environment exists.
+- **The provider cannot read the external vRO in the 9.1.1 lab.** Every authenticated `/vco/api`
+  object read answers `500` with an HTML page there, reproduced outside the client, while VCFO-099
+  had full provider access on 9.1.0. Provider-session writes on an external vRO therefore have no
+  9.1.1 evidence. See the [9.1.1 section](#vcf-automation-9-1-1-all-apps-organization-2026-11-24-vcfo-120).
+- **Two defects VCFO-120 found, both open:**
+  [#292](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/292) (VCFO-122), the ignored
+  `maxResults` on `list-workflow-executions`, and
+  [#293](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/293) (VCFO-123), `undefined` for an
+  execution output with no value.
 - **Two defects VCFO-099 found, both since fixed:**
   - [#223](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/223) (VCFO-100) — `search` was a silent no-op on `list-templates`, `list-deployments` and `list-catalog-items` on
     9.1. The client sends `$search`; the services ignore it and return the full inventory, so a

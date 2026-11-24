@@ -1353,9 +1353,10 @@ const versionsXml = (versions) =>
   `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <SupportedVersions xmlns="http://www.vmware.com/vcloud/versions">
 ${versions
+  .map((entry) => (typeof entry === "string" ? { version: entry } : entry))
   .map(
-    (v) => `    <VersionInfo deprecated="false">
-        <Version>${v}</Version>
+    ({ version, deprecated = false }) => `    <VersionInfo deprecated="${deprecated}">
+        <Version>${version}</Version>
         <LoginUrl>https://vcfa.example.test/cloudapi/1.0.0/sessions</LoginUrl>
     </VersionInfo>`,
   )
@@ -1393,6 +1394,73 @@ test("vcfa auto-negotiation prefers API version 9.1.0 from GET /api/versions", a
   );
   const probes = calls.filter((c) => c.url.endsWith("/api/versions"));
   assert.equal(probes.length, 1, "discovery probe should run exactly once");
+});
+
+const captureNegotiation = async (versions) => {
+  const calls = [];
+  const logs = [];
+  const originalError = console.error;
+  console.error = (...args) => logs.push(args.join(" "));
+  try {
+    globalThis.fetch = async (url, init) => {
+      calls.push({ url: String(url), init });
+      if (String(url).endsWith("/api/versions")) {
+        return new Response(versionsXml(versions), { status: 200 });
+      }
+      if (String(url).includes("/cloudapi/1.0.0/sessions")) return authResponse();
+      return Response.json({ link: [], total: 0 });
+    };
+    const client = new VroClient(config({ targetPlatform: "vcfa" }));
+    await client.listWorkflows();
+  } finally {
+    console.error = originalError;
+  }
+  const session = calls.find((c) => c.url.includes("/cloudapi/1.0.0/sessions"));
+  return { accept: session.init.headers.Accept, logs };
+};
+
+const NO_KNOWN_VERSION_WARNING = /advertised no known API version/;
+
+test("vcfa auto-negotiation falls back to 9.0.0 with a warning when only 9.1.1 is advertised", async () => {
+  const { accept, logs } = await captureNegotiation(["9.1.1"]);
+
+  assert.equal(accept, "application/json;version=9.0.0");
+  assert.ok(
+    logs.some((line) => NO_KNOWN_VERSION_WARNING.test(line)),
+    "an advertisement with no known version should log the fallback warning",
+  );
+});
+
+test("vcfa auto-negotiation picks 9.1.0 without a warning when 9.1.1 and 9.1.0 are advertised", async () => {
+  const { accept, logs } = await captureNegotiation(["9.1.1", "9.1.0"]);
+
+  assert.equal(accept, "application/json;version=9.1.0");
+  assert.ok(!logs.some((line) => NO_KNOWN_VERSION_WARNING.test(line)));
+  assert.ok(
+    logs.some((line) => line.includes("Negotiated VCF Cloud API version 9.1.0")),
+  );
+});
+
+test("vcfa auto-negotiation picks 9.1.0 from the advertisement a VCF Automation 9.1.1 target serves", async () => {
+  // As observed on VCF Automation 9.1.1 (VCFO-120): two deprecated legacy
+  // versions, 9.0.0, 9.1.0, 9.1.1, and a four-part alpha preview.
+  const { accept, logs } = await captureNegotiation([
+    { version: "40.0", deprecated: true },
+    "9.0.0",
+    { version: "40.1", deprecated: true },
+    "9.1.0",
+    "9.1.1",
+    "10.0.0.0-alpha-12345678",
+  ]);
+
+  assert.equal(accept, "application/json;version=9.1.0");
+  assert.ok(!logs.some((line) => NO_KNOWN_VERSION_WARNING.test(line)));
+
+  // The capture is anchored on the closing tag, so a four-part alpha string
+  // never matches its three-part prefix, even one that is a known version.
+  const alphaOnly = await captureNegotiation(["9.1.0.0-alpha-12345678"]);
+  assert.equal(alphaOnly.accept, "application/json;version=9.0.0");
+  assert.ok(alphaOnly.logs.some((line) => NO_KNOWN_VERSION_WARNING.test(line)));
 });
 
 test("vcfa auto-negotiation falls back to 9.0.0 when no known version is advertised", async () => {
