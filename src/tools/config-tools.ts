@@ -13,21 +13,7 @@ import {
   hasAnyExpectedValue,
 } from "./confirmation-guards.js";
 import { assertConfigurationUpdateSafe } from "../client/configuration-client.js";
-import { formatVroValue } from "./parameter-values.js";
-import { REDACTED, isSecureAttributeValue } from "../redaction.js";
-
-/**
- * An attribute carries a value only when vRO returned an envelope for it; the
- * built-in `BatchAction` element, for instance, declares `Array/Action`
- * attributes with no value at all. The check is deliberately on the envelope
- * and not on the value inside it, so an attribute genuinely holding `""`, `0`
- * or `false` still renders that value instead of reading as unset.
- */
-function hasAttributeValue(value: unknown): boolean {
-  if (value === undefined || value === null) return false;
-  if (typeof value === "object") return Object.keys(value).length > 0;
-  return true;
-}
+import { formatVroValueRedacted } from "./parameter-values.js";
 
 export function registerConfigTools(
   server: McpServer,
@@ -117,11 +103,7 @@ export function registerConfigTools(
         if (attrs.length > 0) {
           text += `\nAttributes:\n`;
           for (const a of attrs) {
-            const val = isSecureAttributeValue(a.type, a.value)
-              ? REDACTED
-              : hasAttributeValue(a.value)
-                ? formatVroValue(a.value, a.type)
-                : "(no value)";
+            const val = formatVroValueRedacted(a.value, a.type);
             text += `  • ${a.name} (${a.type}): ${val}${a.description ? ` — ${a.description}` : ""}\n`;
           }
         } else {

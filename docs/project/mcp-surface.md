@@ -72,6 +72,8 @@ User-facing description: [Safety](../operations/safety.md#two-phase-target-confi
 
 - **Typed values:** `isSecureAttributeValue` in `src/redaction.ts` checks the declared type and the value envelope. `formatVroValueRedacted` in `src/tools/parameter-values.ts` prints `[redacted]` for those values.
 - **Untyped maps:** a key-name heuristic, `SENSITIVE_PROPERTY_KEY` in `src/redaction.ts`, is the weaker fallback.
+- **Event-broker headers:** one narrow exception applies that heuristic to a typed value. A workflow execution output named `__metadata_hdr_*` whose name after the prefix matches it is withheld whatever its type (`isSensitiveEventHeaderName` in `src/redaction.ts`, applied by `formatExecutionOutputValue` in `src/tools/parameter-values.ts`).
+- **Absent values:** `formatVroValueRedacted` prints `(no value)` for a parameter with no `value` key, a top-level `null`, or an empty envelope (`hasVroValue` in `src/tools/parameter-values.ts`), after the secure check.
 - **Not covered:** neither check reaches inside an untyped composite, a log line, or exception text. The modules require every caller to say so in its description and docs.
 - **Digests:** `contentMetadata` and `omittedContentSummary` hash the same input the same way, so the tool and resource digests match byte for byte (`contentMetadata` in `src/content-metadata.ts`).
 

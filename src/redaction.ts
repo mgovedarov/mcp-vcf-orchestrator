@@ -16,6 +16,9 @@ import { vroValueEnvelopeKeys } from "./client/parameters.js";
  * So the key's own name is the signal. This is a heuristic and not a guarantee
  * -- a secret under a key this pattern does not match is printed -- which every
  * caller of this module must say plainly in its tool description and docs.
+ *
+ * One narrow exception reaches a typed surface: an event-broker header output
+ * of a workflow execution (see {@link isSensitiveEventHeaderName}).
  */
 const SENSITIVE_PROPERTY_KEY =
   /(password|passwd|secret|token|credential|private[-_]?key|api[-_]?key)/i;
@@ -26,6 +29,40 @@ export const REDACTED = "[redacted]";
 /** True when a key's name suggests the value under it is credential material. */
 export function isSensitiveKey(key: string): boolean {
   return SENSITIVE_PROPERTY_KEY.test(key);
+}
+
+/**
+ * The prefix vRO gives a workflow execution output that carries an
+ * event-broker message header, for a workflow started by an extensibility
+ * subscription. Observed on VCF Automation 9.1.1 as `__metadata_hdr_tokenId`,
+ * `__metadata_hdr_encryption-context`, `__metadata_hdr_traceparent` and
+ * `__metadata_hdr_runnableId` (VCFO-124).
+ */
+const EVENT_HEADER_OUTPUT_PREFIX = "__metadata_hdr_";
+
+/**
+ * True when an execution output is an event-broker header whose name, after
+ * the `__metadata_hdr_` prefix, matches the sensitive-key pattern above.
+ *
+ * vRO declares `__metadata_hdr_tokenId` as a plain `string`, so the type-based
+ * guard ({@link isSecureAttributeValue}) prints it. What the value is has not
+ * been characterized, and withholding a platform header wrongly costs far less
+ * than printing a replayable credential, so this one class of output is
+ * withheld on its name.
+ *
+ * The rule is deliberately narrow: a fixed prefix plus the existing pattern,
+ * unchanged, so it adds no general name-based policy for typed values. It
+ * matches `tokenId`; it does not match `encryption-context`, `traceparent` or
+ * `runnableId`, and it never matches an output without the prefix, so a
+ * workflow's own `apiToken` output stays on the type-based policy. The same
+ * limit as the heuristic applies: a secret under a header name the pattern does
+ * not match is printed.
+ */
+export function isSensitiveEventHeaderName(name: string): boolean {
+  return (
+    name.startsWith(EVENT_HEADER_OUTPUT_PREFIX) &&
+    isSensitiveKey(name.slice(EVENT_HEADER_OUTPUT_PREFIX.length))
+  );
 }
 
 /**

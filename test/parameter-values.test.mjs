@@ -6,8 +6,10 @@ import {
   vroValueEnvelopeKeys,
 } from "../dist/client/parameters.js";
 import {
+  formatExecutionOutputValue,
   formatVroValue,
   formatVroValueRedacted,
+  hasVroValue,
 } from "../dist/tools/parameter-values.js";
 
 // The envelopes below were read back from a live vRO 8.18.1 configuration
@@ -189,7 +191,7 @@ test("formatVroValueRedacted renders an ordinary value exactly as formatVroValue
     [{ string: { value: "" } }, "string"],
     [{ number: { value: 42 } }, "number"],
     [{ array: { elements: [{ string: { value: "one" } }] } }, "Array/string"],
-    [undefined, "string"],
+    [{ string: { value: null } }, "string"],
   ]) {
     assert.equal(
       formatVroValueRedacted(value, type),
@@ -204,4 +206,95 @@ test("vroValueEnvelopeKeys reports the type keys of an envelope", () => {
   ]);
   assert.deepEqual(vroValueEnvelopeKeys("plain"), []);
   assert.deepEqual(vroValueEnvelopeKeys(undefined), []);
+});
+
+test("hasVroValue decides on the envelope, not the value inside it", () => {
+  // Absent: no value key at all (the shape observed on a live execution
+  // output, VCFO-123), a top-level null, and an empty envelope.
+  assert.equal(hasVroValue(undefined), false);
+  assert.equal(hasVroValue(null), false);
+  assert.equal(hasVroValue({}), false);
+  // Present, even when the value inside is falsy or null.
+  assert.equal(hasVroValue({ string: { value: "" } }), true);
+  assert.equal(hasVroValue({ number: { value: 0 } }), true);
+  assert.equal(hasVroValue({ boolean: { value: false } }), true);
+  assert.equal(hasVroValue({ string: { value: null } }), true);
+});
+
+test("formatVroValueRedacted prints (no value) for an absent value, never undefined", () => {
+  assert.equal(formatVroValueRedacted(undefined, "string"), "(no value)");
+  assert.equal(formatVroValueRedacted(null, "string"), "(no value)");
+  assert.equal(formatVroValueRedacted({}, "string"), "(no value)");
+  // A genuine falsy or null value inside an envelope renders as it always has.
+  assert.equal(formatVroValueRedacted({ string: { value: "" } }, "string"), '""');
+  assert.equal(formatVroValueRedacted({ number: { value: 0 } }, "number"), "0");
+  assert.equal(
+    formatVroValueRedacted({ boolean: { value: false } }, "boolean"),
+    "false",
+  );
+  assert.equal(
+    formatVroValueRedacted({ string: { value: null } }, "string"),
+    "null",
+  );
+});
+
+test("formatVroValueRedacted checks the secure type before the absent value", () => {
+  assert.equal(formatVroValueRedacted(undefined, "SecureString"), "[redacted]");
+  assert.equal(formatVroValueRedacted({}, "SecureString"), "[redacted]");
+});
+
+test("formatExecutionOutputValue withholds a credential-named event-broker header", () => {
+  // Declared a plain string with a populated envelope: the type-based guard
+  // alone would print it (VCFO-124). The value is a made-up fixture.
+  assert.equal(
+    formatExecutionOutputValue({
+      name: "__metadata_hdr_tokenId",
+      type: "string",
+      value: { string: { value: "fixture-header-value" } },
+    }),
+    "[redacted]",
+  );
+  // Withheld even when absent, as a secure type is.
+  assert.equal(
+    formatExecutionOutputValue({ name: "__metadata_hdr_tokenId", type: "string" }),
+    "[redacted]",
+  );
+});
+
+test("formatExecutionOutputValue leaves other outputs on the type-based policy", () => {
+  for (const name of [
+    // Sibling headers the rule deliberately does not cover.
+    "__metadata_hdr_encryption-context",
+    "__metadata_hdr_traceparent",
+    "__metadata_hdr_runnableId",
+    // Event-broker metadata outside the header prefix.
+    "__metadata_userName",
+    "__metadata_correlationId",
+    // Credential-like names without the header prefix: the rule is not general.
+    "apiToken",
+    "__metadata_tokenId",
+  ]) {
+    assert.equal(
+      formatExecutionOutputValue({
+        name,
+        type: "string",
+        value: { string: { value: "visible" } },
+      }),
+      '"visible"',
+      name,
+    );
+  }
+  // The type-based guard and the no-value branch still apply.
+  assert.equal(
+    formatExecutionOutputValue({
+      name: "result",
+      type: "SecureString",
+      value: { string: { value: "must-not-render" } },
+    }),
+    "[redacted]",
+  );
+  assert.equal(
+    formatExecutionOutputValue({ name: "__metadata_targetId", type: "string" }),
+    "(no value)",
+  );
 });

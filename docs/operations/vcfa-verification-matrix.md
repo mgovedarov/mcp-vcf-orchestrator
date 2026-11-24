@@ -546,7 +546,7 @@ project-service `/about` documents still advertise only `2019-01-15`.
 | `list-workflows`, `get-workflow` | Verified | One workflow visible: the tenant sees only its own organization's content, not the built-in library. |
 | `list-workflows-by-category` | Verified | `Library` resolves to 0 workflows under a 5-category cap, and the category-limit note is shown. |
 | `list-workflow-executions` | Verified, with a defect since fixed | Lists the workflow's executions. The `maxResults` cap was not applied; fixed under VCFO-122, not re-verified live. See [#292](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/292) below. |
-| `get-workflow-execution` | Verified, with a defect | A failed execution of a workflow triggered by an event-broker subscription: error text and outputs rendered. An output with no value renders as `undefined`. See [#293](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/293) below. |
+| `get-workflow-execution` | Verified, with a defect since fixed | A failed execution of a workflow triggered by an event-broker subscription: error text and outputs rendered. An output with no value rendered as `undefined`; fixed under VCFO-123, not re-verified live. See [#293](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/293) below. |
 | `get-workflow-execution-logs` | Verified | Exported to a file: 3 entries fetched, 2 of them at level `error`. |
 | `export-workflow-file`, `preflight-workflow-file`, `diff-workflow-file` | Verified | Exported; preflight passed; the live-versus-exported diff reports no meaningful changes. |
 | `list-configurations`, `get-configuration` | Verified | One element; its `SecureString` attribute renders `[redacted]`. |
@@ -598,7 +598,9 @@ project-service `/about` documents still advertise only `2019-01-15`.
   under VCFO-122:** the client sends `maxResult` and caps the rows client-side. The fix rests on unit
   tests and the query-parameter probe above; it was not re-verified live.
 - [#293](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/293) (VCFO-123): execution output
-  parameters that carry no value render as the bare word `undefined`.
+  parameters that carry no value render as the bare word `undefined`. **Since fixed under
+  VCFO-123:** an output with no value now reads `(no value)`. The fix rests on unit tests; it was not
+  re-verified live.
 
 ### Not exercised here
 
@@ -652,14 +654,14 @@ project-service `/about` documents still advertise only `2019-01-15`.
   object read answers `500` with an HTML page there, reproduced outside the client, while VCFO-099
   had full provider access on 9.1.0. Provider-session writes on an external vRO therefore have no
   9.1.1 evidence. See the [9.1.1 section](#vcf-automation-9-1-1-all-apps-organization-2026-11-24-vcfo-120).
-- **One defect VCFO-120 found, since fixed:**
-  [#292](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/292) (VCFO-122), the ignored
-  `maxResults` on `list-workflow-executions`. **Fixed under VCFO-122** by sending `maxResult` and
-  capping the rows client-side; the fix rests on unit tests and the 9.1.1 query-parameter probe and
-  was not re-verified live.
-- **One defect VCFO-120 found, open:**
-  [#293](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/293) (VCFO-123), `undefined` for an
-  execution output with no value.
+- **Two defects VCFO-120 found, both since fixed:**
+  - [#292](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/292) (VCFO-122), the ignored
+    `maxResults` on `list-workflow-executions`. **Fixed under VCFO-122** by sending `maxResult` and
+    capping the rows client-side; the fix rests on unit tests and the 9.1.1 query-parameter probe and
+    was not re-verified live.
+  - [#293](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/293) (VCFO-123), `undefined` for an
+    execution output with no value. **Fixed under VCFO-123** by rendering it as `(no value)`; the fix
+    rests on unit tests and was not re-verified live.
 - **Two defects VCFO-099 found, both since fixed:**
   - [#223](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/223) (VCFO-100) — `search` was a silent no-op on `list-templates`, `list-deployments` and `list-catalog-items` on
     9.1. The client sends `$search`; the services ignore it and return the full inventory, so a

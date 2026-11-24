@@ -4,9 +4,37 @@ import {
   REDACTED,
   containsSensitiveKey,
   isSecureAttributeValue,
+  isSensitiveEventHeaderName,
   isSensitiveKey,
   redactSensitiveValues,
 } from "../dist/redaction.js";
+
+test("isSensitiveEventHeaderName matches only credential-named event-broker headers", () => {
+  // The observed header, and the rest of the existing vocabulary after the prefix.
+  for (const name of [
+    "__metadata_hdr_tokenId",
+    "__metadata_hdr_authToken",
+    "__metadata_hdr_clientSecret",
+    "__metadata_hdr_api-key",
+  ]) {
+    assert.equal(isSensitiveEventHeaderName(name), true, name);
+  }
+  for (const name of [
+    // Observed siblings the existing pattern does not match, deliberately.
+    "__metadata_hdr_encryption-context",
+    "__metadata_hdr_traceparent",
+    "__metadata_hdr_runnableId",
+    // No header prefix: outside the rule, whatever the name says.
+    "__metadata_tokenId",
+    "__metadata_userName",
+    "apiToken",
+    "tokenId",
+    // The prefix alone carries no name to match.
+    "__metadata_hdr_",
+  ]) {
+    assert.equal(isSensitiveEventHeaderName(name), false, name);
+  }
+});
 
 test("isSensitiveKey matches the credential vocabulary case-insensitively", () => {
   for (const key of [

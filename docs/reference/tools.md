@@ -202,6 +202,10 @@ Output parameters render as values rather than as vRO's value envelope — `resu
 
 An output parameter the server declares secure is withheld and shown as `[redacted]`, the same marker and the same detection `get-configuration` uses for a secure-typed attribute: a declared type reading secure or encrypted, or a value that arrived wrapped in such an envelope whatever its declared type says. Both signals are read, because no lab has yet served such an output and the shape vRO sends is unobserved. **The signal has to be a declared type or an envelope key.** An `Array/SecureString` is caught by its type, but a secret sitting inside an untyped composite value — a `Properties` output, say — is announced by neither and is printed.
 
+An event-broker header output is the one exception to that type-only rule. A workflow started by an extensibility subscription can return message headers as outputs named `__metadata_hdr_*`, declared as plain `string`. A header whose name after that prefix matches the credential pattern the untyped maps use (`password`, `secret`, `token`, `credential`, `private key`, `api key`) is withheld as `[redacted]` whatever its type, which covers `__metadata_hdr_tokenId`. The rule is deliberately narrow: `__metadata_hdr_encryption-context`, `__metadata_hdr_traceparent` and `__metadata_hdr_runnableId` are printed, and so is any output without the prefix, whatever its name.
+
+An output parameter vRO returned with no value — no `value` key at all, as the event-broker `__metadata_*` outputs of a subscription-triggered run arrive, or an empty envelope — reads `(no value)`, as an unset attribute does in `get-configuration`. It previously printed the bare word `undefined`. An envelope holding `""`, `0`, `false` or `null` prints that value, and a secure-typed output reads `[redacted]` whether or not it has a value.
+
 The failure and timeout results print log excerpts and the workflow's own exception text verbatim. Neither carries a declared type, so neither is withheld.
 
 ::: details Parameters
@@ -252,6 +256,10 @@ Check the status and outputs of a workflow execution.
 Output parameters render as values rather than as vRO's value envelope, using the same unwrap as `run-workflow-and-wait` and `get-configuration`. Array outputs previously leaked the raw envelope here.
 
 An output parameter the server declares secure is withheld and shown as `[redacted]`, the same marker and the same detection `get-configuration` uses for a secure-typed attribute: a declared type reading secure or encrypted, or a value that arrived wrapped in such an envelope whatever its declared type says. Both signals are read, because no lab has yet served such an output and the shape vRO sends is unobserved. **The signal has to be a declared type or an envelope key.** An `Array/SecureString` is caught by its type, but a secret sitting inside an untyped composite value — a `Properties` output, say — is announced by neither and is printed.
+
+An event-broker header output is the one exception to that type-only rule. A workflow started by an extensibility subscription can return message headers as outputs named `__metadata_hdr_*`, declared as plain `string`. A header whose name after that prefix matches the credential pattern the untyped maps use (`password`, `secret`, `token`, `credential`, `private key`, `api key`) is withheld as `[redacted]` whatever its type, which covers `__metadata_hdr_tokenId`. The rule is deliberately narrow: `__metadata_hdr_encryption-context`, `__metadata_hdr_traceparent` and `__metadata_hdr_runnableId` are printed, and so is any output without the prefix, whatever its name.
+
+An output parameter vRO returned with no value — no `value` key at all, as the event-broker `__metadata_*` outputs of a subscription-triggered run arrive, or an empty envelope — reads `(no value)`, as an unset attribute does in `get-configuration`. It previously printed the bare word `undefined`. An envelope holding `""`, `0`, `false` or `null` prints that value, and a secure-typed output reads `[redacted]` whether or not it has a value.
 
 The `content-exception` text of a failed execution is printed verbatim and is not typed, so a secret a script threw is not withheld.
 

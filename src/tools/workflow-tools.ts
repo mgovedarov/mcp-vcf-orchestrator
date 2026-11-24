@@ -28,7 +28,7 @@ import {
 import type { VroClient } from "../vro-client.js";
 import { truncationNote } from "./truncation.js";
 import { listLimitSchema, limitNote } from "./list-limit.js";
-import { formatVroValueRedacted } from "./parameter-values.js";
+import { formatExecutionOutputValue } from "./parameter-values.js";
 
 const DEFAULT_WORKFLOW_WAIT_TIMEOUT_SECONDS = 300;
 const DEFAULT_WORKFLOW_POLL_INTERVAL_SECONDS = 2;
@@ -322,7 +322,7 @@ function formatOutputParameters(execution: WorkflowExecution): string {
 
   const lines = outputs.map(
     (p) =>
-      `  • ${p.name} (${p.type}): ${formatVroValueRedacted(p.value, p.type)}`,
+      `  • ${p.name} (${p.type}): ${formatExecutionOutputValue(p)}`,
   );
   return `Output Parameters:\n${lines.join("\n")}`;
 }
@@ -776,7 +776,7 @@ export function registerWorkflowTools(
     {
       title: "Run Workflow and Wait",
       description:
-        "Validate inputs, execute a workflow, poll until completion/failure/timeout, and return outputs or useful failure diagnostics. An output parameter whose declared type or value envelope reads secure or encrypted is withheld as [redacted]; that signal is a declared type, so a secret inside an untyped composite value, or one a script wrote to the log or threw, is still printed.",
+        "Validate inputs, execute a workflow, poll until completion/failure/timeout, and return outputs or useful failure diagnostics. An output parameter whose declared type or value envelope reads secure or encrypted is withheld as [redacted]. An event-broker header output named __metadata_hdr_* whose name after that prefix reads as credential material (password, secret, token, credential, private key, API key; for example __metadata_hdr_tokenId) is also withheld, whatever its type. An output vRO returned with no value reads (no value). Every other output is withheld only on its declared type, so a secret inside an untyped composite value, or one a script wrote to the log or threw, is still printed.",
       inputSchema: z.object({
         id: z.string().describe("The workflow ID to execute"),
         inputs: z
@@ -977,7 +977,7 @@ export function registerWorkflowTools(
     {
       title: "Get Workflow Execution",
       description:
-        "Check the status and outputs of a workflow execution. An output parameter whose declared type or value envelope reads secure or encrypted is withheld as [redacted]; that signal is a declared type, so a secret inside an untyped composite value, or one a script threw as an exception, is still printed.",
+        "Check the status and outputs of a workflow execution. An output parameter whose declared type or value envelope reads secure or encrypted is withheld as [redacted]. An event-broker header output named __metadata_hdr_* whose name after that prefix reads as credential material (password, secret, token, credential, private key, API key; for example __metadata_hdr_tokenId) is also withheld, whatever its type. An output vRO returned with no value reads (no value). Every other output is withheld only on its declared type, so a secret inside an untyped composite value, or one a script threw as an exception, is still printed.",
       inputSchema: z.object({
         workflowId: z.string().describe("The workflow ID"),
         executionId: z.string().describe("The execution ID"),
@@ -1001,7 +1001,7 @@ export function registerWorkflowTools(
           text += `\nOutput Parameters:\n`;
           for (const p of outputs) {
             text +=
-              `  • ${p.name} (${p.type}): ${formatVroValueRedacted(p.value, p.type)}\n`;
+              `  • ${p.name} (${p.type}): ${formatExecutionOutputValue(p)}\n`;
           }
         }
         return { content: [{ type: "text", text }] };
