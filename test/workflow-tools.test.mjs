@@ -777,6 +777,122 @@ test("run-workflow-and-wait withholds a secure-typed output parameter", async ()
   assert.match(result.content[0].text, /result \(string\): "ok"/);
 });
 
+// Event-broker output parameters as a subscription-triggered execution returns
+// them: an absent value carries no `value` key at all (VCFO-123), and the
+// header `__metadata_hdr_tokenId` is declared a plain string (VCFO-124). Every
+// value here is a made-up fixture.
+const EVENT_BROKER_OUTPUTS = [
+  { name: "__metadata_targetId", type: "string", scope: "token" },
+  { name: "__metadata_description", type: "string", scope: "token", value: {} },
+  {
+    name: "__metadata_eventType",
+    type: "string",
+    scope: "token",
+    value: { string: { value: "EVENT" } },
+  },
+  {
+    name: "__metadata_hdr_tokenId",
+    type: "string",
+    scope: "token",
+    value: { string: { value: "fixture-header-must-not-render" } },
+  },
+  {
+    name: "__metadata_hdr_traceparent",
+    type: "string",
+    scope: "token",
+    value: { string: { value: "fixture-trace" } },
+  },
+  {
+    name: "__metadata_hdr_runnableId",
+    type: "string",
+    scope: "token",
+    value: { string: { value: "fixture-runnable" } },
+  },
+  {
+    name: "__metadata_hdr_encryption-context",
+    type: "string",
+    scope: "token",
+    value: { string: { value: "fixture-context" } },
+  },
+  {
+    name: "__metadata_userName",
+    type: "string",
+    scope: "token",
+    value: { string: { value: "fixture-user" } },
+  },
+  { name: "apiToken", type: "string", value: { string: { value: "fixture-own-output" } } },
+  { name: "empty", type: "string", value: { string: { value: "" } } },
+  { name: "zero", type: "number", value: { number: { value: 0 } } },
+  { name: "flag", type: "boolean", value: { boolean: { value: false } } },
+  { name: "unsetSecret", type: "SecureString" },
+];
+
+function assertEventBrokerOutputsRendered(text) {
+  assert.doesNotMatch(text, /undefined/);
+  assert.match(text, /__metadata_targetId \(string\): \(no value\)/);
+  assert.match(text, /__metadata_description \(string\): \(no value\)/);
+  assert.match(text, /__metadata_eventType \(string\): "EVENT"/);
+  assert.doesNotMatch(text, /fixture-header-must-not-render/);
+  assert.match(text, /__metadata_hdr_tokenId \(string\): \[redacted\]/);
+  assert.match(text, /__metadata_hdr_traceparent \(string\): "fixture-trace"/);
+  assert.match(text, /__metadata_hdr_runnableId \(string\): "fixture-runnable"/);
+  assert.match(
+    text,
+    /__metadata_hdr_encryption-context \(string\): "fixture-context"/,
+  );
+  assert.match(text, /__metadata_userName \(string\): "fixture-user"/);
+  assert.match(text, /apiToken \(string\): "fixture-own-output"/);
+  assert.match(text, /empty \(string\): ""/);
+  assert.match(text, /zero \(number\): 0/);
+  assert.match(text, /flag \(boolean\): false/);
+  assert.match(text, /unsetSecret \(SecureString\): \[redacted\]/);
+}
+
+test("get-workflow-execution renders absent outputs as (no value) and withholds a credential-named header", async () => {
+  const handlers = registeredWorkflowTools({
+    getWorkflowExecution: async (workflowId, executionId) => ({
+      id: executionId,
+      state: "failed",
+      "output-parameters": EVENT_BROKER_OUTPUTS,
+    }),
+  });
+
+  const result = await handlers.get("get-workflow-execution")({
+    workflowId: "workflow-1",
+    executionId: "execution-1",
+  });
+
+  assert.equal(result.isError, undefined);
+  assertEventBrokerOutputsRendered(result.content[0].text);
+});
+
+test("run-workflow-and-wait renders absent outputs as (no value) and withholds a credential-named header", async () => {
+  const handlers = registeredWorkflowTools({
+    getWorkflow: async () => ({
+      id: "workflow-1",
+      name: "Workflow",
+      inputParameters: [{ name: "name", type: "string" }],
+    }),
+    runWorkflow: async () => ({ id: "execution-1", state: "running" }),
+    getWorkflowExecution: async () => ({
+      id: "execution-1",
+      state: "COMPLETED",
+      outputParameters: EVENT_BROKER_OUTPUTS,
+    }),
+  });
+
+  const result = await handlers.get("run-workflow-and-wait")({
+    id: "workflow-1",
+    inputs: [{ name: "name", value: "web-server-01" }],
+    timeoutSeconds: 1,
+    pollIntervalSeconds: 0,
+    confirm: true,
+  });
+
+  assert.equal(result.isError, undefined);
+  assertEventBrokerOutputsRendered(result.content[0].text);
+});
+
 test("get-workflow-execution and get-configuration withhold the same declared type", async () => {
   // The two surfaces render `name (type): value` from the same shape through
   // the same helper, and for a long time only one of them checked the type
