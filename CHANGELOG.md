@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **The release workflow now passes the tarball to `npm publish` as a local file, so a release can reach npm again; v3.3.1 never did.** The `Publish package` job in `.github/workflows/npm-publish.yml` ran `npm publish "$1"` with `$1` set to the bare relative path `package-tarball/<name>.tgz`. npm does not read that form as a file: it parses it as a GitHub `owner/repo` shorthand, runs `git ls-remote` against an SSH URL built from the path, and exits with code 128 before contacting the registry. The v3.3.1 release hit this after its build job had succeeded, so npm `latest` stayed at 3.3.0, and because release tags are immutable that tag cannot be republished; its contents ship in the next release instead. The publish line now passes `"./$1"`, which npm reads as a file spec, and the single-tarball guard before it is unchanged. A new `test/npm-publish-workflow.test.mjs` reads the workflow text and fails if any `npm publish` argument loses its `./` prefix, since nothing in `npm run validate` exercises the publish job itself. This is a text check: the publish path is only proven by the next release run (VCFO-126).
+
 ## 3.3.1 - 2026-11-24
 
 The first release since 3.3.0. It adds no tools and changes no tool arguments: `list-workflow-executions` now honours its `maxResults` cap and says accurately when a list was cut off, execution outputs with no value read `(no value)` and credential-named event-broker headers are withheld, and the rest is repository hardening, contributor documentation and dependency updates. The two `### Added` entries are repository governance files that do not ship in the npm package.

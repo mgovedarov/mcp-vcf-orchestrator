@@ -110,6 +110,10 @@ jobs:
           node-version: 24
           registry-url: "https://registry.npmjs.org"
 
+      # The `./` prefix is load-bearing. npm reads a bare `package-tarball/<name>.tgz` as a
+      # GitHub `owner/repo` shorthand, runs `git ls-remote` over SSH and exits 128 before
+      # publishing anything, which is how v3.3.1 failed to publish. `./` makes it a file spec.
+      # `test/npm-publish-workflow.test.mjs` fails if the prefix is dropped. (VCFO-126)
       - name: Publish
         run: |
           set -- package-tarball/*.tgz
@@ -117,4 +121,4 @@ jobs:
             echo "::error::Expected exactly one tarball, found $#"
             exit 1
           fi
-          npm publish "$1" --access public --provenance
+          npm publish "./$1" --access public --provenance
