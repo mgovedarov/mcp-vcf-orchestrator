@@ -594,9 +594,12 @@ project-service `/about` documents still advertise only `2019-01-15`.
 - [#292](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/292) (VCFO-122):
   `list-workflow-executions` sends `maxResults`, which vRO 9.1.1 ignores, so the default cap of 20
   never applies. Measured: `maxResults=2` is ignored and `maxResult=2` is honored; `startIndex` is
-  ignored; `conditions=state~failed` is honored; the response carries no `total`. **Since fixed
-  under VCFO-122:** the client sends `maxResult` and caps the rows client-side. The fix rests on unit
-  tests and the query-parameter probe above; it was not re-verified live.
+  ignored; `conditions=state~failed` is honored; `relations.total` is the full count of matching
+  executions, with `conditions` applied (this entry first recorded it as absent; corrected
+  under VCFO-125). **Since fixed under VCFO-122:** the client sends `maxResult` and caps the rows
+  client-side. **And under VCFO-125:** a reported total equal to `maxResults` no longer marks the
+  list as limited. Both fixes rest on unit tests and the query-parameter probe above; neither was
+  re-verified live.
 - [#293](https://github.com/mgovedarov/mcp-vcf-orchestrator/issues/293) (VCFO-123): execution output
   parameters that carry no value render as the bare word `undefined`. **Since fixed under
   VCFO-123:** an output with no value now reads `(no value)`. The fix rests on unit tests; it was not

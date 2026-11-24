@@ -1134,7 +1134,7 @@ export function registerWorkflowTools(
     "list-workflow-executions",
     {
       title: "List Workflow Executions",
-      description: `List past and current executions for a specific workflow. Use this to find an execution ID before calling get-workflow-execution. Returns at most maxResults executions (default ${DEFAULT_EXECUTION_MAX_RESULTS}); when the list was cut off, or reached maxResults so more may exist, the output says so and structuredContent.limited is true.`,
+      description: `List past and current executions for a specific workflow. Use this to find an execution ID before calling get-workflow-execution. Returns at most maxResults executions (default ${DEFAULT_EXECUTION_MAX_RESULTS}); when vRO reports more matching executions than were returned, or reports no count and the rows reached maxResults so more may exist, the output says so and structuredContent.limited is true.`,
       inputSchema: z.object({
         workflowId: z.string().describe("The workflow ID"),
         maxResults: z
@@ -1181,17 +1181,18 @@ export function registerWorkflowTools(
           if (e["started-by"]) line += ` [by: ${e["started-by"]}]`;
           return line;
         });
-        const total = result.total ?? executions.length;
         const shown = executions.length;
-        // The client caps the rows at maxResults, and vRO 9.1.1 returns no
-        // `total` (the client falls back to the row count), so a page that
-        // reached maxResults is the signal that more may exist. The
-        // `total > shown` arm stays for a build that reports a total
-        // (VCFO-119, VCFO-122).
+        // vRO 9.1.1 reports `relations.total` as the full count of matching
+        // executions, so a known total decides `limited` on its own. Only
+        // when vRO sends no count is a page that reached maxResults the
+        // signal that more may exist (VCFO-119, VCFO-122, VCFO-125).
+        const reportedTotal = result.total;
+        const total = reportedTotal ?? shown;
         const totalExceedsShown = total > shown;
         const limited =
-          totalExceedsShown ||
-          shown >= (maxResults ?? DEFAULT_EXECUTION_MAX_RESULTS);
+          reportedTotal !== undefined
+            ? totalExceedsShown
+            : shown >= (maxResults ?? DEFAULT_EXECUTION_MAX_RESULTS);
         const header = !limited
           ? `Found ${total} execution(s):`
           : totalExceedsShown

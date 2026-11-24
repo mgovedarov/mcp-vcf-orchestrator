@@ -5703,7 +5703,8 @@ test("listWorkflowExecutions caps the rows at maxResults when vRO ignores the pa
   globalThis.fetch = async () => {
     requests += 1;
     if (requests === 1) return authResponse();
-    // A build that ignores the page size returns every execution, with no total.
+    // A build that ignores the page size returns every execution; this
+    // fixture also reports no total.
     return Response.json({ relations: { link: executionLinks(25) } });
   };
 
@@ -5715,11 +5716,43 @@ test("listWorkflowExecutions caps the rows at maxResults when vRO ignores the pa
     capped.relations.link.map((e) => e.id),
     ["execution-1", "execution-2", "execution-3", "execution-4", "execution-5"],
   );
-  assert.equal(capped.total, 5);
+  // No count was reported, so the total stays unknown (VCFO-125).
+  assert.equal(capped.total, undefined);
 
   const defaulted = await client.listWorkflowExecutions("workflow-1");
   assert.equal(defaulted.relations.link.length, 20);
-  assert.equal(defaulted.total, 20);
+  assert.equal(defaulted.total, undefined);
+});
+
+test("listWorkflowExecutions passes vRO's relations.total through and treats -1 as unknown", async () => {
+  const bodies = [
+    { relations: { total: 6, link: executionLinks(2) } },
+    { total: -1, relations: { total: 6, link: executionLinks(2) } },
+    { relations: { total: -1, link: executionLinks(2) } },
+  ];
+  let requests = 0;
+  globalThis.fetch = async () => {
+    requests += 1;
+    if (requests === 1) return authResponse();
+    return Response.json(bodies[requests - 2]);
+  };
+
+  const client = new VroClient(config());
+  const reported = await client.listWorkflowExecutions("workflow-1", {
+    maxResults: 2,
+  });
+  assert.equal(reported.total, 6);
+  assert.equal(reported.relations.link.length, 2);
+
+  const sentinelTopLevel = await client.listWorkflowExecutions("workflow-1", {
+    maxResults: 2,
+  });
+  assert.equal(sentinelTopLevel.total, 6);
+
+  const sentinelOnly = await client.listWorkflowExecutions("workflow-1", {
+    maxResults: 2,
+  });
+  assert.equal(sentinelOnly.total, undefined);
 });
 
 test("listDeploymentActions calls deployment actions endpoint", async () => {
