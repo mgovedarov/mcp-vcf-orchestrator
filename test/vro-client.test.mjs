@@ -5660,6 +5660,68 @@ test("listWorkflowExecutions ignores non-execution relation links", async () => 
   ]);
 });
 
+function executionLinks(count) {
+  return Array.from({ length: count }, (_, i) => ({
+    href: `https://vcfa.example.test/vco/api/workflows/wf/executions/execution-${i + 1}`,
+    rel: "down",
+    attributes: [
+      { name: "id", value: `execution-${i + 1}` },
+      { name: "state", value: "completed" },
+    ],
+  }));
+}
+
+test("listWorkflowExecutions sends the singular maxResult vRO honours, never maxResults", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return authResponse();
+    return Response.json({ relations: { link: executionLinks(2) } });
+  };
+
+  const client = new VroClient(config());
+  await client.listWorkflowExecutions("workflow-1", {
+    maxResults: 2,
+    status: "failed",
+  });
+  await client.listWorkflowExecutions("workflow-1");
+
+  const explicit = new URL(calls[1].url);
+  assert.equal(explicit.pathname, "/vco/api/workflows/workflow-1/executions");
+  assert.equal(explicit.searchParams.get("maxResult"), "2");
+  assert.equal(explicit.searchParams.has("maxResults"), false);
+  assert.equal(explicit.searchParams.get("conditions"), "state~failed");
+
+  const defaulted = new URL(calls[2].url);
+  assert.equal(defaulted.searchParams.get("maxResult"), "20");
+  assert.equal(defaulted.searchParams.has("maxResults"), false);
+  assert.doesNotMatch(calls[2].url, /maxResults=/);
+});
+
+test("listWorkflowExecutions caps the rows at maxResults when vRO ignores the page size", async () => {
+  let requests = 0;
+  globalThis.fetch = async () => {
+    requests += 1;
+    if (requests === 1) return authResponse();
+    // A build that ignores the page size returns every execution, with no total.
+    return Response.json({ relations: { link: executionLinks(25) } });
+  };
+
+  const client = new VroClient(config());
+  const capped = await client.listWorkflowExecutions("workflow-1", {
+    maxResults: 5,
+  });
+  assert.deepEqual(
+    capped.relations.link.map((e) => e.id),
+    ["execution-1", "execution-2", "execution-3", "execution-4", "execution-5"],
+  );
+  assert.equal(capped.total, 5);
+
+  const defaulted = await client.listWorkflowExecutions("workflow-1");
+  assert.equal(defaulted.relations.link.length, 20);
+  assert.equal(defaulted.total, 20);
+});
+
 test("listDeploymentActions calls deployment actions endpoint", async () => {
   const calls = [];
   globalThis.fetch = async (url, init) => {

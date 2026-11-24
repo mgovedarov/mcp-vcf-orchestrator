@@ -1183,9 +1183,11 @@ export function registerWorkflowTools(
         });
         const total = result.total ?? executions.length;
         const shown = executions.length;
-        // vRO's `total` may be the full match count or only the page size, so
-        // a page that reached maxResults counts as limited even when
-        // total equals shown (VCFO-119).
+        // The client caps the rows at maxResults, and vRO 9.1.1 returns no
+        // `total` (the client falls back to the row count), so a page that
+        // reached maxResults is the signal that more may exist. The
+        // `total > shown` arm stays for a build that reports a total
+        // (VCFO-119, VCFO-122).
         const totalExceedsShown = total > shown;
         const limited =
           totalExceedsShown ||
